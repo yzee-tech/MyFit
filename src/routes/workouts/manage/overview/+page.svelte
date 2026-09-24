@@ -102,9 +102,9 @@
 		if (createData === undefined) return;
 
 		try {
-			let message, mesocycleCompleted;
+			let message;
 			if (workoutRunes.editingWorkoutId === null) {
-				({ message, mesocycleCompleted } = await trpc().workouts.create.mutate(createData));
+				({ message } = await trpc().workouts.create.mutate(createData));
 			} else {
 				message = (
 					await trpc().workouts.editById.mutate({
@@ -124,11 +124,7 @@
 			// So to prevent this from happening, just reset the meso split runes after a workout is completed
 			mesocycleExerciseSplitRunes.resetStores();
 
-			if (mesocycleCompleted) {
-				await goto(`/mesocycles/${workoutRunes.workoutData?.workoutOfMesocycle?.mesocycle.id}?completion`);
-			} else {
-				await goto('/workouts');
-			}
+			await goto('/workouts');
 		} catch (error) {
 			if (error instanceof TRPCClientError) toast.error(error.message);
 		}

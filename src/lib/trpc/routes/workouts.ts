@@ -2,7 +2,9 @@ import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { arraySum } from '$lib/utils';
 import {
+	getBlockWeek,
 	progressiveOverloadMagic,
+	type ExerciseHistory,
 	type WorkoutExerciseInProgress,
 	type WorkoutExerciseWithSets
 } from '$lib/utils/workoutUtils';
@@ -15,8 +17,6 @@ import {
 	Prisma,
 	WorkoutStatus,
 	type Mesocycle,
-	type MesocycleExerciseSplitDay,
-	type MuscleGroup,
 	type PrismaPromise,
 	type WorkoutExercise,
 	type WorkoutOfMesocycle
@@ -36,7 +36,22 @@ type TodaysWorkoutData = {
 		splitDayName: string;
 	};
 	note: string | null;
-	isLastWorkout: boolean;
+	activeBlock?: ActiveBlockData;
+};
+
+export type RoutineOption = {
+	splitDayIndex: number;
+	name: string;
+	workoutExercises: Pick<WorkoutExercise, 'name' | 'targetMuscleGroup' | 'customMuscleGroup'>[];
+	lastDoneAt: Date | null;
+};
+
+type ActiveBlockData = {
+	mesocycle: Mesocycle;
+	weekNumber: number;
+	totalWeeks: number;
+	blockFinished: boolean;
+	routines: RoutineOption[];
 };
 
 type WorkoutExercisesWithPreviousData = {
@@ -47,37 +62,42 @@ type WorkoutExercisesWithPreviousData = {
 	};
 };
 
-const createActiveMesocycleWithProgressionDataInclude = (splitDayIndex?: number) => {
-	const workoutsWhere = splitDayIndex !== undefined ? { where: { splitDayIndex } } : {};
-
-	return Prisma.validator<Prisma.MesocycleInclude>()({
+const createActiveMesocycleWithProgressionDataInclude = () =>
+	Prisma.validator<Prisma.MesocycleInclude>()({
 		mesocycleExerciseSplitDays: {
 			include: { mesocycleSplitDayExercises: { orderBy: { exerciseIndex: 'asc' } } },
 			orderBy: { dayIndex: 'asc' }
-		},
-		mesocycleCyclicSetChanges: true,
-		workoutsOfMesocycle: {
-			include: {
-				workout: {
-					include: {
-						workoutExercises: {
-							include: {
-								sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } }
-							},
-							orderBy: { exerciseIndex: 'asc' }
-						}
-					}
-				}
-			},
-			orderBy: { workout: { startedAt: 'asc' } },
-			...workoutsWhere
 		}
 	});
-};
 
 export type ActiveMesocycleWithProgressionData = Prisma.MesocycleGetPayload<{
 	include: ReturnType<typeof createActiveMesocycleWithProgressionDataInclude>;
 }>;
+
+/** How many past performances of an exercise feed its progression */
+const EXERCISE_HISTORY_LENGTH = 8;
+
+/** Recent performances of each named exercise across all of the user's workouts, oldest first */
+async function getExerciseHistory(userId: string, exerciseNames: string[]): Promise<ExerciseHistory> {
+	const pastExercises = await prisma.workoutExercise.findMany({
+		where: { name: { in: exerciseNames }, workout: { userId } },
+		include: {
+			sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
+			workout: { select: { userBodyweight: true } }
+		},
+		orderBy: { workout: { startedAt: 'desc' } }
+	});
+
+	const history: ExerciseHistory = {};
+	for (const { workout, ...exercise } of pastExercises) {
+		const performances = (history[exercise.name] ??= []);
+		if (performances.length < EXERCISE_HISTORY_LENGTH) {
+			performances.push({ exercise, oldUserBodyweight: workout.userBodyweight });
+		}
+	}
+	Object.values(history).forEach((performances) => performances.reverse());
+	return history;
+}
 
 const workoutInputDataSchema = z.object({
 	startedAt: z.date().or(z.string().datetime()).optional(),
@@ -229,117 +249,24 @@ export const workouts = t.router({
 	),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
-		const workoutToDelete = await prisma.workout.findUniqueOrThrow({
-			where: { userId: ctx.userId, id: input },
-			select: {
-				workoutOfMesocycle: {
-					select: {
-						id: true,
-						splitDayIndex: true,
-						mesocycle: {
-							select: {
-								id: true,
-								startDate: true,
-								endDate: true,
-								mesocycleExerciseSplitDays: { select: { name: true } }
-							}
-						}
-					}
-				}
-			}
-		});
-
-		const mesocycle = workoutToDelete.workoutOfMesocycle?.mesocycle;
-		if (mesocycle && mesocycle.startDate && mesocycle.endDate === null) {
-			const wom = workoutToDelete.workoutOfMesocycle!;
-			const workoutsOfMeso = await prisma.workout.findMany({
-				where: { workoutOfMesocycle: { mesocycleId: mesocycle.id } },
-				select: { workoutOfMesocycle: { select: { splitDayIndex: true } } }
-			});
-
-			const workoutsPerSplitDay: number[] = Array(mesocycle.mesocycleExerciseSplitDays.length).fill(0);
-			workoutsOfMeso.forEach((w) => workoutsPerSplitDay[w.workoutOfMesocycle!.splitDayIndex]++);
-
-			const maxSplitDayWorkouts = Math.max(...workoutsPerSplitDay);
-			const lastSplitDayPerformed = workoutsPerSplitDay.findLastIndex((count) => count === maxSplitDayWorkouts);
-
-			if (lastSplitDayPerformed !== wom.splitDayIndex) {
-				throw new TRPCError({
-					code: 'BAD_REQUEST',
-					message: `You can only delete the latest workout of the active mesocycle: ${mesocycle.mesocycleExerciseSplitDays[lastSplitDayPerformed].name} (Day ${lastSplitDayPerformed + 1})`
-				});
-			}
-		}
-
 		await prisma.workout.delete({ where: { id: input, userId: ctx.userId } });
 		return { message: 'Workout deleted successfully' };
 	}),
 
 	getTodaysWorkoutData: t.procedure.query(async ({ ctx }) => {
-		const data = await prisma.mesocycle.findFirst({
-			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-			include: {
-				mesocycleExerciseSplitDays: {
-					include: {
-						mesocycleSplitDayExercises: {
-							select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
-							orderBy: { exerciseIndex: 'asc' }
-						}
-					},
-					orderBy: { dayIndex: 'asc' }
-				},
-				mesocycleCyclicSetChanges: true,
-				workoutsOfMesocycle: {
-					include: { workout: true },
-					orderBy: { workout: { startedAt: 'desc' } }
-				}
-			}
+		const lastWorkout = await prisma.workout.findFirst({
+			where: { userId: ctx.userId },
+			select: { userBodyweight: true },
+			orderBy: { startedAt: 'desc' }
 		});
-		const lastBodyweight = data?.workoutsOfMesocycle.map((wm) => wm.workout.userBodyweight)[0];
-		const userBodyweight = lastBodyweight ?? null;
 
 		const todaysWorkoutData: TodaysWorkoutData = {
 			workoutExercises: [],
-			userBodyweight,
+			userBodyweight: lastWorkout?.userBodyweight ?? null,
 			startedAt: new Date(),
 			endedAt: null,
-			note: null,
-			isLastWorkout: false
+			note: null
 		};
-
-		if (data === null) {
-			return todaysWorkoutData;
-		}
-
-		const { isRestDay, splitDayIndex, cycleNumber, todaysSplitDay, isLastWorkout } = getBasicDayInfo(
-			data,
-			data.workoutsOfMesocycle.length
-		);
-		const { mesocycleCyclicSetChanges, workoutsOfMesocycle, mesocycleExerciseSplitDays, ...mesocycleData } = data;
-
-		todaysWorkoutData.workoutOfMesocycle = {
-			mesocycle: mesocycleData,
-			splitDayName: todaysSplitDay.name,
-			workoutStatus: isRestDay ? 'RestDay' : null,
-			cycleNumber,
-			splitDayIndex
-		};
-
-		todaysWorkoutData.isLastWorkout = isLastWorkout;
-
-		if (!isRestDay) {
-			todaysWorkoutData.workoutExercises = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => ({
-				name: exercise.name,
-				targetMuscleGroup: exercise.targetMuscleGroup,
-				customMuscleGroup: exercise.customMuscleGroup
-			}));
-		}
-
-		return todaysWorkoutData;
-	}),
-
-	getSkippedWorkoutData: t.procedure.input(z.number().int()).query(async ({ ctx, input }) => {
-		const splitDayIndex = input;
 
 		const data = await prisma.mesocycle.findFirst({
 			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
@@ -353,88 +280,35 @@ export const workouts = t.router({
 					},
 					orderBy: { dayIndex: 'asc' }
 				},
-				mesocycleCyclicSetChanges: true,
 				workoutsOfMesocycle: {
-					include: { workout: true },
+					select: { splitDayIndex: true, workout: { select: { startedAt: true } } },
 					orderBy: { workout: { startedAt: 'desc' } }
 				}
 			}
 		});
-		const lastBodyweight = data?.workoutsOfMesocycle.map((wm) => wm.workout.userBodyweight)[0];
-		const userBodyweight = lastBodyweight ?? null;
+		if (data === null) return todaysWorkoutData;
 
-		const todaysWorkoutData: TodaysWorkoutData = {
-			workoutExercises: [],
-			userBodyweight,
-			startedAt: new Date(),
-			endedAt: null,
-			note: null,
-			isLastWorkout: false
-		};
+		const { mesocycleExerciseSplitDays, workoutsOfMesocycle, ...mesocycle } = data;
+		const weekNumber = getBlockWeek(mesocycle.startDate!);
+		const totalWeeks = arraySum(mesocycle.RIRProgression);
 
-		if (data === null) {
-			return todaysWorkoutData;
-		}
-
-		const { isRestDay, cycleNumber, todaysSplitDay } = getBasicDayInfoForSkippedWorkout(
-			data,
-			data.workoutsOfMesocycle.length,
-			splitDayIndex
-		);
-		const { mesocycleCyclicSetChanges, workoutsOfMesocycle, mesocycleExerciseSplitDays, ...mesocycleData } = data;
-
-		todaysWorkoutData.workoutOfMesocycle = {
-			mesocycle: mesocycleData,
-			splitDayName: todaysSplitDay.name,
-			workoutStatus: isRestDay ? 'RestDay' : null,
-			cycleNumber,
-			splitDayIndex
-		};
-
-		if (!isRestDay) {
-			todaysWorkoutData.workoutExercises = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => ({
-				name: exercise.name,
-				targetMuscleGroup: exercise.targetMuscleGroup,
-				customMuscleGroup: exercise.customMuscleGroup
+		const routines: RoutineOption[] = mesocycleExerciseSplitDays
+			.filter((splitDay) => !splitDay.isRestDay)
+			.map((splitDay) => ({
+				splitDayIndex: splitDay.dayIndex,
+				name: splitDay.name,
+				workoutExercises: splitDay.mesocycleSplitDayExercises,
+				lastDoneAt: workoutsOfMesocycle.find((wm) => wm.splitDayIndex === splitDay.dayIndex)?.workout.startedAt ?? null
 			}));
-		}
 
+		todaysWorkoutData.activeBlock = {
+			mesocycle,
+			weekNumber,
+			totalWeeks,
+			blockFinished: weekNumber > totalWeeks,
+			routines
+		};
 		return todaysWorkoutData;
-	}),
-
-	getSkippedWorkoutsOfCurrentCycle: t.procedure.query(async ({ ctx }) => {
-		const data = await prisma.mesocycle.findFirst({
-			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-			select: {
-				mesocycleExerciseSplitDays: {
-					select: { name: true },
-					orderBy: { dayIndex: 'asc' }
-				},
-				workoutsOfMesocycle: {
-					select: { splitDayIndex: true, workoutStatus: true },
-					orderBy: { workout: { startedAt: 'desc' } }
-				}
-			}
-		});
-
-		if (data === null) {
-			return [];
-		}
-
-		const { workoutsOfMesocycle, mesocycleExerciseSplitDays } = data;
-		const currentCycleWorkouts = workoutsOfMesocycle.slice(
-			0,
-			workoutsOfMesocycle.length % mesocycleExerciseSplitDays.length
-		);
-		const skippedWorkouts = currentCycleWorkouts.filter((wm) => wm.workoutStatus === 'Skipped');
-		const skippedWorkoutsWithNames = skippedWorkouts
-			.map((workout) => ({
-				...workout,
-				splitDayName: mesocycleExerciseSplitDays[workout.splitDayIndex].name
-			}))
-			.toReversed();
-
-		return skippedWorkoutsWithNames;
 	}),
 
 	getWorkoutExercisesWithPreviousData: t.procedure
@@ -447,31 +321,35 @@ export const workouts = t.router({
 					startDate: { not: null },
 					endDate: null
 				},
-				include: createActiveMesocycleWithProgressionDataInclude(input.splitDayIndex)
+				include: createActiveMesocycleWithProgressionDataInclude()
 			});
 
 			const workoutExercisesWithPreviousData: WorkoutExercisesWithPreviousData = {
 				todaysWorkoutExercises: [],
 				previousWorkoutData: null
 			};
-			if (!data) return workoutExercisesWithPreviousData;
+			const todaysSplitDay = data?.mesocycleExerciseSplitDays[splitDayIndex];
+			if (!data || !todaysSplitDay || todaysSplitDay.isRestDay) return workoutExercisesWithPreviousData;
 
-			const totalWorkouts = await prisma.workoutOfMesocycle.count({ where: { mesocycleId: data?.id } });
-			const { isRestDay, cycleNumber } = getBasicDayInfoForSkippedWorkout(data, totalWorkouts, splitDayIndex);
-			if (isRestDay) return workoutExercisesWithPreviousData;
+			const exerciseNames = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => exercise.name);
+			const exerciseHistory = await getExerciseHistory(ctx.userId, exerciseNames);
 
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
 				data,
-				cycleNumber,
+				getBlockWeek(data.startDate!),
 				input.userBodyweight,
-				splitDayIndex
+				splitDayIndex,
+				exerciseHistory
 			);
 
-			const previousWorkout = data.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null).at(-1)?.workout;
-			if (previousWorkout) {
+			// "Previous" for comparisons: the last time each of today's exercises was done
+			const lastPerformances = exerciseNames
+				.map((name) => exerciseHistory[name]?.at(-1))
+				.filter((performance) => performance !== undefined);
+			if (lastPerformances.length > 0) {
 				workoutExercisesWithPreviousData.previousWorkoutData = {
-					exercises: previousWorkout.workoutExercises,
-					userBodyweight: previousWorkout.userBodyweight
+					exercises: lastPerformances.map((performance) => performance.exercise),
+					userBodyweight: lastPerformances.at(-1)!.oldUserBodyweight
 				};
 			}
 
@@ -539,41 +417,22 @@ export const workouts = t.router({
 			return { message: 'Workout created successfully' };
 		}
 
-		// Update mesocycle data using this new workout
+		// Update the routine's exercises in the block according to this workout
 		const mesocycleData = await prisma.mesocycle.findFirst({
 			where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
-			select: {
-				RIRProgression: true,
-				mesocycleExerciseSplitDays: { select: { id: true }, orderBy: { dayIndex: 'asc' } },
-				workoutsOfMesocycle: {
-					select: { workoutId: true, splitDayIndex: true },
-					orderBy: { workout: { startedAt: 'desc' } }
-				}
-			}
+			select: { mesocycleExerciseSplitDays: { select: { id: true, dayIndex: true } } }
 		});
-
-		if (!mesocycleData) {
-			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Mesocycle not found' });
+		const todaysSplitDay = mesocycleData?.mesocycleExerciseSplitDays.find(
+			(splitDay) => splitDay.dayIndex === workoutOfMesocycle.splitDayIndex
+		);
+		if (!mesocycleData || !todaysSplitDay) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Routine of the active block not found' });
 		}
 
-		// Update mesocycle's exercise templates according to new workout
 		if (workoutOfMesocycle.workoutStatus === null) {
-			const todaysSplitDay = mesocycleData.mesocycleExerciseSplitDays[workoutOfMesocycle.splitDayIndex];
-			if (!todaysSplitDay) {
-				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Related mesocycle exercise split day not found' });
-			}
-
 			transactionQueries.push(
 				prisma.mesocycleExerciseTemplate.deleteMany({
-					where: {
-						mesocycleExerciseSplitDay: {
-							dayIndex: workoutOfMesocycle.splitDayIndex,
-							mesocycle: {
-								id: workoutOfMesocycle.mesocycle.id,
-								userId: ctx.userId
-							}
-						}
-					}
+					where: { mesocycleExerciseSplitDayId: todaysSplitDay.id }
 				}),
 				prisma.mesocycleExerciseTemplate.createMany({
 					data: workoutExercises.map((ex, exerciseIdx) => {
@@ -588,42 +447,9 @@ export const workouts = t.router({
 			);
 		}
 
-		// Delete skipped workout if repeating
-		const currentCycleWorkouts = mesocycleData.workoutsOfMesocycle.slice(
-			0,
-			mesocycleData.workoutsOfMesocycle.length % mesocycleData.mesocycleExerciseSplitDays.length
-		);
-		const repeatOfSkippedWorkout = currentCycleWorkouts.find(
-			(wm) => wm.splitDayIndex === input.workoutData.workoutOfMesocycle?.splitDayIndex
-		);
-
-		// End mesocycle if all workouts completed (shouldn't happen when repeating skipped workouts)
-		let mesocycleCompleted: boolean | undefined = undefined;
-		const totalWorkouts = arraySum(mesocycleData.RIRProgression) * mesocycleData.mesocycleExerciseSplitDays.length;
-		const completedWorkouts = mesocycleData.workoutsOfMesocycle.length + 1; // +1 as we assume this new workout to be completed as well
-		mesocycleCompleted = completedWorkouts >= totalWorkouts;
-
-		if (repeatOfSkippedWorkout) {
-			transactionQueries.push(prisma.workout.delete({ where: { id: repeatOfSkippedWorkout.workoutId } }));
-		} else if (mesocycleCompleted) {
-			transactionQueries.push(
-				prisma.mesocycle.update({
-					where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
-					data: { endDate: new Date() }
-				})
-			);
-		}
-
 		await prisma.$transaction(transactionQueries);
-
-		let message = 'Workout created successfully';
-		if (workoutOfMesocycle?.workoutStatus === 'RestDay') {
-			message = 'Rest day completed successfully';
-		}
-		if (workoutOfMesocycle?.workoutStatus === 'Skipped') {
-			message = 'Workout skipped successfully';
-		}
-		return { message, mesocycleCompleted };
+		const message = 'Workout created successfully';
+		return { message };
 	}),
 
 	editById: t.procedure
@@ -725,59 +551,54 @@ export const workouts = t.router({
 		}),
 
 	getUserExercises: t.procedure.input(z.enum(['minimal', 'extensive'])).query(async ({ ctx, input }) => {
-		const selectQuery: Prisma.WorkoutExerciseSelect | undefined =
-			input === 'minimal' ? { name: true, targetMuscleGroup: true, customMuscleGroup: true } : undefined;
+		if (input === 'extensive') {
+			return prisma.workoutExercise.findMany({
+				where: { workout: { userId: ctx.userId } },
+				distinct: ['name'],
+				orderBy: { workout: { startedAt: 'desc' } }
+			});
+		}
 
-		return prisma.workoutExercise.findMany({
-			where: { workout: { userId: ctx.userId } },
-			distinct: ['name'],
-			orderBy: { workout: { startedAt: 'desc' } },
-			select: selectQuery
+		// Names from logged workouts (most recent first), then ones only used in routines so far
+		// Fields shared by logged exercises and routine exercises, so picking one pre-fills its settings
+		const select = {
+			name: true,
+			targetMuscleGroup: true,
+			customMuscleGroup: true,
+			bodyweightFraction: true,
+			setType: true,
+			repRangeStart: true,
+			repRangeEnd: true,
+			changeType: true,
+			changeAmount: true,
+			note: true,
+			topRepRangeStart: true,
+			topRepRangeEnd: true
+		} as const;
+		const [workoutExercises, splitExercises, mesocycleExercises] = await Promise.all([
+			prisma.workoutExercise.findMany({
+				where: { workout: { userId: ctx.userId } },
+				distinct: ['name'],
+				orderBy: { workout: { startedAt: 'desc' } },
+				select
+			}),
+			prisma.exerciseTemplate.findMany({
+				where: { exerciseSplitDay: { exerciseSplit: { userId: ctx.userId } } },
+				distinct: ['name'],
+				select
+			}),
+			prisma.mesocycleExerciseTemplate.findMany({
+				where: { mesocycleExerciseSplitDay: { mesocycle: { userId: ctx.userId } } },
+				distinct: ['name'],
+				select
+			})
+		]);
+
+		const seenNames = new Set<string>();
+		return [...workoutExercises, ...splitExercises, ...mesocycleExercises].filter((exercise) => {
+			if (seenNames.has(exercise.name)) return false;
+			seenNames.add(exercise.name);
+			return true;
 		});
 	})
 });
-
-function getBasicDayInfo(
-	mesocycleData: {
-		mesocycleExerciseSplitDays: (MesocycleExerciseSplitDay & {
-			mesocycleSplitDayExercises: {
-				name: string;
-				targetMuscleGroup: MuscleGroup;
-				customMuscleGroup: string | null;
-			}[];
-		})[];
-		RIRProgression: number[];
-	},
-	totalWorkouts: number
-) {
-	const { mesocycleExerciseSplitDays } = mesocycleData;
-	const splitLength = mesocycleExerciseSplitDays.length;
-	const todaysSplitDay = mesocycleExerciseSplitDays[totalWorkouts % splitLength];
-	const isRestDay = todaysSplitDay.isRestDay;
-	const splitDayIndex = totalWorkouts % splitLength;
-	const cycleNumber = 1 + Math.floor(totalWorkouts / splitLength);
-	const isLastWorkout = totalWorkouts === arraySum(mesocycleData.RIRProgression) * splitLength - 1;
-	return { isRestDay, splitDayIndex, cycleNumber, todaysSplitDay, isLastWorkout };
-}
-
-function getBasicDayInfoForSkippedWorkout(
-	mesocycleData: {
-		mesocycleExerciseSplitDays: (MesocycleExerciseSplitDay & {
-			mesocycleSplitDayExercises: {
-				name: string;
-				targetMuscleGroup: MuscleGroup;
-				customMuscleGroup: string | null;
-			}[];
-		})[];
-		workoutsOfMesocycle: WorkoutOfMesocycle[];
-	},
-	totalWorkouts: number,
-	skippedWorkoutIndex: number
-) {
-	const { mesocycleExerciseSplitDays } = mesocycleData;
-	const splitLength = mesocycleExerciseSplitDays.length;
-	const todaysSplitDay = mesocycleExerciseSplitDays[skippedWorkoutIndex];
-	const isRestDay = todaysSplitDay.isRestDay;
-	const cycleNumber = 1 + Math.floor(totalWorkouts / splitLength);
-	return { isRestDay, cycleNumber, todaysSplitDay };
-}

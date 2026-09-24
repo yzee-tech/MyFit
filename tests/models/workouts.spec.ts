@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '../fixtures';
-import { createMesocycle } from './commonFunctions';
+import { createMesocycle, pickRoutine } from './commonFunctions';
 
 function getTodaysDateString() {
 	return new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit' });
@@ -164,12 +164,15 @@ test('create workout with all set types', async ({ page }) => {
 test('create a workout with active mesocycle', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
-	await expect(page.getByRole('main')).toContainText('Pull A Day 1, Cycle 1 LatsTrapsBicepsRear delts');
+	await expect(page.getByRole('main')).toContainText('Pull A Not done yet LatsTrapsBicepsRear delts');
+	await expect(page.getByRole('main')).toContainText('Legs B Not done yet');
 	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('100');
+	await expect(page.getByRole('button', { name: 'Pick a routine' })).toBeDisabled();
+	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'New workout Exercises Pull A Day 1, Cycle 1 Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (+BW) RIR Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
+		'New workout Exercises Pull A Week 1 Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (+BW) RIR Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
 	);
 	await page.locator('#Pull-ups-set-1-reps').fill('12');
 	await page.locator('#Pull-ups-set-2-reps').fill('11');
@@ -250,20 +253,45 @@ test('create workout without using active mesocycle', async ({ page }) => {
 	);
 });
 
-test('skip a workout', async ({ page }) => {
+test('progression carries over between routines that share an exercise', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('status')).toContainText('Workout skipped successfully');
-	await page.getByRole('link', { name: 'Workouts' }).click();
-	await expect(page.getByRole('main')).toContainText(`${getTodaysDateString()} Pull A (skipped)`);
+	await pickRoutine(page, 'Legs A');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	for (const exercise of ['Barbell good mornings', 'Barbell squats', 'Leg extensions']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Calf\\ raises-set-1-reps"]').fill('12');
+	await page.locator('[id="Calf\\ raises-set-2-reps"]').fill('12');
+	await page.locator('[id="Calf\\ raises-set-3-reps"]').fill('11');
+	await page.locator('[id="Calf\\ raises-set-1-load"]').fill('50');
+	await page.getByTestId('Calf raises-set-1-action').click();
+	await page.getByTestId('Calf raises-set-2-action').click();
+	await page.getByTestId('Calf raises-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	// Legs B also has calf raises: its suggestion starts from the Legs A session
+	await page.getByLabel('create-workout').click();
+	await expect(page.getByRole('main')).toContainText('Legs A Done today');
+	await pickRoutine(page, 'Legs B');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Calf\\ raises-set-1-load"]')).toHaveValue('50');
+	// Straight sets share set 1's weight; each set gets a rep target
+	await expect(page.locator('[id="Calf\\ raises-set-3-reps"]')).not.toHaveValue('');
+	// Exercises never done before have no suggestion
+	await expect(page.locator('#Lunges-set-1-load')).toHaveValue('');
 });
 
 test('delete a workout', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByTestId('Pull-ups-menu-button').click();
@@ -284,7 +312,7 @@ test('delete a workout', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	await page.getByLabel('create-workout').click();
-	await expect(page.getByRole('main')).toContainText('Push A Day 2, Cycle 1 ChestTricepsSide delts');
+	await expect(page.getByRole('main')).toContainText('Pull A Done today');
 	await page.getByRole('link', { name: 'Workouts' }).click();
 	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
 	await page.getByLabel('workout-options').click();
@@ -292,13 +320,14 @@ test('delete a workout', async ({ page }) => {
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Workout deleted successfully' })).toBeVisible();
 	await page.getByLabel('create-workout').click();
-	await expect(page.getByRole('main')).toContainText('Pull A Day 1, Cycle 1 Rear delts');
+	await expect(page.getByRole('main')).toContainText('Pull A Not done yet');
 });
 
 test('edit a workout', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByTestId('Barbell rows-menu-button').click();
@@ -342,6 +371,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByTestId('Barbell rows-menu-button').click();

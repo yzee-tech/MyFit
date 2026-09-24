@@ -1,6 +1,6 @@
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { ActiveMesocycleWithProgressionData } from '$lib/trpc/routes/workouts';
-import { arrayAverage, arraySum, groupBy } from '../utils';
+import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Prisma } from '@prisma/client';
 
@@ -127,10 +127,13 @@ type SetInProgress = {
 	completed: boolean;
 };
 
-type PreviousPerformance = {
+export type PreviousPerformance = {
 	exercise: WorkoutExercise;
 	oldUserBodyweight: number;
 };
+
+/** Past performances of each exercise, keyed by exercise name, oldest first */
+export type ExerciseHistory = Record<string, PreviousPerformance[]>;
 
 export type WorkoutExerciseInProgress = Omit<
 	Prisma.WorkoutExerciseCreateWithoutWorkoutInput,
@@ -194,7 +197,17 @@ export function getRIRForWeek(rirArray: number[], cycle: number): number {
 		cumulativeWeeks += rirArray[i];
 		if (cycle <= cumulativeWeeks) return rirArray.length - i - 1;
 	}
-	throw new Error('Cycle number is out of range.');
+	// Past the planned length (block not finished yet): keep the last week's RIR
+	const lastRIR = rirArray.findLastIndex((weeks) => weeks > 0);
+	return lastRIR === -1 ? 0 : rirArray.length - lastRIR - 1;
+}
+
+const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** 1-based calendar week of a block, counted from its start date */
+export function getBlockWeek(startDate: Date | string, now: Date = new Date()): number {
+	const elapsed = now.getTime() - new Date(startDate).getTime();
+	return Math.max(1, Math.floor(elapsed / WEEK_IN_MS) + 1);
 }
 
 function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {
@@ -297,20 +310,6 @@ function adjustIdealPerformance(actualPerformances: number[], idealPerformance: 
 	return adjustedIdealPerformance;
 }
 
-function getTotalCyclicSetsPerMuscleGroup(
-	mesocycleExerciseSplitDays: ActiveMesocycleWithProgressionData['mesocycleExerciseSplitDays']
-) {
-	const cyclicSetsPerMuscleGroup: Map<string, number> = new Map();
-	mesocycleExerciseSplitDays.forEach((splitDay) => {
-		splitDay.mesocycleSplitDayExercises.forEach((exercise) => {
-			const muscleGroup = exercise.customMuscleGroup ?? exercise.targetMuscleGroup;
-			const previousSets = cyclicSetsPerMuscleGroup.get(muscleGroup) || 0;
-			cyclicSetsPerMuscleGroup.set(muscleGroup, previousSets + exercise.sets);
-		});
-	});
-	return cyclicSetsPerMuscleGroup;
-}
-
 function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
 	let loadIncreasedForOneOfSameLoadSets = false;
@@ -368,10 +367,10 @@ export function progressiveOverloadMagic(
 	mesocycleWithProgressionData: ActiveMesocycleWithProgressionData,
 	cycleNumber: number,
 	userBodyweight: number,
-	splitDayIndex: number
+	splitDayIndex: number,
+	exerciseHistory: ExerciseHistory = {}
 ) {
-	const { mesocycleCyclicSetChanges, mesocycleExerciseSplitDays, workoutsOfMesocycle, ...mesocycle } =
-		mesocycleWithProgressionData;
+	const { mesocycleExerciseSplitDays, ...mesocycle } = mesocycleWithProgressionData;
 
 	const currentCycleRIR = getRIRForWeek(mesocycle.RIRProgression, cycleNumber);
 	const todaysSplitDay = mesocycleExerciseSplitDays[splitDayIndex];
@@ -380,131 +379,71 @@ export function progressiveOverloadMagic(
 		return createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise);
 	});
 
-	if (workoutsOfMesocycle.length > 0) {
-		workoutExercises.forEach((ex) => {
-			// Progressive overload here
-			const mappedPerformances = workoutsOfMesocycle.map((wm) => ({
-				exercise: wm.workout.workoutExercises.find((exercise) => ex.name === exercise.name),
-				oldUserBodyweight: wm.workout.userBodyweight
-			}));
-			const allPreviousPerformances = mappedPerformances.filter(
-				(item): item is PreviousPerformance => item.exercise !== undefined
-			);
+	workoutExercises.forEach((ex) => {
+		// Progressive overload from the last times this exercise was done, in any routine
+		const allPreviousPerformances = exerciseHistory[ex.name] ?? [];
+		const lastPerformance = allPreviousPerformances.at(-1);
+		if (!lastPerformance?.exercise) return;
 
-			const lastPerformance = allPreviousPerformances.at(-1);
-			if (!lastPerformance?.exercise) return;
+		const routineSetCount = ex.sets.length;
+		const averageDropOffs = generateAveragePerformanceDropOffs(allPreviousPerformances);
+		const lastDropOffs = generateAveragePerformanceDropOffs([
+			allPreviousPerformances[allPreviousPerformances.length - 1]
+		]);
 
-			const averageDropOffs = generateAveragePerformanceDropOffs(allPreviousPerformances);
-			const lastDropOffs = generateAveragePerformanceDropOffs([
-				allPreviousPerformances[allPreviousPerformances.length - 1]
-			]);
+		let dropOffDifferences = averageDropOffs.map((averageDropOff, idx) => lastDropOffs[idx] - averageDropOff);
+		dropOffDifferences =
+			dropOffDifferences[0] < 0
+				? [Math.abs(dropOffDifferences[0]), 0, ...dropOffDifferences.slice(1)]
+				: [0, ...dropOffDifferences];
 
-			let dropOffDifferences = averageDropOffs.map((averageDropOff, idx) => lastDropOffs[idx] - averageDropOff);
-			dropOffDifferences =
-				dropOffDifferences[0] < 0
-					? [Math.abs(dropOffDifferences[0]), 0, ...dropOffDifferences.slice(1)]
-					: [0, ...dropOffDifferences];
+		const idealTotalOverloadPercentagePerSet = ex.overloadPercentage ?? mesocycle.startOverloadPercentage;
+		const performanceChanges = getPerformanceChanges(allPreviousPerformances);
+		const adjustedTotalOverloadPercentagePerSet = adjustIdealPerformance(
+			performanceChanges,
+			idealTotalOverloadPercentagePerSet
+		);
+		const setPriorities = (dropOffDifferences = getMaxIndexes(dropOffDifferences));
+		let remainingTotalOverload = adjustedTotalOverloadPercentagePerSet * lastPerformance.exercise.sets.length;
 
-			const idealTotalOverloadPercentagePerSet = ex.overloadPercentage ?? mesocycle.startOverloadPercentage;
-			const performanceChanges = getPerformanceChanges(allPreviousPerformances);
-			const adjustedTotalOverloadPercentagePerSet = adjustIdealPerformance(
-				performanceChanges,
-				idealTotalOverloadPercentagePerSet
-			);
-			const setPriorities = (dropOffDifferences = getMaxIndexes(dropOffDifferences));
-			let remainingTotalOverload = adjustedTotalOverloadPercentagePerSet * lastPerformance.exercise.sets.length;
+		for (const setIndex of setPriorities) {
+			const oldSet = lastPerformance.exercise.sets[setIndex];
+			if (!oldSet) continue;
 
-			for (const setIndex of setPriorities) {
-				const oldSet = lastPerformance.exercise.sets[setIndex];
-				if (!oldSet) continue;
-
-				const newSet = { ...oldSet, reps: oldSet.reps + 1 };
-				const overloadAchieved = solveBergerFormula({
-					variableToSolve: 'OverloadPercentage',
-					knownValues: {
-						oldSet,
-						newSet,
-						oldUserBodyweight: lastPerformance.oldUserBodyweight,
-						newUserBodyweight: userBodyweight,
-						bodyweightFraction: ex.bodyweightFraction ?? null
-					}
-				});
-
-				const previousRemainingTotalOverload = remainingTotalOverload;
-				remainingTotalOverload -= overloadAchieved;
-
-				if (Math.abs(remainingTotalOverload) < previousRemainingTotalOverload) {
-					ex.sets[setIndex] = addExtraSetProperties(newSet);
-				} else {
-					ex.sets[setIndex] = addExtraSetProperties(oldSet);
+			const newSet = { ...oldSet, reps: oldSet.reps + 1 };
+			const overloadAchieved = solveBergerFormula({
+				variableToSolve: 'OverloadPercentage',
+				knownValues: {
+					oldSet,
+					newSet,
+					oldUserBodyweight: lastPerformance.oldUserBodyweight,
+					newUserBodyweight: userBodyweight,
+					bodyweightFraction: ex.bodyweightFraction ?? null
 				}
-			}
-
-			ex.sets = increaseLoadOfSets(ex, userBodyweight);
-		});
-	}
-
-	// Increase sets
-	if (workoutsOfMesocycle.length >= 2) {
-		const exercisesGroupedByMuscleGroups = Object.entries(
-			groupBy(workoutExercises, (exercise) => exercise.customMuscleGroup ?? exercise.targetMuscleGroup)
-		).map(([muscleGroup, exercises]) => ({
-			muscleGroup,
-			exercises: exercises as WorkoutExerciseInProgress[]
-		}));
-
-		exercisesGroupedByMuscleGroups.forEach(({ muscleGroup, exercises }) => {
-			const averageMuscleGroupPerformanceChanges = exercises
-				.map((ex) => {
-					const mappedPerformances = workoutsOfMesocycle.map((wm) => ({
-						exercise: wm.workout.workoutExercises.find((exercise) => ex.name === exercise.name),
-						oldUserBodyweight: wm.workout.userBodyweight
-					}));
-					const allPreviousPerformances = mappedPerformances.filter(
-						(item): item is PreviousPerformance => item.exercise !== undefined
-					);
-					return arrayAverage(getPerformanceChanges(allPreviousPerformances));
-				})
-				.filter((n) => !isNaN(n));
-
-			const cyclicSetsPerMuscleGroup = getTotalCyclicSetsPerMuscleGroup(mesocycleExerciseSplitDays);
-			const cyclicSetChange = mesocycleCyclicSetChanges.find((setChange) => {
-				if (setChange.muscleGroup === 'Custom') {
-					return setChange.customMuscleGroup === muscleGroup;
-				}
-				return setChange.muscleGroup === muscleGroup;
 			});
-			if (!cyclicSetChange) return;
 
-			const cyclicSetsForMuscleGroup = cyclicSetsPerMuscleGroup.get(muscleGroup) ?? 0;
-			if (cyclicSetsForMuscleGroup >= cyclicSetChange.maxVolume) return;
+			const previousRemainingTotalOverload = remainingTotalOverload;
+			remainingTotalOverload -= overloadAchieved;
 
-			const adjustedTotalOverloadPercentage = adjustIdealPerformance(
-				averageMuscleGroupPerformanceChanges,
-				mesocycle.startOverloadPercentage
+			if (Math.abs(remainingTotalOverload) < previousRemainingTotalOverload) {
+				ex.sets[setIndex] = addExtraSetProperties(newSet);
+			} else {
+				ex.sets[setIndex] = addExtraSetProperties(oldSet);
+			}
+		}
+
+		// The routine decides how many sets: drop extra sets from the last time, and fill
+		// missing ones with a copy of the last suggested set
+		ex.sets = ex.sets.slice(0, routineSetCount);
+		const lastSuggestedSet = ex.sets.findLast((set) => set.reps !== undefined);
+		if (lastSuggestedSet) {
+			ex.sets = ex.sets.map((set) =>
+				set.reps === undefined ? { ...lastSuggestedSet, miniSets: structuredClone(lastSuggestedSet.miniSets) } : set
 			);
-			let setsToIncrease = 1;
-			if (averageMuscleGroupPerformanceChanges.length > 0) {
-				setsToIncrease = Math.floor(
-					(averageMuscleGroupPerformanceChanges.at(-1)! - 0.8 * adjustedTotalOverloadPercentage) /
-						(0.1 * adjustedTotalOverloadPercentage)
-				);
-				setsToIncrease = Math.min(setsToIncrease, cyclicSetChange.setIncreaseAmount);
-			}
+		}
 
-			for (let i = 0; i < setsToIncrease; i++) {
-				const exercisesSortedBySets = exercises.sort((a, b) => a.sets.length - b.sets.length);
-				exercisesSortedBySets[0].sets.push({
-					reps: undefined,
-					load: undefined,
-					RIR: undefined,
-					skipped: false,
-					completed: false,
-					miniSets: []
-				});
-			}
-		});
-	}
+		ex.sets = increaseLoadOfSets(ex, userBodyweight);
+	});
 
 	// RIR adjustment
 	workoutExercises.forEach((ex) => {
