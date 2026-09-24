@@ -18,7 +18,7 @@ Make sure you have the following tools installed:
 1. Fork the repository.
 2. Clone your forked repository:
    ```bash
-   git clone https://github.com/WhyAsh5114/MyFit.git
+   git clone https://github.com/yzee-tech/MyFit.git
    cd MyFit
    ```
 3. Install dependencies:
@@ -67,7 +67,7 @@ To use them, open your browser's developer tools, navigate to the `Application` 
 
 ### Reporting Issues
 
-If you find a bug or have a feature request, please check the [existing issues](https://github.com/WhyAsh5114/MyFit/issues) first. If your issue is not listed, create a new one and provide as much detail as possible.
+If you find a bug or have a feature request, please check the [existing issues](https://github.com/yzee-tech/MyFit/issues) first. If your issue is not listed, create a new one and provide as much detail as possible.
 
 ### Proposing Changes
 

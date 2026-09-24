@@ -1,4 +1,6 @@
-# [MyFit](https://myfit.fit/)
+# [MyFit](https://my-fit-lake.vercel.app/)
+
+> This is an independently hosted fork of [WhyAsh5114/MyFit](https://github.com/WhyAsh5114/MyFit), licensed under the AGPL v3.
 
 ![overview](https://github.com/user-attachments/assets/5290df63-ba02-49b1-93c8-9706046bd176)
 
@@ -6,7 +8,7 @@ A web-based workout tracking application designed to help users track their work
 
 ## Direct link
 
-For web app access, use the [direct link](https://myfit.fit/). Can be installed on device through supported browsers and platforms, recommended browser is Google Chrome.
+For web app access, use the [direct link](https://my-fit-lake.vercel.app/). Can be installed on device through supported browsers and platforms, recommended browser is Google Chrome.
 
 ## Features
 
@@ -32,7 +34,7 @@ Follow these instructions to get a copy of the project up and running on your lo
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/WhyAsh5114/MyFit.git
+   git clone https://github.com/yzee-tech/MyFit.git
    cd MyFit
    ```
 

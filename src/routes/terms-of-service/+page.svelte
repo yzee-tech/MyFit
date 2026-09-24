@@ -15,11 +15,11 @@
 
 	<h3>1. Not Medical Advice</h3>
 	<p>
-		The information provided by MyFit ("we," "us," or "our") on myfit.fit (the "Site") and our mobile application is for
-		general informational purposes only. All information on the Site and our mobile application is provided in good
-		faith; however, we make no representation or warranty of any kind, express or implied, regarding the accuracy,
-		adequacy, validity, reliability, availability, or completeness of any information on the Site or our mobile
-		application.
+		The information provided by MyFit ("we," "us," or "our") on my-fit-lake.vercel.app (the "Site") and our mobile
+		application is for general informational purposes only. All information on the Site and our mobile application is
+		provided in good faith; however, we make no representation or warranty of any kind, express or implied, regarding
+		the accuracy, adequacy, validity, reliability, availability, or completeness of any information on the Site or our
+		mobile application.
 	</p>
 	<p>
 		<strong>
@@ -236,5 +236,5 @@
 	</p>
 
 	<h2>Contact</h2>
-	<p>If you have any questions about these Terms, please contact us through our GitHub repository or Discord server.</p>
+	<p>If you have any questions about these Terms, please contact us through our GitHub repository.</p>
 </div>

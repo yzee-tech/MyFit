@@ -108,7 +108,7 @@
 			<p class="text-xs text-muted-foreground">
 				For complete Terms of Service, please visit:
 				<a href="/terms-of-service" class="font-semibold text-primary hover:underline" target="_blank" tabindex="-1">
-					myfit.fit/terms-of-service
+					my-fit-lake.vercel.app/terms-of-service
 				</a>
 			</p>
 		</div>

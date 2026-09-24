@@ -14,20 +14,21 @@
 	let releases = $state<{ tag_name: string; body: string }[]>([]);
 
 	onMount(async () => {
-		const response = await fetch('https://api.github.com/repos/WhyAsh5114/MyFit/releases');
+		const response = await fetch('https://api.github.com/repos/yzee-tech/MyFit/releases');
 		releases = await response.json();
 		const latestRelease = releases[0];
+		if (!latestRelease) return;
 
 		const ls = window.localStorage;
 		const changelogShownOf = ls.getItem('changelogShownOf');
 		if (
 			changelogShownOf &&
-			changelogShownOf.localeCompare(latestRelease!.tag_name, undefined, { numeric: true }) === -1
+			changelogShownOf.localeCompare(latestRelease.tag_name, undefined, { numeric: true }) === -1
 		) {
 			open = true;
 			await loadChangelog(changelogShownOf);
 		}
-		ls.setItem('changelogShownOf', latestRelease!.tag_name);
+		ls.setItem('changelogShownOf', latestRelease.tag_name);
 	});
 
 	async function loadChangelog(lastRelease: string) {

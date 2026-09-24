@@ -13,12 +13,10 @@
 		{ text: 'Mesocycles', href: '/mesocycles' },
 		{ text: 'Workouts', href: '/workouts' },
 		null,
-		{ text: 'GitHub', href: 'https://github.com/WhyAsh5114/MyFit' },
-		{ text: 'Discord', href: 'https://discord.com/invite/2g9YPD6PQu' },
+		{ text: 'GitHub', href: 'https://github.com/yzee-tech/MyFit' },
 		null,
 		{ text: 'Docs', href: '/docs' },
 		{ text: 'Changelog', href: '/changelog' },
-		{ text: 'Donations', href: '/donations' },
 		{ text: 'Privacy policy', href: '/privacy-policy' },
 		{ text: 'Terms of service', href: '/terms-of-service' }
 	];
