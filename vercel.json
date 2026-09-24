@@ -1,3 +1,4 @@
 {
-	"installCommand": "pnpm install --frozen-lockfile"
+	"installCommand": "pnpm install --frozen-lockfile",
+	"buildCommand": "DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" pnpm exec prisma migrate deploy && pnpm build"
 }
