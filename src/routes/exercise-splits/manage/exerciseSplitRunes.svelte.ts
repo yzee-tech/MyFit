@@ -18,9 +18,7 @@ type ExerciseSplitDayWithoutIds = Omit<Prisma.ExerciseSplitDayCreateWithoutExerc
 
 export function createExerciseSplitRunes() {
 	let splitName = $state('');
-	let splitDays: ExerciseSplitDayWithoutIds[] = $state(
-		Array.from({ length: 7 }).map(() => ({ name: '', isRestDay: false }))
-	);
+	let splitDays: ExerciseSplitDayWithoutIds[] = $state([{ name: '', isRestDay: false }]);
 	let splitExercises: SplitExerciseTemplateWithoutIdsOrIndex[][] = $state([]);
 	let editingExerciseSplitId: string | null = $state(null);
 
@@ -37,40 +35,22 @@ export function createExerciseSplitRunes() {
 		splitDays.push({ name: '', isRestDay: false });
 	}
 
-	function removeSplitDay() {
-		splitDays.pop();
-	}
-
-	function toggleSplitDay(idx: number, markAsRest: boolean) {
-		if (!markAsRest) splitDays[idx].isRestDay = false;
-		else {
-			splitDays[idx].isRestDay = true;
-			splitDays[idx].name = '';
-		}
+	function removeSplitDay(idx: number) {
+		splitDays.splice(idx, 1);
+		splitExercises.splice(idx, 1);
+		if (selectedSplitDayIndex >= splitDays.length) selectedSplitDayIndex = splitDays.length - 1;
+		saveStoresToLocalStorage();
 	}
 
 	function validateSplitStructure() {
-		const splitDayNames = splitDays.filter((splitDay) => !splitDay.isRestDay).map((splitDay) => splitDay.name);
-
-		return new Set(splitDayNames).size === splitDayNames.length;
-	}
-
-	function getDataLossDays() {
-		const dataLossDays: number[] = [];
-		for (let i = 0; i < splitExercises.length; i++) {
-			if (splitDays[i] === undefined && splitExercises[i].length === 0) continue;
-			if (splitDays[i] === undefined && splitExercises[i].length > 0) dataLossDays.push(i);
-			else if (splitDays[i].isRestDay && splitExercises[i].length > 0) dataLossDays.push(i);
-		}
-		return dataLossDays;
+		const routineNames = splitDays.map((splitDay) => splitDay.name.trim());
+		return new Set(routineNames).size === routineNames.length;
 	}
 
 	function updateSplitExercisesStructure() {
-		for (let i = 0; i < splitDays.length; i++) {
-			if (splitDays[i].isRestDay || splitExercises[i] === undefined) splitExercises[i] = [];
-		}
+		for (let i = 0; i < splitDays.length; i++) splitExercises[i] ??= [];
 		splitExercises.length = splitDays.length;
-		selectedSplitDayIndex = splitDays.findIndex((splitDay) => !splitDay.isRestDay);
+		selectedSplitDayIndex = 0;
 		saveStoresToLocalStorage();
 	}
 
@@ -140,7 +120,7 @@ export function createExerciseSplitRunes() {
 	function resetStores() {
 		editingExerciseSplitId = null;
 		splitName = '';
-		splitDays = Array.from({ length: 7 }).map(() => ({ name: '', isRestDay: false }));
+		splitDays = [{ name: '', isRestDay: false }];
 		splitExercises = [];
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
@@ -151,11 +131,10 @@ export function createExerciseSplitRunes() {
 	function loadExerciseSplit(exerciseSplit: FullExerciseSplitWithoutIdsOrIndex, editingId?: string) {
 		editingExerciseSplitId = editingId ?? null;
 		splitName = exerciseSplit.name;
-		splitDays = exerciseSplit.exerciseSplitDays.map((splitDay) => ({
-			name: splitDay.name,
-			isRestDay: splitDay.isRestDay
-		}));
-		splitExercises = exerciseSplit.exerciseSplitDays.map((splitDay) => splitDay.exercises);
+		// Rest days belonged to the old fixed rotation; a routine library only has routines
+		const routines = exerciseSplit.exerciseSplitDays.filter((splitDay) => !splitDay.isRestDay);
+		splitDays = routines.map((splitDay) => ({ name: splitDay.name, isRestDay: false }));
+		splitExercises = routines.map((splitDay) => splitDay.exercises);
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
 		copiedExercises = undefined;
@@ -198,9 +177,7 @@ export function createExerciseSplitRunes() {
 		},
 		addSplitDay,
 		removeSplitDay,
-		toggleSplitDay,
 		validateSplitStructure,
-		getDataLossDays,
 		updateSplitExercisesStructure,
 		addExercise,
 		setEditingExercise,

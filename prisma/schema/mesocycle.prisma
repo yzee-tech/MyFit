@@ -5,7 +5,8 @@ model Mesocycle {
   userId                     String
   exerciseSplit              ExerciseSplit?              @relation(fields: [exerciseSplitId], references: [id])
   exerciseSplitId            String?
-  RIRProgression             Int[]
+  /// Target RIR of each week of the block, in order; -1 marks a deload week
+  weeklyRIR                  Int[]
   startDate                  DateTime?
   endDate                    DateTime?
   startOverloadPercentage    Float

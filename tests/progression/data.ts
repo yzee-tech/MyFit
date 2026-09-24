@@ -5,7 +5,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 	name: 'MyMeso',
 	userId: 'cm25sutzy000010xygns28ax0',
 	exerciseSplitId: 'cm25sv4cc000014ycbgn538se',
-	RIRProgression: [1, 3, 3, 3],
+	weeklyRIR: [3, 3, 3, 2, 2, 2, 1, 1, 1, 0],
 	startDate: new Date(),
 	endDate: null,
 	startOverloadPercentage: 2.5,

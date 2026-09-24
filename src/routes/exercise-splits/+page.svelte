@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -53,7 +54,7 @@
 	}
 </script>
 
-<H2>Exercise splits</H2>
+<H2>Routine libraries</H2>
 
 <div class="flex grow flex-col gap-2">
 	<div class="flex gap-1">
@@ -84,13 +85,13 @@
 				variant="outline"
 			>
 				<span class="truncate text-lg font-semibold">{exerciseSplit.name}</span>
-				<Badge>{exerciseSplit.exerciseSplitDays.length} days / cycle</Badge>
+				<Badge>{formatRoutineCount(exerciseSplit.exerciseSplitDays)}</Badge>
 			</Button>
 		{/each}
 		<DefaultInfiniteLoader
 			{loadMore}
 			identifier={$page.url.searchParams.get('search')}
-			entityPlural="exercise splits"
+			entityPlural="routine libraries"
 		/>
 	</div>
 </div>

@@ -194,8 +194,8 @@
 
 <ResponsiveDialog title="Note" bind:open={editExerciseSplitNoteDrawerOpen}>
 	{#snippet description()}
-		Editing an exercise split won't change the mesocycle split it is used in. To modify that, use the <b>Split</b> tab
-		in <b>View mesocycle</b>
+		Editing a routine library won't change the routines of mesocycles already using it. To change those, use the
+		<b>Routines</b> tab in <b>View mesocycle</b>
 	{/snippet}
 	<Button onclick={editExerciseSplit}>Continue</Button>
 </ResponsiveDialog>

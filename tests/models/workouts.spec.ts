@@ -1,5 +1,8 @@
 import { test, expect, type Page } from '../fixtures';
+import { PrismaClient } from '@prisma/client';
 import { createMesocycle, pickRoutine } from './commonFunctions';
+
+const prisma = new PrismaClient();
 
 function getTodaysDateString() {
 	return new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit' });
@@ -400,8 +403,75 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Pull APush ALegs APull BPush BLegs BRest Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
+		'Pull APush ALegs APull BPush BLegs B Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
+});
+
+async function logBarbellRowsInPullA(page: Page) {
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	for (const exercise of ['Pull-ups', 'Dumbbell bicep curls', 'Face pulls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill('13');
+	await page.locator('[id="Barbell\\ rows-set-2-reps"]').fill('13');
+	await page.locator('[id="Barbell\\ rows-set-3-reps"]').fill('12');
+	await page.locator('[id="Barbell\\ rows-set-1-load"]').fill('40');
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await page.getByTestId('Barbell rows-set-2-action').click();
+	await page.getByTestId('Barbell rows-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+}
+
+test('welcome back after a break: repeat last numbers, easier', async ({ page, userData }) => {
+	await createSplitAndMesoForTest(page);
+	await logBarbellRowsInPullA(page);
+
+	// Pretend that workout was 10 days ago
+	await prisma.workout.updateMany({
+		where: { userId: userData.userId },
+		data: { startedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) }
+	});
+	await page.getByLabel('create-workout').click();
+	await expect(page.getByRole('main')).toContainText("Welcome back: take it easy today It's been 10 days");
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	// Same weight; 1 more rep in reserve than week 1's 3 RIR, so one rep fewer than last time
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('12');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-RIR"]')).toHaveValue('4');
+
+	// Turned off in Settings: no banner
+	await page.goto('/settings');
+	await page.getByLabel('Take it easy after a break').click();
+	await page.waitForTimeout(500);
+	await page.goto('/workouts/manage/start');
+	await page
+		.getByRole('button', { name: 'Overwrite' })
+		.click({ timeout: 2000 })
+		.catch(() => {});
+	await expect(page.getByRole('main')).toContainText('Pick a routine');
+	await expect(page.getByRole('main')).not.toContainText('Welcome back');
+});
+
+test('deload week: same weights, half the sets', async ({ page, userData }) => {
+	await createSplitAndMesoForTest(page);
+	await logBarbellRowsInPullA(page);
+
+	await prisma.mesocycle.updateMany({ where: { userId: userData.userId }, data: { weeklyRIR: [-1] } });
+	await page.getByLabel('create-workout').click();
+	await expect(page.getByRole('main')).toContainText('Deload week');
+	await expect(page.getByRole('main')).toContainText('Week 1 of 1 · Deload');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
+	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toBeVisible();
+	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
 });

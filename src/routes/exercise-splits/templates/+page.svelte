@@ -1,6 +1,7 @@
 <svelte:options runes={true} />
 
 <script lang="ts">
+	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import ExternalLink from 'virtual:icons/lucide/external-link';
@@ -16,7 +17,7 @@
 	}
 </script>
 
-<H2>Exercise split</H2>
+<H2>Routine library templates</H2>
 <H3>Templates</H3>
 
 {#each exerciseSplitTemplates as { description, exerciseSplit }}
@@ -27,7 +28,7 @@
 	>
 		<div class="pointer-events-none flex w-full items-center justify-between">
 			<span class="text-lg font-semibold">{exerciseSplit.name}</span>
-			<Badge>{exerciseSplit.exerciseSplitDays.length} days / cycle</Badge>
+			<Badge>{formatRoutineCount(exerciseSplit.exerciseSplitDays)}</Badge>
 		</div>
 		<span class="pointer-events-none w-full text-wrap text-left text-muted-foreground">
 			{description}

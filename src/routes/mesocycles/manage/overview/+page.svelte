@@ -12,7 +12,6 @@
 	import type { FullExerciseSplit } from '../../../exercise-splits/manage/exerciseSplitRunes.svelte';
 	import type { Prisma } from '@prisma/client';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import MesocycleCyclicSetChangesCharts from '../../(components)/MesocycleCyclicSetChangesCharts.svelte';
 	import { TRPCClientError } from '@trpc/client';
 
 	let { data } = $props();
@@ -23,11 +22,12 @@
 
 	function getSplitWithoutExercises() {
 		const exerciseSplit = mesocycleRunes.selectedExerciseSplit as FullExerciseSplit;
+		const includedRoutineIndexes = mesocycleRunes.getIncludedRoutineIndexes();
 		const exerciseSplitWithoutExercises = {
 			...exerciseSplit,
-			exerciseSplitDays: exerciseSplit.exerciseSplitDays.map((splitDay) => {
-				const { exercises, id, exerciseSplitId, ...rest } = splitDay;
-				return rest;
+			exerciseSplitDays: includedRoutineIndexes.map((routineIdx, dayIndex) => {
+				const { exercises, id, exerciseSplitId, ...rest } = exerciseSplit.exerciseSplitDays[routineIdx];
+				return { ...rest, dayIndex };
 			})
 		};
 		return exerciseSplitWithoutExercises;
@@ -75,7 +75,9 @@
 				exerciseSplitId: exerciseSplitWithoutExercises.id
 			},
 			mesocycleCyclicSetChanges,
-			mesocycleExerciseTemplates: mesocycleRunes.mesocycleExerciseTemplates,
+			mesocycleExerciseTemplates: mesocycleRunes
+				.getIncludedRoutineIndexes()
+				.map((routineIdx) => mesocycleRunes.mesocycleExerciseTemplates[routineIdx]),
 			exerciseSplit: exerciseSplitWithoutExercises,
 			startImmediately
 		});
@@ -110,9 +112,19 @@
 	</Card.Root>
 {/if}
 
-<Card.Root class="my-2 p-4">
-	<MesocycleCyclicSetChangesCharts cyclicSetChanges={mesocycleRunes.mesocycleCyclicSetChanges} />
-</Card.Root>
+{#if mesocycleRunes.editingMesocycleId === null && mesocycleRunes.selectedExerciseSplit}
+	{@const includedRoutineIndexes = mesocycleRunes.getIncludedRoutineIndexes()}
+	<Card.Root class="my-2 p-4">
+		<p class="mb-1 text-sm font-medium">
+			{includedRoutineIndexes.length} routines from {mesocycleRunes.selectedExerciseSplit.name}
+		</p>
+		<p class="text-sm text-muted-foreground">
+			{includedRoutineIndexes
+				.map((idx) => mesocycleRunes.selectedExerciseSplit!.exerciseSplitDays[idx].name)
+				.join(', ')}
+		</p>
+	</Card.Root>
+{/if}
 
 <div class="mt-auto grid grid-cols-2 gap-1">
 	<Button onclick={() => window.history.back()} variant="secondary">Previous</Button>

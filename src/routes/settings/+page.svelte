@@ -13,6 +13,7 @@
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import RefreshCcw from 'virtual:icons/lucide/refresh-ccw';
 	import MotivationalQuotes from '$lib/components/settings/MotivationalQuotes.svelte';
+	import WelcomeBack from '$lib/components/settings/WelcomeBack.svelte';
 
 	let hasError = $state(false);
 	let quotesEnabled = $state(false);
@@ -159,6 +160,10 @@
 			</Card.Content>
 		</Card.Root>
 	{:else}
+		<WelcomeBack
+			welcomeBackEnabled={$page.data.userSettings.welcomeBackEnabled}
+			welcomeBackAfterDays={$page.data.userSettings.welcomeBackAfterDays}
+		/>
 		<MotivationalQuotes {quotesEnabled} {quotesDisplayModes} {onUpdateSettings} />
 	{/if}
 </div>

@@ -2,58 +2,39 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import * as Resizable from '$lib/components/ui/resizable';
 	import * as Select from '$lib/components/ui/select';
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 
 	import { goto } from '$app/navigation';
-	import { arraySum } from '$lib/utils';
-	import type { PaneAPI } from 'paneforge';
+	import { DELOAD_WEEK, suggestWeeklyRIR } from '$lib/utils/workoutUtils';
 	import { mesocycleRunes } from '../mesocycleRunes.svelte';
 
-	let manualDragging = false;
-	let panes: PaneAPI[] = $state([]);
+	const MAX_WEEKS = 20;
+	const effortOptions = [
+		{ value: 4, label: '4 RIR' },
+		{ value: 3, label: '3 RIR' },
+		{ value: 2, label: '2 RIR' },
+		{ value: 1, label: '1 RIR' },
+		{ value: 0, label: '0 RIR (failure)' },
+		{ value: DELOAD_WEEK, label: 'Deload' }
+	];
 
-	let RIRProgression = $state(structuredClone($state.snapshot(mesocycleRunes.mesocycle.RIRProgression)));
-	let totalDuration = $state(arraySum(mesocycleRunes.mesocycle.RIRProgression));
-	let selectedRIRs: number[] = $state(
-		mesocycleRunes.mesocycle.RIRProgression.map((_, idx) =>
-			mesocycleRunes.mesocycle.RIRProgression[idx] > 0 ? idx : -1
-		)
-			.filter((idx) => idx !== -1)
-			.toReversed()
-	);
+	let weeklyRIR = $state(structuredClone($state.snapshot(mesocycleRunes.mesocycle.weeklyRIR)));
+	let totalWeeks = $state(weeklyRIR.length);
 
-	function generateRIRDistribution(selectedRirValues: number[], totalWeeks: number) {
-		if (selectedRirValues.length === 0) {
-			RIRProgression = [totalWeeks];
-			return;
-		}
+	function getOption(value: number) {
+		return effortOptions.find((option) => option.value === value) ?? effortOptions[1];
+	}
 
-		const sortedRirs = [...selectedRirValues].sort((a, b) => b - a);
-		const maxRir = Math.max(...sortedRirs);
-		const rirDistribution: number[] = Array(maxRir + 1).fill(0);
-
-		let remainingWeeks = totalWeeks;
-		const weeksPerRir = Math.floor(totalWeeks / selectedRirValues.length);
-
-		for (const rir of selectedRirValues) {
-			rirDistribution[rir] = weeksPerRir;
-			remainingWeeks -= weeksPerRir;
-		}
-
-		let rirIndex = 0;
-		while (remainingWeeks > 0 && rirIndex < selectedRirValues.length) {
-			rirDistribution[selectedRirValues[rirIndex]]++;
-			remainingWeeks--;
-			rirIndex++;
-		}
-		RIRProgression = rirDistribution;
+	/** A new length starts from the suggested plan, which can then be adjusted week by week */
+	function changeLength(weeks: number) {
+		if (isNaN(weeks) || weeks < 1 || weeks > MAX_WEEKS) return;
+		weeklyRIR = suggestWeeklyRIR(weeks);
 	}
 
 	function saveBasics(e: SubmitEvent) {
 		e.preventDefault();
-		mesocycleRunes.mesocycle.RIRProgression = RIRProgression;
+		mesocycleRunes.mesocycle.weeklyRIR = $state.snapshot(weeklyRIR);
 		mesocycleRunes.saveStoresToLocalStorage();
 		goto('/mesocycles/manage/progression');
 	}
@@ -67,80 +48,59 @@
 		<Input id="mesocycle-name" placeholder="Type here" required bind:value={mesocycleRunes.mesocycle.name} />
 	</div>
 
-	<div class="flex gap-2">
-		<div class="flex basis-1/2 flex-col gap-1.5">
-			<Select.Root
-				multiple
-				onSelectedChange={(s) => {
-					if (!s) return;
-					selectedRIRs = s.sort((a, b) => (b.value as number) - (a.value as number)).map((s) => s.value as number);
-					generateRIRDistribution(selectedRIRs, totalDuration);
-				}}
-				selected={selectedRIRs.map((rir) => ({ value: rir, label: `${rir} RIR` }))}
-			>
-				<Select.Label class="p-0 text-sm font-medium leading-none">Select RIRs</Select.Label>
-				<Select.Trigger>
-					<Select.Value placeholder="Select RIRs" />
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						<Select.Item value={4}>4 RIR</Select.Item>
-						<Select.Item value={3}>3 RIR</Select.Item>
-						<Select.Item value={2}>2 RIR</Select.Item>
-						<Select.Item value={1}>1 RIR</Select.Item>
-						<Select.Item value={0}>0 RIR</Select.Item>
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-		</div>
-		<div class="flex basis-1/2 flex-col gap-1.5">
-			<Label for="mesocycle-duration">Mesocycle duration</Label>
-			<Input
-				id="mesocycle-duration"
-				max={20}
-				min={Math.max(1, selectedRIRs.length)}
-				oninput={(e) => {
-					totalDuration = e.currentTarget.valueAsNumber;
-					if (!isNaN(totalDuration)) generateRIRDistribution(selectedRIRs, totalDuration);
-				}}
-				placeholder="Type here"
-				required
-				type="number"
-				value={totalDuration}
-			/>
-		</div>
+	<div class="flex w-full flex-col gap-1.5">
+		<Label for="mesocycle-duration">Mesocycle duration (weeks)</Label>
+		<Input
+			id="mesocycle-duration"
+			max={MAX_WEEKS}
+			min={1}
+			oninput={(e) => {
+				totalWeeks = e.currentTarget.valueAsNumber;
+				changeLength(totalWeeks);
+			}}
+			placeholder="Type here"
+			required
+			type="number"
+			value={totalWeeks}
+		/>
 	</div>
 
-	<span class="text-sm font-medium leading-none">RIR progression</span>
-	<Resizable.PaneGroup class="rounded-lg border" direction="vertical">
-		{#each selectedRIRs as rir, idx}
-			{#key selectedRIRs.join(',') + totalDuration}
-				<Resizable.Pane
-					defaultSize={(100 / totalDuration) * (RIRProgression[rir] || 0)}
-					minSize={100 / totalDuration}
-					onResize={(size) => {
-						if (!manualDragging) return;
-						RIRProgression[rir] = Math.round((size / 100) * totalDuration);
+	<div class="flex items-center justify-between">
+		<span class="text-sm font-medium leading-none">Weekly effort</span>
+		<Button
+			class="h-auto p-0"
+			onclick={() => (weeklyRIR = suggestWeeklyRIR(weeklyRIR.length))}
+			type="button"
+			variant="link"
+		>
+			Use suggested
+		</Button>
+	</div>
+	<p class="text-sm text-muted-foreground">
+		How many reps to keep in reserve (RIR) each week. A deload week keeps last week's weights with half the sets.
+	</p>
+	<ol class="flex flex-col gap-1">
+		{#each weeklyRIR as rir, idx}
+			<li class="flex items-center justify-between gap-2 rounded-lg border bg-card px-4 py-2">
+				<span class="font-medium">Week {idx + 1}</span>
+				<Select.Root
+					onSelectedChange={(selected) => {
+						if (selected) weeklyRIR[idx] = selected.value;
 					}}
-					bind:pane={panes[idx]}
+					selected={getOption(rir)}
 				>
-					<div class="flex h-full items-center justify-between px-4">
-						<span class="text-center font-semibold">{rir} RIR</span>
-						<span class="text-center text-sm text-muted-foreground">{RIRProgression[rir] || 0} cycles</span>
-					</div>
-				</Resizable.Pane>
-			{/key}
-			{#if idx !== selectedRIRs.length - 1}
-				<Resizable.Handle
-					onDraggingChange={(dragging) => {
-						manualDragging = dragging;
-						if (!dragging) panes[idx].resize((100 / totalDuration) * (RIRProgression[rir] || 0));
-					}}
-					withHandle
-				/>
-			{/if}
+					<Select.Trigger class="w-40" aria-label="Week {idx + 1} effort">
+						<Select.Value />
+					</Select.Trigger>
+					<Select.Content>
+						{#each effortOptions as option}
+							<Select.Item value={option.value}>{option.label}</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</li>
 		{/each}
-	</Resizable.PaneGroup>
+	</ol>
 
-	<Button type="submit">Next</Button>
+	<Button class="mt-auto" type="submit">Next</Button>
 </form>

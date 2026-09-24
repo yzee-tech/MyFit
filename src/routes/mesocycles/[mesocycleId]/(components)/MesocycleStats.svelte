@@ -1,13 +1,14 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
-	import { arraySum, convertCamelCaseToNormal } from '$lib/utils';
+	import { convertCamelCaseToNormal } from '$lib/utils';
 	import {
 		generatePerformanceChangesPerMuscleGroup,
 		generatePerformanceChangesPerSplitDay,
 		getSetsPerformedPerMuscleGroup
 	} from '$lib/utils/mesocycleUtils';
 	import CircleCheck from 'virtual:icons/lucide/circle-check';
-	import CircleX from 'virtual:icons/lucide/circle-X';
+	import CalendarCheck from 'virtual:icons/lucide/calendar-check';
+	import { getBlockWeek } from '$lib/utils/workoutUtils';
 	import BicepsFlexed from 'virtual:icons/lucide/biceps-flexed';
 	import Frown from 'virtual:icons/lucide/frown';
 	import CalendarHeart from 'virtual:icons/lucide/calendar-heart';
@@ -18,32 +19,14 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	const totalWorkoutsOfMesocycle = $derived(mesocycle.workoutsOfMesocycle.length);
-	const totalMesocycleLength = $derived(
-		mesocycle.mesocycleExerciseSplitDays.length * arraySum(mesocycle.RIRProgression)
-	);
-	const totalSkippedWorkouts = $derived(
-		mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === 'Skipped').length
-	);
-
-	const mostSkippedWorkoutDay = $derived.by(() => {
-		const frequencyMap: Record<number, number> = {};
-		mesocycle.workoutsOfMesocycle
-			.filter((wm) => wm.workoutStatus === 'Skipped')
-			.forEach((item) => {
-				frequencyMap[item.splitDayIndex] = (frequencyMap[item.splitDayIndex] || 0) + 1;
-			});
-		let mostOccurring: string | undefined;
-		let maxCount = 0;
-		for (const [key, count] of Object.entries(frequencyMap)) {
-			if (count > maxCount) {
-				mostOccurring = key;
-				maxCount = count;
-			}
-		}
-		if (mostOccurring === undefined) return null;
-		return mesocycle.mesocycleExerciseSplitDays[parseInt(mostOccurring)].name;
+	const performedWorkouts = $derived(mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null));
+	const plannedWeeks = $derived(mesocycle.weeklyRIR.length);
+	const weeksDone = $derived.by(() => {
+		if (!mesocycle.startDate) return 0;
+		const lastDay = mesocycle.endDate ?? new Date();
+		return Math.min(getBlockWeek(mesocycle.startDate, new Date(lastDay)), plannedWeeks);
 	});
+	const workoutsPerWeek = $derived(weeksDone > 0 ? performedWorkouts.length / weeksDone : 0);
 
 	const performanceChangesPerMuscleGroups = $derived(
 		generatePerformanceChangesPerMuscleGroup(mesocycle.workoutsOfMesocycle)
@@ -63,26 +46,23 @@
 			</Card.Header>
 			<Card.Content class="p-4 pt-0">
 				<div class="text-2xl font-bold">
-					{((totalWorkoutsOfMesocycle / totalMesocycleLength) * 100).toFixed(2)}%
+					{plannedWeeks > 0 ? ((weeksDone / plannedWeeks) * 100).toFixed(0) : 0}%
 				</div>
 				<p class="text-xs text-muted-foreground">
-					{totalWorkoutsOfMesocycle}/{totalMesocycleLength} workouts
+					Week {weeksDone} of {plannedWeeks}
 				</p>
 			</Card.Content>
 		</Card.Root>
 
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
-				<Card.Title class="text-sm font-medium">Skipped</Card.Title>
-				<CircleX />
+				<Card.Title class="text-sm font-medium">Workouts</Card.Title>
+				<CalendarCheck />
 			</Card.Header>
 			<Card.Content class="p-4 pt-0">
-				<p>
-					<span class="text-2xl font-bold">{totalSkippedWorkouts}</span>
-					<span class="text-sm">/ {totalWorkoutsOfMesocycle}</span>
-				</p>
+				<div class="text-2xl font-bold">{performedWorkouts.length}</div>
 				<p class="text-xs text-muted-foreground">
-					Most skipped: <span class="font-semibold">{mostSkippedWorkoutDay}</span>
+					{workoutsPerWeek.toFixed(1)} per week
 				</p>
 			</Card.Content>
 		</Card.Root>

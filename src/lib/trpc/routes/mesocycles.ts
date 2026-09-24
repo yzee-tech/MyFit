@@ -5,7 +5,6 @@ import {
 	ExerciseSplitDayCreateWithoutExerciseSplitInputSchema,
 	ExerciseSplitSchema,
 	MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema,
-	MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema,
 	MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema,
 	MesocycleUncheckedCreateWithoutUserInputSchema,
 	MesocycleUpdateInputSchema
@@ -32,7 +31,15 @@ const zodMesocycleEditInput = z.strictObject({
 });
 
 const zodUpdateExerciseSplitInput = z.strictObject({
-	mesocycleExerciseSplitDays: z.array(MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),
+	mesocycleExerciseSplitDays: z.array(
+		z.strictObject({
+			name: z.string(),
+			dayIndex: z.number().int(),
+			isRestDay: z.boolean(),
+			/** Where this routine was before the edit; null for a new routine */
+			previousDayIndex: z.number().int().nullable().optional()
+		})
+	),
 	mesocycleExerciseTemplates: z.array(
 		z.array(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema)
 	),
@@ -192,19 +199,42 @@ export const mesocycles = t.router({
 		}),
 
 	updateExerciseSplit: t.procedure.input(zodUpdateExerciseSplitInput).mutation(async ({ input, ctx }) => {
-		// TODO: #125
 		const mesocycle = await prisma.mesocycle.findUniqueOrThrow({
 			where: { id: input.mesocycleId, userId: ctx.userId },
-			select: { id: true }
+			select: {
+				id: true,
+				mesocycleExerciseSplitDays: { select: { dayIndex: true, name: true } },
+				workoutsOfMesocycle: { select: { splitDayIndex: true } }
+			}
 		});
+
+		// Workouts point at routines by position: work out where each trained routine moves to
+		const newIndexByPreviousIndex = new Map<number, number>();
+		input.mesocycleExerciseSplitDays.forEach((splitDay, newIndex) => {
+			if (splitDay.previousDayIndex !== null && splitDay.previousDayIndex !== undefined) {
+				newIndexByPreviousIndex.set(splitDay.previousDayIndex, newIndex);
+			}
+		});
+		const trainedDayIndexes = new Set(mesocycle.workoutsOfMesocycle.map((wm) => wm.splitDayIndex));
+		for (const dayIndex of trainedDayIndexes) {
+			if (!newIndexByPreviousIndex.has(dayIndex)) {
+				const routineName = mesocycle.mesocycleExerciseSplitDays.find((day) => day.dayIndex === dayIndex)?.name;
+				throw new TRPCError({
+					code: 'BAD_REQUEST',
+					message: `Can't delete ${routineName || 'a routine'}: it has workouts in this mesocycle`
+				});
+			}
+		}
+
 		const deleteQuery = prisma.mesocycleExerciseSplitDay.deleteMany({
 			where: { mesocycleId: mesocycle.id }
 		});
 
 		const newSplitDaysIds = Array.from({ length: input.mesocycleExerciseSplitDays.length }).map(() => createId());
 		const createSplitDaysQuery = prisma.mesocycleExerciseSplitDay.createMany({
-			data: input.mesocycleExerciseSplitDays.map((splitDay, idx) => ({
+			data: input.mesocycleExerciseSplitDays.map(({ previousDayIndex, ...splitDay }, idx) => ({
 				...splitDay,
+				dayIndex: idx,
 				id: newSplitDaysIds[idx],
 				mesocycleId: mesocycle.id
 			}))
@@ -217,7 +247,28 @@ export const mesocycles = t.router({
 				}));
 			})
 		});
-		await prisma.$transaction([deleteQuery, createSplitDaysQuery, createSplitExercisesQuery]);
+
+		// Move workouts to their routine's new position, via an offset so moves can't collide
+		const OFFSET = 100000;
+		const movedDayIndexes = [...trainedDayIndexes].filter(
+			(dayIndex) => newIndexByPreviousIndex.get(dayIndex) !== dayIndex
+		);
+		const moveWorkoutsQueries = [
+			...movedDayIndexes.map((dayIndex) =>
+				prisma.workoutOfMesocycle.updateMany({
+					where: { mesocycleId: mesocycle.id, splitDayIndex: dayIndex },
+					data: { splitDayIndex: newIndexByPreviousIndex.get(dayIndex)! + OFFSET }
+				})
+			),
+			...movedDayIndexes.map((dayIndex) =>
+				prisma.workoutOfMesocycle.updateMany({
+					where: { mesocycleId: mesocycle.id, splitDayIndex: newIndexByPreviousIndex.get(dayIndex)! + OFFSET },
+					data: { splitDayIndex: newIndexByPreviousIndex.get(dayIndex)! }
+				})
+			)
+		];
+
+		await prisma.$transaction([deleteQuery, createSplitDaysQuery, createSplitExercisesQuery, ...moveWorkoutsQueries]);
 		return { message: 'Mesocycle exercise split edited successfully' };
 	}),
 

@@ -6,8 +6,6 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import * as Resizable from '$lib/components/ui/resizable';
-	import * as Popover from '$lib/components/ui/popover/index.js';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 
 	import CloneIcon from 'virtual:icons/clarity/clone-line';
@@ -17,8 +15,8 @@
 	import ExtractIcon from 'virtual:icons/lucide/pickaxe';
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
-	import { arraySum } from '$lib/utils';
 	import { trpc } from '$lib/trpc/client';
+	import { formatWeekEffort, isDeloadWeek } from '$lib/utils/workoutUtils';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
 	import { mesocycleRunes, type FullMesocycleWithoutIds } from '../../manage/mesocycleRunes.svelte';
@@ -187,28 +185,16 @@
 	<Card.Content class="flex flex-col gap-3">
 		<div class="flex flex-col gap-1">
 			<div class="flex justify-between">
-				<span class="text-sm text-muted-foreground">RIR progression</span>
-				<Badge variant="outline">{arraySum(mesocycle.RIRProgression)} cycles</Badge>
+				<span class="text-sm text-muted-foreground">Weekly effort</span>
+				<Badge variant="outline">{mesocycle.weeklyRIR.length} weeks</Badge>
 			</div>
-			<Resizable.PaneGroup class="min-h-10 w-full rounded-lg border" direction="horizontal">
-				{#each mesocycle.RIRProgression.toReversed() as cycles, idx}
-					{@const size = (cycles / arraySum(mesocycle.RIRProgression)) * 100}
-					<Resizable.Pane class="flex items-center justify-center" maxSize={size} minSize={size}>
-						<Popover.Root portal={null}>
-							<Popover.Trigger>
-								{mesocycle.RIRProgression.length - idx - 1}
-							</Popover.Trigger>
-							<Popover.Content class="flex w-fit flex-col p-2 text-sm">
-								<span>{mesocycle.RIRProgression.length - idx - 1} RIR</span>
-								<span class="text-muted-foreground">{cycles} cycles</span>
-							</Popover.Content>
-						</Popover.Root>
-					</Resizable.Pane>
-					{#if idx !== mesocycle.RIRProgression.length - 1}
-						<Resizable.Handle class="pointer-events-none" />
-					{/if}
+			<div class="flex flex-wrap gap-1" data-testid="mesocycle-weekly-effort">
+				{#each mesocycle.weeklyRIR as _, idx}
+					<Badge variant={isDeloadWeek(mesocycle.weeklyRIR, idx + 1) ? 'secondary' : 'outline'}>
+						W{idx + 1}: {formatWeekEffort(mesocycle.weeklyRIR, idx + 1)}
+					</Badge>
 				{/each}
-			</Resizable.PaneGroup>
+			</div>
 		</div>
 		<div class="flex flex-col">
 			<span class="text-sm text-muted-foreground">Start exercise template</span>

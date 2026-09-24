@@ -12,6 +12,7 @@ import {
 	type MuscleGroup as V2MuscleGroup
 } from '$lib/V2/types';
 import { z } from 'zod';
+import { weeklyRIRFromWeeksPerRIR } from '$lib/utils/workoutUtils';
 import { t } from '$lib/trpc/t';
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
@@ -235,8 +236,9 @@ export const users = t.router({
 						startOverloadPercentage: 0,
 						userId: ctx.userId,
 						exerciseSplitId: templateIdx ? mesocycleTemplateIds[templateIdx] : null,
-						RIRProgression:
+						weeklyRIR: weeklyRIRFromWeeksPerRIR(
 							templateIdx === -1 ? [1] : mesocycleTemplates[templateIdx].RIRProgression.map(({ cycles }) => cycles)
+						)
 					};
 
 					if (firstWorkout) {
@@ -317,7 +319,8 @@ export const users = t.router({
 						startedAt: new Date(workout.startTimestamp),
 						endedAt: new Date(workout.startTimestamp + 1000 * 60 * input.duration),
 						note: null,
-						userBodyweight: input.bodyweight // Assumption (same bodyweight applied to all workouts)
+						userBodyweight: input.bodyweight, // Assumption (same bodyweight applied to all workouts)
+						isDeload: false
 					};
 					return prismaWorkout;
 				})
@@ -508,7 +511,13 @@ export const users = t.router({
 	getUserSettings: t.procedure.query(async ({ ctx }) => {
 		const userSettings = await prisma.userSettings.findUnique({
 			where: { userId: ctx.userId },
-			select: { id: true, quotesDisplayModes: true, motivationalQuotesEnabled: true }
+			select: {
+				id: true,
+				quotesDisplayModes: true,
+				motivationalQuotesEnabled: true,
+				welcomeBackEnabled: true,
+				welcomeBackAfterDays: true
+			}
 		});
 
 		if (!userSettings) {
@@ -522,7 +531,9 @@ export const users = t.router({
 		.input(
 			z.object({
 				motivationalQuotesEnabled: z.boolean().optional(),
-				quotesDisplayModes: z.array(QuotesDisplayModeSchema).min(1).optional()
+				quotesDisplayModes: z.array(QuotesDisplayModeSchema).min(1).optional(),
+				welcomeBackEnabled: z.boolean().optional(),
+				welcomeBackAfterDays: z.number().int().min(1).max(60).optional()
 			})
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -531,15 +542,25 @@ export const users = t.router({
 				create: {
 					userId: ctx.userId,
 					quotesDisplayModes: input.quotesDisplayModes ?? ['PRE_WORKOUT'],
-					motivationalQuotesEnabled: input.motivationalQuotesEnabled ?? false
+					motivationalQuotesEnabled: input.motivationalQuotesEnabled ?? false,
+					welcomeBackEnabled: input.welcomeBackEnabled ?? true,
+					welcomeBackAfterDays: input.welcomeBackAfterDays ?? 7
 				},
 				update: {
 					...(input.motivationalQuotesEnabled !== undefined && {
 						motivationalQuotesEnabled: input.motivationalQuotesEnabled
 					}),
-					...(input.quotesDisplayModes !== undefined && { quotesDisplayModes: input.quotesDisplayModes })
+					...(input.quotesDisplayModes !== undefined && { quotesDisplayModes: input.quotesDisplayModes }),
+					...(input.welcomeBackEnabled !== undefined && { welcomeBackEnabled: input.welcomeBackEnabled }),
+					...(input.welcomeBackAfterDays !== undefined && { welcomeBackAfterDays: input.welcomeBackAfterDays })
 				},
-				select: { id: true, quotesDisplayModes: true, motivationalQuotesEnabled: true }
+				select: {
+					id: true,
+					quotesDisplayModes: true,
+					motivationalQuotesEnabled: true,
+					welcomeBackEnabled: true,
+					welcomeBackAfterDays: true
+				}
 			});
 
 			return userSettings;
