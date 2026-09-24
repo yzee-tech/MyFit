@@ -13,6 +13,9 @@
 </svelte:head>
 
 <H2>Changelog</H2>
+{#if data.releases.length === 0}
+	<p class="text-muted-foreground">No releases yet.</p>
+{/if}
 {#each data.releases as { body }, idx}
 	<article class="prose prose-sm dark:prose-invert md:prose-base">
 		{#await marked.parse(body) then body}

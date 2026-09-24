@@ -98,7 +98,7 @@
 
 	<h2 class="italic">"I need more help!"</h2>
 	<p>
-		Feel free to <a href="https://github.com/WhyAsh5114/issues">open an issue</a> on the GitHub repository, will be glad
-		to help you out and add more details to the docs
+		Feel free to <a href="https://github.com/yzee-tech/MyFit/issues">open an issue</a> on the GitHub repository, will be
+		glad to help you out and add more details to the docs
 	</p>
 </div>
