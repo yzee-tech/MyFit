@@ -5,7 +5,7 @@
 
 <div class="prose prose-neutral max-w-none dark:prose-invert lg:prose-lg">
 	<h1>Privacy Policy</h1>
-	<p>Last updated: May 05, 2026</p>
+	<p>Last updated: September 24, 2026</p>
 	<p>
 		This Privacy Policy describes Our policies and procedures on the collection, use and disclosure of Your information
 		when You use the Service and tells You about Your privacy rights and how the law protects You.
@@ -55,7 +55,7 @@
 			</p>
 		</li>
 		<li>
-			<p><strong>Country</strong> refers to: Maharashtra, India</p>
+			<p><strong>Country</strong> refers to: California, USA</p>
 		</li>
 		<li>
 			<p>
@@ -411,7 +411,7 @@
 	<p>If you have any questions about this Privacy Policy, You can contact us:</p>
 	<ul>
 		<li>
-			<p>By email: myfit.auth@gmail.com</p>
+			<p>By email: yzoffice@draco-investments.com</p>
 		</li>
 	</ul>
 </div>
