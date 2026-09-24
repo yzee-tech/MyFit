@@ -11,7 +11,7 @@ Make sure you have the following tools installed:
 - **Node.js** (v20.16.0 or higher)
 - **npm**
 - **TypeScript**
-- **Docker** (if applicable, for local CockroachDB setup)
+- **Docker** (if applicable, for local PostgreSQL setup)
 
 ### Setup Instructions
 
@@ -36,7 +36,7 @@ Make sure you have the following tools installed:
 
 - **Frontend**: The app is built with SvelteKit
 - **Backend**: API calls are handled using tRPC
-- **Database**: Prisma with CockroachDB as the provider
+- **Database**: Prisma with PostgreSQL as the provider
 - **Testing**: Playwright is used for end-to-end testing
 
 ## How to Contribute

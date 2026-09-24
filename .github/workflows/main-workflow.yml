@@ -30,19 +30,25 @@ jobs:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
     runs-on: ubuntu-latest
     services:
-      cockroach_db:
-        image: cockroachdb/cockroach:v24.2.1
+      postgres:
+        image: postgres:16
         env:
-          COCKROACH_ARGS: 'start-single-node --insecure'
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: myfit
         ports:
-          - 26257:26257
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-environment
 
       - name: Set DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://root@localhost:26257/defaultdb?sslmode=disable" >> $GITHUB_ENV
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/myfit" >> $GITHUB_ENV
 
       - name: Initialize database schema
         run: pnpm exec prisma db push

@@ -2,148 +2,151 @@
 CREATE TYPE "MuscleGroup" AS ENUM ('Chest', 'FrontDelts', 'SideDelts', 'RearDelts', 'Lats', 'Traps', 'Triceps', 'Biceps', 'Forearms', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Neck', 'Adductors', 'Abductors', 'Custom');
 
 -- CreateEnum
-CREATE TYPE "SetType" AS ENUM ('Straight', 'V2', 'Drop', 'Down', 'Myorep', 'MyorepMatch');
+CREATE TYPE "SetType" AS ENUM ('Straight', 'V2', 'Drop', 'Down', 'Myorep', 'MyorepMatch', 'MyorepMatchDown', 'TopBackoff');
 
 -- CreateEnum
 CREATE TYPE "ChangeType" AS ENUM ('Percentage', 'AbsoluteLoad');
 
 -- CreateEnum
-CREATE TYPE "ProgressionVariable" AS ENUM ('Reps', 'Load');
+CREATE TYPE "WorkoutStatus" AS ENUM ('Skipped', 'RestDay');
 
 -- CreateEnum
-CREATE TYPE "WorkoutStatus" AS ENUM ('Skipped', 'RestDay');
+CREATE TYPE "QuotesDisplayMode" AS ENUM ('PRE_WORKOUT', 'POST_WORKOUT', 'BETWEEN_SETS');
 
 -- CreateTable
 CREATE TABLE "ExerciseSplit" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "userId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
 
     CONSTRAINT "ExerciseSplit_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ExerciseSplitDay" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "dayIndex" INT4 NOT NULL,
-    "isRestDay" BOOL NOT NULL,
-    "exerciseSplitId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "dayIndex" INTEGER NOT NULL,
+    "isRestDay" BOOLEAN NOT NULL,
+    "exerciseSplitId" TEXT NOT NULL,
 
     CONSTRAINT "ExerciseSplitDay_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ExerciseTemplate" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "exerciseIndex" INT4 NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "exerciseIndex" INTEGER NOT NULL,
     "targetMuscleGroup" "MuscleGroup" NOT NULL,
-    "customMuscleGroup" STRING,
-    "bodyweightFraction" FLOAT8,
+    "customMuscleGroup" TEXT,
+    "bodyweightFraction" DOUBLE PRECISION,
     "setType" "SetType" NOT NULL,
-    "repRangeStart" INT4 NOT NULL,
-    "repRangeEnd" INT4 NOT NULL,
+    "repRangeStart" INTEGER NOT NULL,
+    "repRangeEnd" INTEGER NOT NULL,
     "changeType" "ChangeType",
-    "changeAmount" FLOAT8,
-    "note" STRING,
-    "exerciseSplitDayId" STRING NOT NULL,
+    "changeAmount" DOUBLE PRECISION,
+    "note" TEXT,
+    "exerciseSplitDayId" TEXT NOT NULL,
+    "topRepRangeStart" INTEGER,
+    "topRepRangeEnd" INTEGER,
 
     CONSTRAINT "ExerciseTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Mesocycle" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "userId" STRING NOT NULL,
-    "exerciseSplitId" STRING,
-    "RIRProgression" INT4[],
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "exerciseSplitId" TEXT,
+    "RIRProgression" INTEGER[],
     "startDate" TIMESTAMP(3),
     "endDate" TIMESTAMP(3),
-    "preferredProgressionVariable" "ProgressionVariable" NOT NULL,
-    "startOverloadPercentage" FLOAT8 NOT NULL,
-    "lastSetToFailure" BOOL NOT NULL,
-    "forceRIRMatching" BOOL NOT NULL,
+    "startOverloadPercentage" DOUBLE PRECISION NOT NULL,
+    "lastSetToFailure" BOOLEAN NOT NULL,
+    "forceRIRMatching" BOOLEAN NOT NULL,
 
     CONSTRAINT "Mesocycle_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "MesocycleCyclicSetChange" (
-    "id" STRING NOT NULL,
-    "mesocycleId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "mesocycleId" TEXT NOT NULL,
     "muscleGroup" "MuscleGroup" NOT NULL,
-    "customMuscleGroup" STRING,
-    "regardlessOfProgress" BOOL NOT NULL,
-    "setIncreaseAmount" INT4 NOT NULL,
-    "maxVolume" INT4 NOT NULL,
+    "customMuscleGroup" TEXT,
+    "regardlessOfProgress" BOOLEAN NOT NULL,
+    "setIncreaseAmount" INTEGER NOT NULL,
+    "maxVolume" INTEGER NOT NULL,
 
     CONSTRAINT "MesocycleCyclicSetChange_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "MesocycleExerciseSplitDay" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "dayIndex" INT4 NOT NULL,
-    "isRestDay" BOOL NOT NULL,
-    "mesocycleId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "dayIndex" INTEGER NOT NULL,
+    "isRestDay" BOOLEAN NOT NULL,
+    "mesocycleId" TEXT NOT NULL,
 
     CONSTRAINT "MesocycleExerciseSplitDay_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "MesocycleExerciseTemplate" (
-    "id" STRING NOT NULL,
-    "name" STRING NOT NULL,
-    "exerciseIndex" INT4 NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "exerciseIndex" INTEGER NOT NULL,
     "targetMuscleGroup" "MuscleGroup" NOT NULL,
-    "customMuscleGroup" STRING,
-    "bodyweightFraction" FLOAT8,
-    "sets" INT4 NOT NULL,
+    "customMuscleGroup" TEXT,
+    "bodyweightFraction" DOUBLE PRECISION,
+    "sets" INTEGER NOT NULL,
     "setType" "SetType" NOT NULL,
-    "repRangeStart" INT4 NOT NULL,
-    "repRangeEnd" INT4 NOT NULL,
+    "repRangeStart" INTEGER NOT NULL,
+    "repRangeEnd" INTEGER NOT NULL,
     "changeType" "ChangeType",
-    "changeAmount" FLOAT8,
-    "note" STRING,
-    "mesocycleExerciseSplitDayId" STRING NOT NULL,
-    "preferredProgressionVariable" "ProgressionVariable",
-    "overloadPercentage" FLOAT8,
-    "lastSetToFailure" BOOL,
-    "forceRIRMatching" BOOL,
-    "minimumWeightChange" FLOAT8,
+    "changeAmount" DOUBLE PRECISION,
+    "note" TEXT,
+    "mesocycleExerciseSplitDayId" TEXT NOT NULL,
+    "overloadPercentage" DOUBLE PRECISION,
+    "lastSetToFailure" BOOLEAN,
+    "forceRIRMatching" BOOLEAN,
+    "minimumWeightChange" DOUBLE PRECISION,
+    "topRepRangeStart" INTEGER,
+    "topRepRangeEnd" INTEGER,
 
     CONSTRAINT "MesocycleExerciseTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "User" (
-    "id" STRING NOT NULL,
-    "name" STRING,
-    "email" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "name" TEXT,
+    "email" TEXT NOT NULL,
     "emailVerified" TIMESTAMP(3),
-    "image" STRING,
+    "image" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "migratedFromV2" BOOLEAN,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Account" (
-    "userId" STRING NOT NULL,
-    "type" STRING NOT NULL,
-    "provider" STRING NOT NULL,
-    "providerAccountId" STRING NOT NULL,
-    "refresh_token" STRING,
-    "access_token" STRING,
-    "expires_at" INT4,
-    "token_type" STRING,
-    "scope" STRING,
-    "id_token" STRING,
-    "session_state" STRING,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    "refresh_token" TEXT,
+    "access_token" TEXT,
+    "expires_at" INTEGER,
+    "token_type" TEXT,
+    "scope" TEXT,
+    "id_token" TEXT,
+    "session_state" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -152,8 +155,8 @@ CREATE TABLE "Account" (
 
 -- CreateTable
 CREATE TABLE "Session" (
-    "sessionToken" STRING NOT NULL,
-    "userId" STRING NOT NULL,
+    "sessionToken" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "expires" TIMESTAMP(3) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL
@@ -161,19 +164,29 @@ CREATE TABLE "Session" (
 
 -- CreateTable
 CREATE TABLE "VerificationToken" (
-    "identifier" STRING NOT NULL,
-    "token" STRING NOT NULL,
+    "identifier" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
     "expires" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "VerificationToken_pkey" PRIMARY KEY ("identifier","token")
 );
 
 -- CreateTable
+CREATE TABLE "UserSettings" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "motivationalQuotesEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "quotesDisplayModes" "QuotesDisplayMode"[] DEFAULT ARRAY['PRE_WORKOUT']::"QuotesDisplayMode"[],
+
+    CONSTRAINT "UserSettings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "WorkoutOfMesocycle" (
-    "id" STRING NOT NULL,
-    "workoutId" STRING NOT NULL,
-    "mesocycleId" STRING NOT NULL,
-    "splitDayIndex" INT4 NOT NULL,
+    "id" TEXT NOT NULL,
+    "workoutId" TEXT NOT NULL,
+    "mesocycleId" TEXT NOT NULL,
+    "splitDayIndex" INTEGER NOT NULL,
     "workoutStatus" "WorkoutStatus",
 
     CONSTRAINT "WorkoutOfMesocycle_pkey" PRIMARY KEY ("id")
@@ -181,60 +194,62 @@ CREATE TABLE "WorkoutOfMesocycle" (
 
 -- CreateTable
 CREATE TABLE "Workout" (
-    "id" STRING NOT NULL,
-    "userBodyweight" INT4 NOT NULL,
+    "id" TEXT NOT NULL,
+    "userBodyweight" DOUBLE PRECISION NOT NULL,
     "startedAt" TIMESTAMP(3) NOT NULL,
     "endedAt" TIMESTAMP(3) NOT NULL,
-    "userId" STRING NOT NULL,
+    "userId" TEXT NOT NULL,
+    "note" TEXT,
 
     CONSTRAINT "Workout_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkoutExercise" (
-    "id" STRING NOT NULL,
-    "exerciseIndex" INT4 NOT NULL,
-    "name" STRING NOT NULL,
-    "workoutId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "exerciseIndex" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "workoutId" TEXT NOT NULL,
     "targetMuscleGroup" "MuscleGroup" NOT NULL,
-    "customMuscleGroup" STRING,
-    "bodyweightFraction" FLOAT8,
+    "customMuscleGroup" TEXT,
+    "bodyweightFraction" DOUBLE PRECISION,
     "setType" "SetType" NOT NULL,
     "changeType" "ChangeType",
-    "changeAmount" FLOAT8,
-    "repRangeStart" INT4 NOT NULL,
-    "repRangeEnd" INT4 NOT NULL,
-    "note" STRING,
-    "preferredProgressionVariable" "ProgressionVariable",
-    "overloadPercentage" FLOAT8,
-    "lastSetToFailure" BOOL,
-    "forceRIRMatching" BOOL,
-    "minimumWeightChange" FLOAT8,
+    "changeAmount" DOUBLE PRECISION,
+    "repRangeStart" INTEGER NOT NULL,
+    "repRangeEnd" INTEGER NOT NULL,
+    "note" TEXT,
+    "overloadPercentage" DOUBLE PRECISION,
+    "lastSetToFailure" BOOLEAN,
+    "forceRIRMatching" BOOLEAN,
+    "minimumWeightChange" DOUBLE PRECISION,
+    "topRepRangeStart" INTEGER,
+    "topRepRangeEnd" INTEGER,
 
     CONSTRAINT "WorkoutExercise_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkoutExerciseSet" (
-    "id" STRING NOT NULL,
-    "setIndex" INT4 NOT NULL,
-    "workoutExerciseId" STRING NOT NULL,
-    "reps" INT4 NOT NULL,
-    "load" FLOAT8 NOT NULL,
-    "RIR" INT4 NOT NULL,
-    "skipped" BOOL NOT NULL,
+    "id" TEXT NOT NULL,
+    "setIndex" INTEGER NOT NULL,
+    "workoutExerciseId" TEXT NOT NULL,
+    "reps" INTEGER NOT NULL,
+    "load" DOUBLE PRECISION NOT NULL,
+    "RIR" INTEGER NOT NULL,
+    "skipped" BOOLEAN NOT NULL,
 
     CONSTRAINT "WorkoutExerciseSet_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkoutExerciseMiniSet" (
-    "id" STRING NOT NULL,
-    "miniSetIndex" INT4 NOT NULL,
-    "reps" INT4 NOT NULL,
-    "load" FLOAT8 NOT NULL,
-    "RIR" INT4 NOT NULL,
-    "workoutExerciseSetId" STRING NOT NULL,
+    "id" TEXT NOT NULL,
+    "miniSetIndex" INTEGER NOT NULL,
+    "reps" INTEGER NOT NULL,
+    "load" DOUBLE PRECISION NOT NULL,
+    "RIR" INTEGER NOT NULL,
+    "workoutExerciseSetId" TEXT NOT NULL,
 
     CONSTRAINT "WorkoutExerciseMiniSet_pkey" PRIMARY KEY ("id")
 );
@@ -244,6 +259,9 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserSettings_userId_key" ON "UserSettings"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WorkoutOfMesocycle_workoutId_key" ON "WorkoutOfMesocycle"("workoutId");
@@ -277,6 +295,9 @@ ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId"
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserSettings" ADD CONSTRAINT "UserSettings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "WorkoutOfMesocycle" ADD CONSTRAINT "WorkoutOfMesocycle_workoutId_fkey" FOREIGN KEY ("workoutId") REFERENCES "Workout"("id") ON DELETE CASCADE ON UPDATE CASCADE;
