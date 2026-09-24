@@ -61,15 +61,18 @@
 			Object.groupBy(userExercises, (exercise) => exercise.customMuscleGroup ?? exercise.targetMuscleGroup)
 		).map(([muscleGroup, exercises]) => ({
 			muscleGroup: muscleGroup as MuscleGroup,
-			exercises: exercises!.map(({ workoutId, ...rest }) => ({ ...rest })) ?? []
+			exercises: exercises ?? []
 		}));
+		const userExerciseNames = new Set(userExercises.map((exercise) => exercise.name));
 
 		allGroupedExercises = groupedUserExercises.reduce(
 			(acc, userGroup) => {
 				const existingGroupIndex = acc.findIndex((group) => group.muscleGroup === userGroup.muscleGroup);
 
 				if (existingGroupIndex !== -1) {
-					acc[existingGroupIndex].exercises = [...acc[existingGroupIndex].exercises, ...userGroup.exercises];
+					// Your own exercises first; hide built-in ones with the same name
+					const builtInExercises = acc[existingGroupIndex].exercises.filter((ex) => !userExerciseNames.has(ex.name));
+					acc[existingGroupIndex].exercises = [...userGroup.exercises, ...builtInExercises];
 				} else {
 					acc.push(userGroup);
 				}

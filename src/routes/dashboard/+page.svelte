@@ -21,5 +21,5 @@
 <H2>Home</H2>
 <GetStartedComponent {entityCounts} />
 
-<H3>Today's workout</H3>
+<H3>Current block</H3>
 <TodaysWorkoutCard {...data} />

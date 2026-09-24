@@ -4,7 +4,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
-	import { Input } from '$lib/components/ui/input';
 	import Label from '$lib/components/ui/label/label.svelte';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Slider } from '$lib/components/ui/slider/index.js';
@@ -23,9 +22,6 @@
 	let searchString = $state('');
 	let exerciseSplits: ExerciseSplit[] | 'loading' = $state('loading');
 
-	const maxMinSetsValue = Math.min(
-		...mesocycleRunes.mesocycleCyclicSetChanges.map((setChange) => setChange.startVolume)
-	);
 	let selectedExerciseSplit: ExerciseSplit | null = $state(mesocycleRunes.selectedExerciseSplit ?? null);
 
 	onMount(async () => (exerciseSplits = await data.exerciseSplits));
@@ -37,7 +33,7 @@
 
 	function savePreferencesAndExerciseSplit() {
 		if (mesocycleRunes.editingMesocycleId !== null) {
-			goto(`./volume?editing`);
+			goto('./overview');
 			return;
 		}
 		if (selectedExerciseSplit === null) {
@@ -156,26 +152,6 @@
 						Whether or not to reduce reps/load to match planned RIR
 					</InfoPopover>
 				</div>
-				{#if mesocycleRunes.editingMesocycleId === null}
-					<div class="flex w-full max-w-sm flex-col gap-1.5">
-						<Label class="flex items-center justify-between" for="distribution-min-sets-per-exercise">
-							Minimum sets per exercise
-							<InfoPopover ariaLabel="distribution-min-sets-per-exercise-info">
-								To avoid excessive exercise variation at the start of the mesocycle
-							</InfoPopover>
-						</Label>
-						<Input
-							id="distribution-min-sets-per-exercise"
-							max={maxMinSetsValue}
-							min={0}
-							placeholder="Type here"
-							required
-							step={1}
-							type="number"
-							bind:value={mesocycleRunes.minSets}
-						/>
-					</div>
-				{/if}
 				<div class="flex flex-col gap-2 md:col-span-2">
 					<div class="flex items-center justify-between text-sm font-medium">
 						<span>Start overload percentage</span>

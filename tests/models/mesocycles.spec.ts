@@ -1,5 +1,8 @@
 import { expect, test } from '../fixtures';
-import { createMesocycle, createTemplateExerciseSplit } from './commonFunctions';
+import { PrismaClient } from '@prisma/client';
+import { createMesocycle, createTemplateExerciseSplit, pickRoutine } from './commonFunctions';
+
+const prisma = new PrismaClient();
 
 test.beforeEach(async ({ page }) => {
 	await page.goto('/exercise-splits');
@@ -22,11 +25,7 @@ test('create a mesocycle', async ({ page }) => {
 	await page.locator('span > .absolute').click();
 	await page.getByRole('button', { name: 'Next' }).click();
 
-	await page.getByLabel('Chest-start-volume').fill('12');
-	await page.getByRole('combobox', { name: 'Chest-set-increase-amount' }).click();
-	await page.getByRole('option', { name: '2' }).click();
-	await page.getByLabel('Chest-increase-volume-').click();
-	await page.getByLabel('Chest-max-volume').fill('50');
+	await page.getByLabel('Sets per exercise').fill('4');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 
@@ -39,9 +38,8 @@ test('create a mesocycle', async ({ page }) => {
 		'RIR progression 12 cycles 2 1 0 Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure Force RIR matching'
 	);
 
-	await page.getByRole('tab', { name: 'Volume' }).click();
-	await expect(page.getByTestId('mesocycle-volume-table-body')).toContainText('50');
-	await expect(page.getByTestId('mesocycle-volume-table-body')).toContainText('2');
+	await page.getByRole('tab', { name: 'Split' }).click();
+	await expect(page.getByRole('main')).toContainText('Pull-ups 4 Straight sets of 5 to 15 reps');
 });
 
 test('delete a mesocycle', async ({ page }) => {
@@ -87,12 +85,7 @@ test('edit a mesocycle', async ({ page }) => {
 	await page.locator('span > .absolute').click();
 	await expect(page.getByRole('main')).toContainText('Starting exercise split cannot be changed');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('Chest-max-volume').click();
-	await page.getByLabel('Chest-max-volume').fill('45');
-	await page.getByRole('combobox', { name: 'Chest-set-increase-amount' }).click();
-	await page.getByRole('option', { name: '3' }).click();
-	await page.getByLabel('Chest-increase-volume-').click();
-	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle edited successfully' })).toBeVisible({
 		timeout: 10000
@@ -103,9 +96,6 @@ test('edit a mesocycle', async ({ page }) => {
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'RIR progression 10 cycles 3 2 1 0 Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure Force RIR matching'
 	);
-	await page.getByRole('tab', { name: 'Volume' }).click();
-	await expect(page.getByTestId('mesocycle-volume-table-body')).toContainText('45');
-	await expect(page.getByTestId('mesocycle-volume-table-body')).toContainText('3');
 });
 
 test('start and stop a mesocycle', async ({ page }) => {
@@ -175,6 +165,7 @@ test('disallow exercise split editing after workout added', async ({ page }) => 
 	await page.getByRole('link', { name: 'Workouts' }).click();
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByTestId('Pull-ups-menu-button').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
@@ -235,15 +226,15 @@ test('extract exercise split from mesocycle', async ({ page }) => {
 	);
 });
 
-test('complete a mesocycle', async ({ page }) => {
-	test.setTimeout(60000);
+test('finish a block once its weeks are over', async ({ page, userData }) => {
 	await page.getByLabel('create-new-mesocycle').click();
-	await page.getByLabel('Mesocycle name').fill('MyMeso');
+	await page.getByLabel('Mesocycle name').fill('OneWeekBlock');
 	await page.getByLabel('Mesocycle duration').fill('1');
 	await page.getByRole('combobox').click();
 	await page.getByRole('option', { name: '3 RIR' }).click();
 	await page.getByRole('option', { name: '2 RIR' }).click();
 	await page.getByRole('option', { name: '1 RIR' }).click();
+	await page.keyboard.press('Escape');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByText('Pick one').click();
 	await page.getByRole('option', { name: 'Pull Push Legs' }).click();
@@ -253,21 +244,18 @@ test('complete a mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.waitForURL('/mesocycles');
 
-	await page.getByRole('link', { name: 'Workouts' }).click();
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('70');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('paragraph').last()).toContainText('Day 2, Cycle 1');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('paragraph').last()).toContainText('Day 3, Cycle 1');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('paragraph').last()).toContainText('Day 4, Cycle 1');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('paragraph').last()).toContainText('Day 5, Cycle 1');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await expect(page.getByRole('paragraph').last()).toContainText('Day 6, Cycle 1');
-	await page.getByRole('button', { name: 'Skip' }).click();
-	await page.getByRole('button', { name: 'Complete' }).click();
+	// Still in week 1: no finish prompt
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText('Week 1 of 1');
+	await expect(page.getByRole('button', { name: 'Finish block' })).toHaveCount(0);
 
+	// Pretend the block started 8 days ago
+	await prisma.mesocycle.updateMany({
+		where: { userId: userData.userId, name: 'OneWeekBlock' },
+		data: { startDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) }
+	});
+	await page.reload();
+	await expect(page.getByRole('main')).toContainText('Block finished');
+	await page.getByRole('button', { name: 'Finish block' }).click();
 	await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
 });

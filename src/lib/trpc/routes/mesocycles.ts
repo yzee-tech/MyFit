@@ -221,7 +221,7 @@ export const mesocycles = t.router({
 		return { message: 'Mesocycle exercise split edited successfully' };
 	}),
 
-	getWorkouts: t.procedure.input(z.enum(['nextSplitDay', 'allSplitDays'])).query(async ({ ctx, input }) => {
+	getWorkouts: t.procedure.input(z.enum(['activeMesocycle', 'allSplitDays'])).query(async ({ ctx, input }) => {
 		const includeClause = Prisma.validator<Prisma.WorkoutInclude>()({
 			workoutExercises: { include: { sets: { include: { miniSets: true } } } }
 		});
@@ -232,21 +232,16 @@ export const mesocycles = t.router({
 
 		const activeMesocycle = await prisma.mesocycle.findFirst({
 			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-			select: {
-				id: true,
-				_count: { select: { mesocycleExerciseSplitDays: true, workoutsOfMesocycle: true } }
-			}
+			select: { id: true }
 		});
 		if (!activeMesocycle) return [];
 
-		const totalWorkouts = activeMesocycle._count.workoutsOfMesocycle;
-		const splitLength = activeMesocycle._count.mesocycleExerciseSplitDays;
-		const splitDayIndex = totalWorkouts % splitLength;
-
-		return await prisma.workout.findMany({
-			where: { workoutOfMesocycle: { mesocycleId: activeMesocycle.id, splitDayIndex }, userId: ctx.userId },
+		const recentWorkouts = await prisma.workout.findMany({
+			where: { workoutOfMesocycle: { mesocycleId: activeMesocycle.id, workoutStatus: null }, userId: ctx.userId },
 			include: includeClause,
-			orderBy: { startedAt: 'asc' }
+			orderBy: { startedAt: 'desc' },
+			take: 12
 		});
+		return recentWorkouts.reverse();
 	})
 });

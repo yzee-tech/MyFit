@@ -122,62 +122,14 @@ export function createMesocycleRunes() {
 			: exercise.targetMuscleGroup === setChange.muscleGroup;
 	}
 
-	function distributeStartVolumes() {
-		mesocycleRunes.mesocycleCyclicSetChanges.forEach((setChange) => {
-			const muscleGroupTargetedOnDays = getMuscleGroupTargetedOnDaysArray(setChange);
-			const startVolumeDistributionAcrossDays = distributeEvenly(
-				setChange.startVolume,
-				muscleGroupTargetedOnDays.length
-			);
-
-			muscleGroupTargetedOnDays.forEach((dayIndex, i) => {
-				const dayVolume = startVolumeDistributionAcrossDays[i];
-				const targetingExercises = mesocycleRunes.mesocycleExerciseTemplates[dayIndex].filter((exercise) =>
-					mesocycleRunes.isExerciseAndSetChangeMuscleSame(exercise, setChange)
-				);
-
-				const exerciseVolumeDistribution = distributeEvenlyWithMinimum(dayVolume, targetingExercises.length, minSets);
-				targetingExercises.forEach((exercise, idx) => {
-					exercise.sets = exerciseVolumeDistribution[idx];
-				});
-			});
+	function setSetsOfAllExercises(sets: number) {
+		mesocycleExerciseTemplates.forEach((dayExercises) => dayExercises.forEach((exercise) => (exercise.sets = sets)));
+		// Automatic set increases are no longer used; keep the stored rules inert
+		mesocycleCyclicSetChanges.forEach((setChange) => {
+			setChange.setIncreaseAmount = 0;
+			setChange.regardlessOfProgress = false;
 		});
-		mesocycleRunes.saveStoresToLocalStorage();
-
-		function getTrueIndexes(boolArray: boolean[]): number[] {
-			return boolArray.reduce((indexes, value, index) => {
-				if (value) indexes.push(index);
-				return indexes;
-			}, [] as number[]);
-		}
-
-		function getMuscleGroupTargetedOnDaysArray(setChange: MesocycleCyclicSetChangeWithExtraProps): number[] {
-			return getTrueIndexes(
-				mesocycleRunes.mesocycleExerciseTemplates.map((exerciseTemplates) =>
-					exerciseTemplates.some((exercise) => mesocycleRunes.isExerciseAndSetChangeMuscleSame(exercise, setChange))
-				)
-			);
-		}
-
-		function distributeEvenly(volume: number, n: number) {
-			const distribution = Array(n).fill(0);
-			const base = Math.floor(volume / n);
-			const remainder = volume % n;
-
-			for (let i = 0; i < n; i++) distribution[i] = base;
-			for (let i = 0; i < remainder; i++) distribution[i] += 1;
-			return distribution;
-		}
-
-		function distributeEvenlyWithMinimum(v: number, n: number, m: number) {
-			const f = Math.floor(v / m);
-			if (f > n) return distributeEvenly(v, n);
-			const a = Array(f).fill(m);
-			const r = distributeEvenly(v - m * f, f);
-			for (let i = 0; i < f; i++) a[i] += r[i];
-			for (let i = 0; i < n - f; i++) a.push(0);
-			return a;
-		}
+		saveStoresToLocalStorage();
 	}
 
 	async function loadMesocycle(mesocycleData: FullMesocycleWithoutIds, editingId?: string) {
@@ -255,7 +207,7 @@ export function createMesocycleRunes() {
 		},
 		isExerciseAndSetChangeMuscleSame,
 		addMuscleGroupToCyclicSetChanges,
-		distributeStartVolumes,
+		setSetsOfAllExercises,
 		loadMesocycle,
 		resetStores,
 		saveStoresToLocalStorage

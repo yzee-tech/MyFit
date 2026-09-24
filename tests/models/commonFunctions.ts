@@ -35,3 +35,7 @@ export async function createMesocycle(page: Page, options?: { exerciseSplitCreat
 	});
 	await page.waitForURL('/mesocycles');
 }
+
+export async function pickRoutine(page: Page, routineName: string) {
+	await page.getByRole('radio', { name: new RegExp(`^${routineName}`) }).click();
+}

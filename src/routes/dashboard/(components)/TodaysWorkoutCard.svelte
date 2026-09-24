@@ -35,31 +35,31 @@
 			<Skeleton class="button-skeleton ml-auto" />
 		</Card.Footer>
 	{:then todaysWorkoutData}
-		{@const wm = todaysWorkoutData.workoutOfMesocycle}
-		{#if wm}
+		{@const block = todaysWorkoutData.activeBlock}
+		{#if block}
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
-					{#if wm.workoutStatus !== 'RestDay'}
-						{wm.splitDayName}
-						<Badge variant="secondary">{getRIRForWeek(wm.mesocycle.RIRProgression, wm.cycleNumber)} RIR</Badge>
-					{:else}
-						<span class="text-primary">Rest</span>
-					{/if}
+					{block.mesocycle.name}
+					<Badge variant="secondary">{getRIRForWeek(block.mesocycle.RIRProgression, block.weekNumber)} RIR</Badge>
 				</Card.Title>
-				<Card.Description>{wm?.mesocycle.name}</Card.Description>
+				<Card.Description>
+					{#if block.blockFinished}
+						Block finished, all {block.totalWeeks} weeks done
+					{:else}
+						Week {block.weekNumber} of {block.totalWeeks} · {block.routines.length} routines
+					{/if}
+				</Card.Description>
 			</Card.Header>
-			{#if wm.workoutStatus !== 'RestDay'}
-				<Card.Content>
-					{#await pastWorkouts}
-						<Skeleton class="h-40 w-full" />
-					{:then pastWorkouts}
-						<WorkoutProgressionChart {pastWorkouts} />
-					{/await}
-				</Card.Content>
-			{/if}
+			<Card.Content>
+				{#await pastWorkouts}
+					<Skeleton class="h-40 w-full" />
+				{:then pastWorkouts}
+					<WorkoutProgressionChart {pastWorkouts} />
+				{/await}
+			</Card.Content>
 			<Card.Footer>
 				<Button class="ml-auto gap-2" onclick={createNewWorkout}>
-					Start
+					Start workout
 					<ChevronRight />
 				</Button>
 			</Card.Footer>
