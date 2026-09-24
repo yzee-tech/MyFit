@@ -10,11 +10,11 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in our Node.js web application or CockroachDB backend, please follow the guidelines below:
+If you discover a security vulnerability in our Node.js web application or PostgreSQL backend, please follow the guidelines below:
 
 ### How to Report
 
-1. **Email**: Send an email to `myfit.auth@gmail.com` with the details of the vulnerability.
+1. **Email**: Send an email to `yzoffice@draco-investments.com` with the details of the vulnerability.
 
    - Use the subject line: `Security Vulnerability Report - [Your Issue Title]`.
    - Provide a detailed description of the vulnerability, including:
