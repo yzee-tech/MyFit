@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { getWorkoutVolume } from '$lib/utils/workoutUtils';
+	import { fromKg } from '$lib/utils/weightUnits';
+	import { page } from '$app/stores';
 	import {
 		CategoryScale,
 		Chart,
@@ -37,7 +39,9 @@
 				),
 				datasets: [
 					{
-						data: pastWorkouts.map((workout) => getWorkoutVolume(workout)),
+						data: pastWorkouts.map((workout) =>
+							Math.round(fromKg(getWorkoutVolume(workout), $page.data.homeWeightUnit))
+						),
 						fill: {
 							target: 'origin',
 							above: `hsl(${secondaryColor})`

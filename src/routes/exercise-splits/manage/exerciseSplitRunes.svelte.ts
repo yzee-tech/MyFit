@@ -18,7 +18,7 @@ type ExerciseSplitDayWithoutIds = Omit<Prisma.ExerciseSplitDayCreateWithoutExerc
 
 export function createExerciseSplitRunes() {
 	let splitName = $state('');
-	let splitDays: ExerciseSplitDayWithoutIds[] = $state([{ name: '', isRestDay: false }]);
+	let splitDays: ExerciseSplitDayWithoutIds[] = $state([{ name: '', isRestDay: false, weightUnit: 'KG' }]);
 	let splitExercises: SplitExerciseTemplateWithoutIdsOrIndex[][] = $state([]);
 	let editingExerciseSplitId: string | null = $state(null);
 
@@ -32,7 +32,7 @@ export function createExerciseSplitRunes() {
 	}
 
 	function addSplitDay() {
-		splitDays.push({ name: '', isRestDay: false });
+		splitDays.push({ name: '', isRestDay: false, weightUnit: 'KG' });
 	}
 
 	function removeSplitDay(idx: number) {
@@ -120,7 +120,7 @@ export function createExerciseSplitRunes() {
 	function resetStores() {
 		editingExerciseSplitId = null;
 		splitName = '';
-		splitDays = [{ name: '', isRestDay: false }];
+		splitDays = [{ name: '', isRestDay: false, weightUnit: 'KG' }];
 		splitExercises = [];
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
@@ -133,7 +133,11 @@ export function createExerciseSplitRunes() {
 		splitName = exerciseSplit.name;
 		// Rest days belonged to the old fixed rotation; a routine library only has routines
 		const routines = exerciseSplit.exerciseSplitDays.filter((splitDay) => !splitDay.isRestDay);
-		splitDays = routines.map((splitDay) => ({ name: splitDay.name, isRestDay: false }));
+		splitDays = routines.map((splitDay) => ({
+			name: splitDay.name,
+			isRestDay: false,
+			weightUnit: splitDay.weightUnit ?? 'KG'
+		}));
 		splitExercises = routines.map((splitDay) => splitDay.exercises);
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;

@@ -14,6 +14,7 @@
 	import RefreshCcw from 'virtual:icons/lucide/refresh-ccw';
 	import MotivationalQuotes from '$lib/components/settings/MotivationalQuotes.svelte';
 	import WelcomeBack from '$lib/components/settings/WelcomeBack.svelte';
+	import HomeUnit from '$lib/components/settings/HomeUnit.svelte';
 
 	let hasError = $state(false);
 	let quotesEnabled = $state(false);
@@ -160,6 +161,7 @@
 			</Card.Content>
 		</Card.Root>
 	{:else}
+		<HomeUnit homeWeightUnit={$page.data.homeWeightUnit} />
 		<WelcomeBack
 			welcomeBackEnabled={$page.data.userSettings.welcomeBackEnabled}
 			welcomeBackAfterDays={$page.data.userSettings.welcomeBackAfterDays}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatWeight, fromKg } from '$lib/utils/weightUnits';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
@@ -21,6 +22,11 @@
 	type PropsType = { exercise: WorkoutExerciseInProgress; originalSetLoads: (number | undefined)[] };
 	type WorkoutExerciseSet = WorkoutExerciseInProgress['sets'][number];
 	let { exercise = $bindable(), originalSetLoads = $bindable() }: PropsType = $props();
+
+	// Loads here are in the exercise's unit; bodyweight is stored in kg
+	function inExerciseUnit(kg: number | null | undefined) {
+		return typeof kg === 'number' ? fromKg(kg, exercise.weightUnit ?? 'KG') : undefined;
+	}
 
 	let isSameLoadExercise = $derived(['Straight', 'Myorep', 'MyorepMatch'].includes(exercise.setType));
 
@@ -128,8 +134,8 @@
 							miniSets: cleanupInProgressMiniSets(exerciseSet.miniSets)
 						},
 						newSet: { load: newLoad, RIR: exerciseSet.RIR, miniSets: cleanupInProgressMiniSets(exerciseSet.miniSets) },
-						oldUserBodyweight: workoutRunes.previousWorkoutData?.userBodyweight,
-						newUserBodyweight: workoutRunes.workoutData?.userBodyweight as number,
+						oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
+						newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
 						bodyweightFraction: exercise.bodyweightFraction ?? null,
 						overloadPercentage: 0
 					}
@@ -149,8 +155,8 @@
 					knownValues: {
 						oldSet: { reps: set.reps, load: oldLoad, RIR: set.RIR, miniSets: cleanupInProgressMiniSets(set.miniSets) },
 						newSet: { load: newLoad, RIR: set.RIR, miniSets: cleanupInProgressMiniSets(set.miniSets) },
-						oldUserBodyweight: workoutRunes.previousWorkoutData?.userBodyweight,
-						newUserBodyweight: workoutRunes.workoutData?.userBodyweight as number,
+						oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
+						newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
 						bodyweightFraction: exercise.bodyweightFraction ?? null,
 						overloadPercentage: -extraOverloadAchieved
 					}
@@ -162,8 +168,8 @@
 				knownValues: {
 					oldSet: { reps: set.reps, load: oldLoad, RIR: set.RIR, miniSets: cleanupInProgressMiniSets(set.miniSets) },
 					newSet: { reps: newReps, load: newLoad, RIR: set.RIR, miniSets: cleanupInProgressMiniSets(set.miniSets) },
-					oldUserBodyweight: workoutRunes.previousWorkoutData?.userBodyweight,
-					newUserBodyweight: workoutRunes.workoutData?.userBodyweight as number,
+					oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
+					newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
 					bodyweightFraction: exercise.bodyweightFraction ?? null
 				}
 			});
@@ -188,8 +194,10 @@
 						{exercise.bodyweightFraction * 100}% of your bodyweight is taken into account for this exercise. No need to
 						adjust the load manually.
 						<br /><br />
-						{Math.round(exercise.bodyweightFraction * workoutRunes.workoutData!.userBodyweight! * 100) / 100} kg will be
-						automatically added to the load of each set.
+						{formatWeight(
+							exercise.bodyweightFraction * workoutRunes.workoutData!.userBodyweight!,
+							exercise.weightUnit ?? 'KG'
+						)} will be automatically added to the load of each set.
 					</p>
 				</Popover.Content>
 			</Popover.Root>

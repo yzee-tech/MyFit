@@ -17,6 +17,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Pull A',
 			dayIndex: 0,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -39,7 +40,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000c10xy5dqswu4o',
@@ -61,7 +63,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000d10xyd1ovg8np',
@@ -83,7 +86,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000e10xyffzb3d5h',
@@ -105,7 +109,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -114,6 +119,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Push A',
 			dayIndex: 1,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -136,7 +142,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000g10xyg58sxz1g',
@@ -158,7 +165,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000h10xy0w6vbqnc',
@@ -180,7 +188,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000i10xy2zvejagf',
@@ -202,7 +211,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -211,6 +221,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Legs A',
 			dayIndex: 2,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -233,7 +244,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000k10xym4ihml3q',
@@ -255,7 +267,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000l10xygdw3cxrx',
@@ -277,7 +290,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000m10xyxb94dnfv',
@@ -299,7 +313,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -308,6 +323,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Pull B',
 			dayIndex: 3,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -330,7 +346,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zr000o10xyh41j4gg8',
@@ -352,7 +369,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000p10xyo4kr67sv',
@@ -374,7 +392,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000q10xyk4uc8g6r',
@@ -396,7 +415,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -405,6 +425,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Push B',
 			dayIndex: 4,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -427,7 +448,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000s10xyzmm67lm4',
@@ -449,7 +471,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000t10xyptu20q1f',
@@ -471,7 +494,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000u10xyw4aa1156',
@@ -493,7 +517,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -502,6 +527,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Legs B',
 			dayIndex: 5,
 			isRestDay: false,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
 				{
@@ -524,7 +550,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000w10xyz704cjzz',
@@ -546,7 +573,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000x10xy7di9mrxq',
@@ -568,7 +596,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				},
 				{
 					id: 'cm25sw3zs000y10xylyd9zcgv',
@@ -590,7 +619,8 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 					forceRIRMatching: null,
 					minimumWeightChange: null,
 					topRepRangeStart: null,
-					topRepRangeEnd: null
+					topRepRangeEnd: null,
+					weightUnit: null
 				}
 			]
 		},
@@ -599,6 +629,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: '',
 			dayIndex: 6,
 			isRestDay: true,
+			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: []
 		}

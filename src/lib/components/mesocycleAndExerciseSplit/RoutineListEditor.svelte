@@ -4,9 +4,17 @@
 	import { Input } from '$lib/components/ui/input';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import DeleteIcon from 'virtual:icons/lucide/trash-2';
+	import * as Select from '$lib/components/ui/select';
+	import type { RoutineWeightUnit } from '$lib/utils/prismaEnums';
+
+	const unitOptions: { value: RoutineWeightUnit; label: string }[] = [
+		{ value: 'KG', label: 'kg' },
+		{ value: 'LB', label: 'lb' },
+		{ value: 'ASK', label: 'Ask' }
+	];
 
 	type PropsType = {
-		routines: { name: string }[];
+		routines: { name: string; weightUnit?: RoutineWeightUnit }[];
 		/** Number of exercises in each routine, to warn before deleting one that has some */
 		exerciseCounts: number[];
 		/** Why a routine can't be deleted, or undefined when it can */
@@ -47,6 +55,21 @@
 				required
 				bind:value={routine.name}
 			/>
+			<Select.Root
+				onSelectedChange={(selected) => {
+					if (selected) routine.weightUnit = selected.value;
+				}}
+				selected={unitOptions.find((option) => option.value === (routine.weightUnit ?? 'KG'))}
+			>
+				<Select.Trigger class="w-20 shrink-0" aria-label="Routine {idx + 1} unit">
+					<Select.Value />
+				</Select.Trigger>
+				<Select.Content>
+					{#each unitOptions as option}
+						<Select.Item value={option.value}>{option.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
 			<Button
 				aria-label="Delete routine {idx + 1}"
 				class="shrink-0"

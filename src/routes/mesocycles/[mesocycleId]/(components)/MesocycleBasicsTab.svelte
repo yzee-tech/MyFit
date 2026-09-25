@@ -105,6 +105,7 @@
 			lastSetToFailure,
 			forceRIRMatching,
 			minimumWeightChange,
+			weightUnit, // a library's exercises follow their routine's unit
 			...rest
 		} = exercise;
 		return rest;
@@ -119,6 +120,7 @@
 			splitDays: mesocycle.mesocycleExerciseSplitDays.map((splitDay, dayIndex) => ({
 				name: splitDay.name,
 				isRestDay: splitDay.isRestDay,
+				weightUnit: splitDay.weightUnit,
 				dayIndex
 			})),
 			splitExercises: mesocycle.mesocycleExerciseSplitDays.map((splitDay) =>

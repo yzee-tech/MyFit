@@ -38,10 +38,10 @@ test('create workout', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
 	);
 });
 
@@ -157,10 +157,10 @@ test('create workout with all set types', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load RIR 1 9 50 1 2 8 45 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Reps Load RIR 1 12 10 2 2 10 10 0 1 2 10 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Reps Load RIR 1 18 10 2 1 12 5 22 16 10 2 1 10 5 2Incline dumbbell press 2 V2 sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Reps Load RIR 1 14 20 2 2 12 15 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Reps Load RIR 1 18 180 2 2 12 180 0'
+		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 50 1 2 8 45 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Reps Load (kg) RIR 1 12 10 2 2 10 10 0 1 2 10 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Reps Load (kg) RIR 1 18 10 2 1 12 5 22 16 10 2 1 10 5 2Incline dumbbell press 2 V2 sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Reps Load (kg) RIR 1 14 20 2 2 12 15 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Reps Load (kg) RIR 1 18 180 2 2 12 180 0'
 	);
 });
 
@@ -175,7 +175,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'New workout Exercises Pull A Week 1 Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (+BW) RIR Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
+		'New workout Exercises Pull A Week 1 Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Reps Load (+BW) RIR Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
 	);
 	await page.locator('#Pull-ups-set-1-reps').fill('12');
 	await page.locator('#Pull-ups-set-2-reps').fill('11');
@@ -213,13 +213,13 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load RIR 1 12 0 3 2 11 0 3 3 10 0 0'
+		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (kg) RIR 1 12 0 3 2 11 0 3 3 10 0 0'
 	);
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load RIR 1 15 40 3 2 14 40 3 3 15 40 0'
+		'Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load (kg) RIR 1 15 40 3 2 14 40 3 3 15 40 0'
 	);
 });
 
@@ -249,10 +249,10 @@ test('create workout without using active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
 	);
 });
 
@@ -362,11 +362,11 @@ test('edit a workout', async ({ page }) => {
 
 	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Mesocycle MyMeso Pull A User bodyweight 95 Targeted muscle groups Lats'
+		'Mesocycle MyMeso Pull A User bodyweight 95 kg Targeted muscle groups Lats'
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load RIR 1 7 0 3 2 6 0 3 3 5 0 0'
+		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (kg) RIR 1 7 0 3 2 6 0 3 3 5 0 0'
 	);
 });
 
@@ -474,4 +474,71 @@ test('deload week: same weights, half the sets', async ({ page, userData }) => {
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
 	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toBeVisible();
 	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
+});
+
+test('ask-each-time routine: pick lb at the gym; next time in kg converts to real kg weights', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+	await prisma.mesocycleExerciseSplitDay.updateMany({
+		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
+		data: { weightUnit: 'ASK' }
+	});
+
+	// This gym uses lb
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await expect(page.getByRole('main')).toContainText('This gym uses');
+	await page.getByLabel('Pounds').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('lb');
+	for (const exercise of ['Pull-ups', 'Dumbbell bicep curls', 'Face pulls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill('12');
+	await page.locator('[id="Barbell\\ rows-set-2-reps"]').fill('12');
+	await page.locator('[id="Barbell\\ rows-set-3-reps"]').fill('11');
+	await page.locator('[id="Barbell\\ rows-set-1-load"]').fill('90');
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await page.getByTestId('Barbell rows-set-2-action').click();
+	await page.getByTestId('Barbell rows-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	// History shows what was lifted
+	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('tab', { name: 'Exercises' }).click();
+	await expect(page.getByRole('tabpanel')).toContainText('Reps Load (lb) RIR 1 12 90');
+
+	// Next trip the gym uses kg: 90 lb (40.8 kg) becomes 40 kg
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await pickRoutine(page, 'Pull A');
+	await page.getByLabel('Kilograms').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('kg');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
+
+	// Switch this exercise back to lb: the planned sets snap to 90 lb
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('lb');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('90');
+});
+
+test('home unit in lb: bodyweight shown and entered in lb', async ({ page }) => {
+	await createSplitAndMesoForTest(page);
+	await page.goto('/settings');
+	await page.getByLabel('Home unit pounds').click();
+	await page.waitForTimeout(500);
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByText('Bodyweight (lb)')).toBeVisible();
+	await page.getByPlaceholder('Type here').fill('220');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	// 220 lb is sent as kg
+	await expect(page).toHaveURL(/userBodyweight=99\.79/);
 });

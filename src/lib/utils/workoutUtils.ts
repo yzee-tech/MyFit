@@ -3,6 +3,7 @@ import type { ActiveMesocycleWithProgressionData } from '$lib/trpc/routes/workou
 import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Prisma } from '@prisma/client';
+import { defaultWeightStep, fromKg, roundWeight, snapToStep, toKg } from './weightUnits';
 
 export function getSetVolume(set: SetDetails, userBodyweight: number, bodyweightFraction: number | null) {
 	const setVolume = (set.reps + set.RIR) * set.load + (bodyweightFraction ?? 0) * userBodyweight;
@@ -187,7 +188,7 @@ export function createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
 		});
 	}
 
-	return { ...exercise, sets: newSets.slice(0, sets) };
+	return { ...exercise, weightUnit: exercise.weightUnit ?? 'KG', sets: newSets.slice(0, sets) };
 }
 
 /** Marks a deload week in a block's weekly RIR plan */
@@ -366,7 +367,9 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 
 		// TODO: #107
 		if (set.reps > repRangeEnd || loadIncreasedForOneOfSameLoadSets) {
-			newLoad += ex.minimumWeightChange ?? 5;
+			// The weight step is in the exercise's unit (e.g. 5 lb); loads here are in kg
+			const unit = ex.weightUnit ?? 'KG';
+			newLoad += toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
 		}
 		if (sameLoadSetType && newLoad > set.load) {
 			loadIncreasedForOneOfSameLoadSets = true;
@@ -402,6 +405,85 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 		if (newSet.reps! < repRangeStart) return ex.sets[setIdx];
 		return newSet;
 	});
+}
+
+/**
+ * Moves each suggested load (in kg) to the nearest weight on the exercise unit's steps, and
+ * recalculates reps so the effort stays the same. Used when the last performance was in the
+ * other unit, e.g. 30 lb (13.6 kg) at a kg gym becomes 12.5 kg with a rep or two more.
+ */
+export function snapSetsToUnitSteps(ex: WorkoutExerciseInProgress, userBodyweight: number) {
+	const unit = ex.weightUnit ?? 'KG';
+	const step = ex.minimumWeightChange ?? defaultWeightStep(unit);
+	const snapKg = (kg: number) => toKg(snapToStep(fromKg(kg, unit), step), unit);
+
+	ex.sets = ex.sets.map((set) => {
+		if (set.load === undefined) return set;
+		const snappedLoad = snapKg(set.load);
+		const miniSets = set.miniSets.map((miniSet) =>
+			miniSet.load === undefined ? miniSet : { ...miniSet, load: snapKg(miniSet.load) }
+		);
+		if (set.reps === undefined || set.RIR === undefined || Math.abs(snappedLoad - set.load) < 1e-9) {
+			return { ...set, load: snappedLoad, miniSets };
+		}
+		const cleanedMiniSets = cleanupInProgressMiniSets(set.miniSets);
+		const newReps = solveBergerFormula({
+			variableToSolve: 'NewReps',
+			knownValues: {
+				oldSet: { reps: set.reps, load: set.load, RIR: set.RIR, miniSets: cleanedMiniSets },
+				newSet: { load: snappedLoad, RIR: set.RIR, miniSets: cleanedMiniSets },
+				bodyweightFraction: ex.bodyweightFraction ?? null,
+				newUserBodyweight: userBodyweight,
+				oldUserBodyweight: userBodyweight,
+				overloadPercentage: 0
+			}
+		});
+		return { ...set, load: snappedLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
+	});
+}
+
+type SetWithLoads = { load?: number; miniSets: { load?: number }[] };
+
+/**
+ * Switches an in-progress exercise to the other unit. Loads are in the exercise's unit.
+ * Sets already done keep the exact weight lifted; sets still to do move to the new unit's
+ * steps (default steps, since a custom step belongs to the old unit) with reps adjusted.
+ */
+export function switchExerciseUnit(
+	ex: WorkoutExerciseInProgress,
+	to: 'KG' | 'LB',
+	userBodyweightKg: number
+): WorkoutExerciseInProgress {
+	if ((ex.weightUnit ?? 'KG') === to) return ex;
+	const inKg = convertExerciseLoads(ex, 'toKg');
+	const snapped: WorkoutExerciseInProgress = structuredClone({ ...inKg, weightUnit: to, minimumWeightChange: null });
+	snapSetsToUnitSteps(snapped, userBodyweightKg);
+	const merged = {
+		...inKg,
+		weightUnit: to,
+		sets: inKg.sets.map((set, idx) => (set.completed ? set : snapped.sets[idx]))
+	};
+	return convertExerciseLoads(merged, 'toDisplay');
+}
+
+/** Converts an exercise's loads from kg to the unit it's shown in (or back) */
+export function convertExerciseLoads<T extends { weightUnit?: 'KG' | 'LB' | null; sets: SetWithLoads[] }>(
+	ex: T,
+	direction: 'toDisplay' | 'toKg'
+): T {
+	const unit = ex.weightUnit ?? 'KG';
+	const convert = (load: number) => (direction === 'toDisplay' ? roundWeight(fromKg(load, unit)) : toKg(load, unit));
+	return {
+		...ex,
+		sets: ex.sets.map((set) => ({
+			...set,
+			load: set.load === undefined ? undefined : convert(set.load),
+			miniSets: set.miniSets.map((miniSet) => ({
+				...miniSet,
+				load: miniSet.load === undefined ? undefined : convert(miniSet.load)
+			}))
+		}))
+	};
 }
 
 /**
@@ -446,10 +528,13 @@ export function progressiveOverloadMagic(
 
 		const routineSetCount = ex.sets.length;
 
+		const unitChanged = (lastPerformance.exercise.weightUnit ?? 'KG') !== (ex.weightUnit ?? 'KG');
+
 		// Easy sessions repeat the last numbers instead of trying to beat them
 		if (easySession) {
 			ex.sets = lastPerformance.exercise.sets.map((oldSet) => addExtraSetProperties(oldSet));
 			fitSetsToRoutine(ex, routineSetCount);
+			if (unitChanged) snapSetsToUnitSteps(ex, userBodyweight);
 			return;
 		}
 
@@ -501,6 +586,7 @@ export function progressiveOverloadMagic(
 
 		fitSetsToRoutine(ex, routineSetCount);
 		ex.sets = increaseLoadOfSets(ex, userBodyweight);
+		if (unitChanged) snapSetsToUnitSteps(ex, userBodyweight);
 	});
 
 	// Deload: half the sets

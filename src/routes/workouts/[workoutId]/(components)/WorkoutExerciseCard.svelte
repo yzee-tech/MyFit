@@ -4,6 +4,7 @@
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import type { Prisma } from '@prisma/client';
 	import MiniSetIcon from 'virtual:icons/lucide/arrow-down-right';
+	import { fromKg, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 
 	type PropsType = {
 		exercise: Prisma.WorkoutExerciseGetPayload<{
@@ -12,6 +13,9 @@
 		date?: Date;
 	};
 	let { exercise, date }: PropsType = $props();
+
+	// Stored in kg; shown in the unit the weights were lifted in
+	const showLoad = (kg: number) => roundWeight(fromKg(kg, exercise.weightUnit));
 </script>
 
 <div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
@@ -48,7 +52,7 @@
 			<Table.Row class="h-2 border-none bg-secondary">
 				<Table.Head class="h-7 w-5"></Table.Head>
 				<Table.Head class="h-7 text-center text-foreground">Reps</Table.Head>
-				<Table.Head class="h-7 text-center text-foreground">Load</Table.Head>
+				<Table.Head class="h-7 text-center text-foreground">Load ({unitLabel(exercise.weightUnit)})</Table.Head>
 				<Table.Head class="h-7 text-center text-foreground">RIR</Table.Head>
 			</Table.Row>
 		</Table.Header>
@@ -58,7 +62,7 @@
 					<Table.Cell class="px-1 py-1.5 font-medium">{set.setIndex + 1}</Table.Cell>
 					{#if !set.skipped}
 						<Table.Cell class="px-1 py-1.5 text-center font-light">{set.reps}</Table.Cell>
-						<Table.Cell class="px-1 py-1.5 text-center font-light">{set.load}</Table.Cell>
+						<Table.Cell class="px-1 py-1.5 text-center font-light">{showLoad(set.load)}</Table.Cell>
 						<Table.Cell class="px-1 py-1.5 text-center font-light">{set.RIR}</Table.Cell>
 					{:else}
 						<Table.Cell colspan={3} class="px-1 py-1.5 text-center italic text-muted-foreground">
@@ -73,7 +77,7 @@
 							{miniSet.miniSetIndex + 1}
 						</Table.Cell>
 						<Table.Cell class="px-1 py-1.5 text-center font-light">{miniSet.reps}</Table.Cell>
-						<Table.Cell class="px-1 py-1.5 text-center font-light">{miniSet.load}</Table.Cell>
+						<Table.Cell class="px-1 py-1.5 text-center font-light">{showLoad(miniSet.load)}</Table.Cell>
 						<Table.Cell class="px-1 py-1.5 text-center font-light">{miniSet.RIR}</Table.Cell>
 					</Table.Row>
 				{/each}

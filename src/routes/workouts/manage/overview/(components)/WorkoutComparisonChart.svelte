@@ -2,6 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import {
+		convertExerciseLoads,
 		getExerciseVolume,
 		getSetVolume,
 		type SetDetails,
@@ -33,10 +34,14 @@
 	$effect(() => {
 		if (chart) chart.destroy();
 		if (selectedChartType.value === 'Work volume') {
+			// Compare in kg: exercises can be shown in different units
 			const previousWorkoutVolume = previousWorkoutData.exercises.reduce((volume, exercise) => {
-				return volume + getExerciseVolume(exercise, previousWorkoutData.userBodyweight);
+				return volume + getExerciseVolume(convertExerciseLoads(exercise, 'toKg'), previousWorkoutData.userBodyweight);
 			}, 0);
-			const currentWorkoutVolume = currentWorkoutData.exercises.reduce((exerciseVolume, exercise) => {
+			const currentExercisesInKg = currentWorkoutData.exercises.map((exercise) =>
+				convertExerciseLoads(exercise, 'toKg')
+			);
+			const currentWorkoutVolume = currentExercisesInKg.reduce((exerciseVolume, exercise) => {
 				return (
 					exerciseVolume +
 					exercise.sets.reduce((setVolume, set) => {

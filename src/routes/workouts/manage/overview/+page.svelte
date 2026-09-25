@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { convertExerciseLoads } from '$lib/utils/workoutUtils';
 	import { goto, invalidate } from '$app/navigation';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -28,7 +29,9 @@
 	function preProcessSetData() {
 		if (workoutRunes.workoutData === null || workoutRunes.workoutExercises === null) return;
 		savingWorkout = true;
-		const workoutExercisesSets = workoutRunes.workoutExercises.map((ex) => {
+		// Weights are entered in each exercise's unit and saved in kg
+		const exercisesInKg = workoutRunes.workoutExercises.map((ex) => convertExerciseLoads(ex, 'toKg'));
+		const workoutExercisesSets = exercisesInKg.map((ex) => {
 			return ex.sets.map((_set, idx) => {
 				const { completed, ...set } = _set;
 				if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
@@ -45,7 +48,7 @@
 
 		const createData: RouterInputs['workouts']['create'] = {
 			workoutData: { ...workoutRunes.workoutData, userBodyweight, note: workoutRunes.workoutData.note ?? undefined },
-			workoutExercises: workoutRunes.workoutExercises.map((ex, idx) => {
+			workoutExercises: exercisesInKg.map((ex, idx) => {
 				const { sets, ...exercise } = ex;
 				return { ...exercise, exerciseIndex: idx };
 			}),
@@ -66,7 +69,7 @@
 			workoutExercisesMiniSets: workoutExercisesMiniSets.map((sets, exerciseIndex) =>
 				sets.map((miniSets, setIndex) =>
 					miniSets.map((_miniSet, miniSetIndex) => {
-						const exercises = workoutRunes.workoutExercises as WorkoutExerciseInProgress[];
+						const exercises = exercisesInKg as WorkoutExerciseInProgress[];
 						const { completed, ...miniSet } = _miniSet;
 						if (exercises[exerciseIndex].sets[setIndex].skipped) [miniSet.reps, miniSet.load, miniSet.RIR] = [0, 0, 0];
 
