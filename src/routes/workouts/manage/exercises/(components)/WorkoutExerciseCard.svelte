@@ -3,7 +3,9 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { convertCamelCaseToNormal } from '$lib/utils';
-	import { switchExerciseUnit, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+	import { page } from '$app/stores';
+	import { getNextWeightHint, switchExerciseUnit, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+	import { availableWeightsFor, type WeightSetLike } from '$lib/utils/weightSets';
 	import { unitLabel } from '$lib/utils/weightUnits';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
@@ -30,9 +32,22 @@
 	let originalSetLoads = $state(exercise.sets.map((set) => set.load));
 	let isContextMenuOpen = $state(false);
 
+	// Weights this gym has for the exercise; when the next one is a big jump, say how to get there
+	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
+	let nextWeightHint = $derived(
+		readOnly
+			? null
+			: getNextWeightHint(exercise, availableWeightsFor(exercise, weightSets), workoutRunes.workoutData?.userBodyweight)
+	);
+
 	function toggleUnit() {
 		const to = (exercise.weightUnit ?? 'KG') === 'KG' ? 'LB' : 'KG';
-		exercise = switchExerciseUnit($state.snapshot(exercise), to, workoutRunes.workoutData?.userBodyweight ?? 0);
+		exercise = switchExerciseUnit(
+			$state.snapshot(exercise),
+			to,
+			workoutRunes.workoutData?.userBodyweight ?? 0,
+			weightSets
+		);
 		originalSetLoads = exercise.sets.map((set) => set.load);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
@@ -120,6 +135,15 @@
 	{#if exercise.note}
 		<div class="mt-1 flex items-center bg-secondary px-1 py-0.5 text-sm">
 			{exercise.note}
+		</div>
+	{/if}
+	{#if nextWeightHint && !reordering}
+		<div class="mt-1 rounded bg-secondary/60 px-1 py-0.5 text-sm" data-testid="{exercise.name}-next-weight">
+			Next weight: {nextWeightHint.nextWeight}
+			{unitLabel(exercise.weightUnit ?? 'KG')}. About {nextWeightHint.moreReps} more {nextWeightHint.moreReps === 1
+				? 'rep'
+				: 'reps'} at {nextWeightHint.currentWeight}
+			{unitLabel(exercise.weightUnit ?? 'KG')} first.
 		</div>
 	{/if}
 	{#if exercise.sets.length > 0 && !reordering}

@@ -335,6 +335,7 @@ export const users = t.router({
 						const prismaWorkoutExercise: WorkoutExercise = {
 							id: workoutExerciseIds[workoutIdx][exerciseIdx],
 							weightUnit: 'KG',
+							weightSetId: null,
 							bodyweightFraction: typeof exercise.bodyweight === 'number' ? 1 : null, // Assumption (full bodyweight)
 							changeAmount: null,
 							changeType: null,

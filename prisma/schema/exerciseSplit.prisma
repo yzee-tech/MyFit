@@ -35,4 +35,6 @@ model ExerciseTemplate {
   exerciseSplitDayId String
   topRepRangeStart   Int?
   topRepRangeEnd     Int?
+  /// Weights available for this exercise (a WeightSet id); none means standard steps
+  weightSetId        String?
 }

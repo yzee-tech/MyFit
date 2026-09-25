@@ -575,3 +575,131 @@ test('home unit in lb: bodyweight shown and entered in lb', async ({ page, userD
 	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('User bodyweight 220 lb');
 });
+
+test('weight sets: set up in Settings, link to an exercise, suggestions use real weights', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+
+	// The building gym's dumbbells: 5–10 kg by 1, then 14 and 20
+	await page.goto('/settings');
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await page.getByLabel('Name').fill('Building DBs');
+	await page.getByLabel('Weight set in kilograms').click();
+	await page.getByLabel('From').fill('5');
+	await page.getByLabel('To', { exact: true }).fill('10');
+	await page.getByLabel('Every').fill('1');
+	await page.getByRole('button', { name: 'Add range' }).click();
+	await page.getByLabel('Add one weight').fill('14');
+	await page.getByRole('button', { name: 'Add weight', exact: true }).click();
+	await page.getByLabel('Add one weight').fill('20');
+	await page.getByLabel('Add one weight').press('Enter');
+	await expect(page.getByTestId('weight-set-draft-weights')).toHaveText(/5\s*6\s*7\s*8\s*9\s*10\s*14\s*20/);
+	await page.getByRole('button', { name: 'Save weight set' }).click();
+	await expect(page.getByTestId('weight-set-Building DBs')).toContainText('5–10 by 1, 14, 20 kg');
+
+	// Link it to the curls during a workout; the routine remembers it
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	for (const exercise of ['Pull-ups', 'Barbell rows', 'Face pulls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Weights available').click();
+	await page.getByRole('option', { name: 'Building DBs (kg)' }).click();
+	await page.getByRole('button', { name: 'Edit exercise' }).click();
+
+	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]').fill('20');
+	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-2-reps"]').fill('20');
+	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-3-reps"]').fill('19');
+	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]').fill('10');
+	await page.getByTestId('Dumbbell bicep curls-set-1-action').click();
+	await page.getByTestId('Dumbbell bicep curls-set-2-action').click();
+	await page.getByTestId('Dumbbell bicep curls-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	const weightSet = await prisma.weightSet.findFirstOrThrow({ where: { userId: userData.userId } });
+	expect(weightSet.weights).toEqual([5, 6, 7, 8, 9, 10, 14, 20]);
+	const curls = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
+		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	});
+	expect(curls.weightSetId).toEqual(weightSet.id);
+
+	// Next time: standard steps would say 12.5 kg, but this gym jumps to 14 kg, too far for 10+ reps.
+	// So it stays at 10 kg with more reps, and says what's next
+	await page.getByLabel('create-workout').click();
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]')).toHaveValue('10');
+	await expect(page.getByTestId('Dumbbell bicep curls-next-weight')).toContainText('Next weight: 14 kg. About');
+	await expect(page.getByTestId('Dumbbell bicep curls-next-weight')).toContainText('more reps at 10 kg first.');
+
+	// Deleting the weight set puts the exercise back on standard steps
+	await page.goto('/settings');
+	page.once('dialog', (dialog) => dialog.accept());
+	await page.getByRole('button', { name: 'Delete Building DBs' }).click();
+	await expect(page.getByTestId('weight-set-Building DBs')).toHaveCount(0);
+	const unlinked = await prisma.mesocycleExerciseTemplate.findUniqueOrThrow({ where: { id: curls.id } });
+	expect(unlinked.weightSetId).toBeNull();
+});
+
+test('weight sets: ask-each-time routine picks the gym’s weights at the start, routine stays unlinked', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+	await prisma.mesocycleExerciseSplitDay.updateMany({
+		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
+		data: { weightUnit: 'ASK' }
+	});
+	await prisma.weightSet.create({
+		data: { userId: userData.userId, name: 'Hotel DBs', unit: 'LB', weights: [80, 95, 110] }
+	});
+	await page.reload();
+
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByLabel('Pounds').click();
+	await page.getByLabel('Weights here').click();
+	await page.getByRole('option', { name: 'Hotel DBs' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page).toHaveURL(/sessionWeightSetId=/);
+	for (const exercise of ['Pull-ups', 'Dumbbell bicep curls', 'Face pulls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill('12');
+	await page.locator('[id="Barbell\\ rows-set-2-reps"]').fill('12');
+	await page.locator('[id="Barbell\\ rows-set-3-reps"]').fill('11');
+	await page.locator('[id="Barbell\\ rows-set-1-load"]').fill('90');
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await page.getByTestId('Barbell rows-set-2-action').click();
+	await page.getByTestId('Barbell rows-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	// The routine is used at many gyms, so it doesn't keep this gym's weights
+	const rows = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
+		where: { name: 'Barbell rows', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	});
+	expect(rows.weightSetId).toBeNull();
+
+	// Back at the hotel: 90 lb isn't there, so the suggestion is one of its weights
+	await page.getByLabel('create-workout').click();
+	await pickRoutine(page, 'Pull A');
+	await page.getByLabel('Pounds').click();
+	await page.getByLabel('Weights here').click();
+	await page.getByRole('option', { name: 'Hotel DBs' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^(80|95)$/);
+});

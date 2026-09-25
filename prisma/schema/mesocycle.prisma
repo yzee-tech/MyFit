@@ -63,4 +63,6 @@ model MesocycleExerciseTemplate {
   topRepRangeEnd              Int?
   /// Unit chosen for this exercise when it differs from the routine's (e.g. lb machines at a kg gym)
   weightUnit                  WeightUnit?
+  /// Weights available for this exercise (a WeightSet id); none means standard steps
+  weightSetId                 String?
 }

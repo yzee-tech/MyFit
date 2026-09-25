@@ -46,6 +46,8 @@ model WorkoutExercise {
   topRepRangeEnd      Int?
   /// Unit the weights were shown and entered in; loads are always stored in kg
   weightUnit          WeightUnit           @default(KG)
+  /// Weights that were available (a WeightSet id), used for suggestions while in progress
+  weightSetId         String?
 }
 
 model WorkoutExerciseSet {
