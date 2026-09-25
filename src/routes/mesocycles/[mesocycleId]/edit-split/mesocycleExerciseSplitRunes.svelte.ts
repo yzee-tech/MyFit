@@ -17,7 +17,7 @@ type MesocycleExerciseSplitDayWithoutIds = Omit<
 export function createMesocycleExerciseSplitRunes() {
 	let mesocycle: RouterOutputs['mesocycles']['findById'] = $state(null);
 	let splitDays: MesocycleExerciseSplitDayWithoutIds[] = $state([
-		{ name: '', isRestDay: false, previousDayIndex: null }
+		{ name: '', isRestDay: false, weightUnit: 'KG', previousDayIndex: null }
 	]);
 	let splitExercises: MesocycleExerciseTemplateWithoutIdsOrIndex[][] = $state([]);
 
@@ -33,7 +33,7 @@ export function createMesocycleExerciseSplitRunes() {
 	}
 
 	function addSplitDay() {
-		splitDays.push({ name: '', isRestDay: false, previousDayIndex: null });
+		splitDays.push({ name: '', isRestDay: false, weightUnit: 'KG', previousDayIndex: null });
 	}
 
 	function removeSplitDay(idx: number) {
@@ -124,7 +124,7 @@ export function createMesocycleExerciseSplitRunes() {
 
 	function resetStores() {
 		mesocycle = null;
-		splitDays = [{ name: '', isRestDay: false, previousDayIndex: null }];
+		splitDays = [{ name: '', isRestDay: false, weightUnit: 'KG', previousDayIndex: null }];
 		splitExercises = [];
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
@@ -143,6 +143,7 @@ export function createMesocycleExerciseSplitRunes() {
 		splitDays = routines.map((splitDay) => ({
 			name: splitDay.name,
 			isRestDay: false,
+			weightUnit: splitDay.weightUnit,
 			previousDayIndex: splitDay.dayIndex
 		}));
 		splitExercises = routines.map((splitDay) =>

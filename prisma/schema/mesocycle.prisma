@@ -33,6 +33,7 @@ model MesocycleExerciseSplitDay {
   name                       String
   dayIndex                   Int
   isRestDay                  Boolean
+  weightUnit                 RoutineWeightUnit           @default(KG)
   mesocycle                  Mesocycle                   @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
   mesocycleId                String
   mesocycleSplitDayExercises MesocycleExerciseTemplate[]
@@ -60,4 +61,6 @@ model MesocycleExerciseTemplate {
   minimumWeightChange         Float?
   topRepRangeStart            Int?
   topRepRangeEnd              Int?
+  /// Unit chosen for this exercise when it differs from the routine's (e.g. lb machines at a kg gym)
+  weightUnit                  WeightUnit?
 }

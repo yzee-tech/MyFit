@@ -2,8 +2,10 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { arrayAverage } from '$lib/utils';
+	import { fromKg } from '$lib/utils/weightUnits';
 	import {
 		cleanupInProgressMiniSets,
+		convertExerciseLoads,
 		solveBergerFormula,
 		type WorkoutExerciseInProgress
 	} from '$lib/utils/workoutUtils';
@@ -17,7 +19,18 @@
 	type PropsType = { exercise: WorkoutExerciseInProgress };
 	let { exercise }: PropsType = $props();
 
-	let prevExercise = workoutRunes.previousWorkoutData?.exercises.find((ex) => ex.name === exercise.name);
+	// Last time's loads, in the unit this exercise is shown in now (it can be switched mid-workout)
+	let prevExercise = $derived.by(() => {
+		const previous = workoutRunes.previousWorkoutData?.exercises.find((ex) => ex.name === exercise.name);
+		if (!previous || previous.weightUnit === exercise.weightUnit) return previous;
+		const inKg = convertExerciseLoads(previous, 'toKg');
+		return convertExerciseLoads({ ...inKg, weightUnit: exercise.weightUnit ?? 'KG' }, 'toDisplay');
+	});
+
+	// Loads here are in the exercise's unit; bodyweight is stored in kg
+	function inExerciseUnit(kg: number | null | undefined) {
+		return typeof kg === 'number' ? fromKg(kg, exercise.weightUnit ?? 'KG') : undefined;
+	}
 
 	function getTheoreticalVolumeChange(setIdx: number) {
 		const prevSet = prevExercise?.sets[setIdx];
@@ -35,8 +48,8 @@
 			knownValues: {
 				oldSet: prevSet,
 				newSet: { reps, load, RIR, miniSets: cleanupInProgressMiniSets(miniSets) },
-				newUserBodyweight: workoutRunes.workoutData?.userBodyweight as number,
-				oldUserBodyweight: workoutRunes.previousWorkoutData?.userBodyweight,
+				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
+				oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
 			}
 		});
@@ -67,8 +80,8 @@
 			knownValues: {
 				oldSet: { ...prev, miniSets: [] },
 				newSet: { ...current, miniSets: [] },
-				newUserBodyweight: workoutRunes.workoutData?.userBodyweight as number,
-				oldUserBodyweight: workoutRunes.previousWorkoutData?.userBodyweight,
+				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
+				oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
 			}
 		});

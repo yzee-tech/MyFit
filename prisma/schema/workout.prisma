@@ -44,6 +44,8 @@ model WorkoutExercise {
   minimumWeightChange Float?
   topRepRangeStart    Int?
   topRepRangeEnd      Int?
+  /// Unit the weights were shown and entered in; loads are always stored in kg
+  weightUnit          WeightUnit           @default(KG)
 }
 
 model WorkoutExerciseSet {

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatWeight } from '$lib/utils/weightUnits';
+	import { page } from '$app/stores';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import Badge from '$lib/components/ui/badge/badge.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -32,7 +34,7 @@
 	);
 
 	async function editWorkout() {
-		workoutRunes.loadWorkout(workout);
+		workoutRunes.loadWorkout(workout, $page.data.homeWeightUnit);
 		await goto('/workouts/manage/start');
 	}
 
@@ -105,7 +107,7 @@
 		</div>
 		<div class="flex flex-col">
 			<span class="text-sm text-muted-foreground">User bodyweight</span>
-			<span class="font-semibold">{workout.userBodyweight}</span>
+			<span class="font-semibold">{formatWeight(workout.userBodyweight, $page.data.homeWeightUnit)}</span>
 		</div>
 		{#if workout.note}
 			<div class="flex flex-col">

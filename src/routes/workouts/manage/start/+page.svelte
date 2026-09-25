@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto, invalidate } from '$app/navigation';
-	import { navigating } from '$app/stores';
+	import { navigating, page } from '$app/stores';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import Quotes from '$lib/components/settings/Quotes.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -18,6 +18,9 @@
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import type { WeightUnit } from '$lib/utils/prismaEnums';
+	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
 
 	type TodaysWorkoutData = RouterOutputs['workouts']['getTodaysWorkoutData'];
 	type RoutineOption = NonNullable<TodaysWorkoutData['activeBlock']>['routines'][number];
@@ -53,7 +56,14 @@
 	let useActiveMesocycle = $state(false);
 	let workoutData = $state<TodaysWorkoutData | 'loading'>('loading');
 	let selectedRoutineIndex: number | null = $state(null);
-	let userBodyweight: null | number = $state(workoutRunes.workoutData?.userBodyweight ?? null);
+	// Bodyweight is typed in the home unit and kept in kg
+	const homeWeightUnit: WeightUnit = $page.data.homeWeightUnit ?? 'KG';
+	const toHomeUnit = (kg: number | null | undefined) =>
+		typeof kg === 'number' ? roundWeight(fromKg(kg, homeWeightUnit)) : null;
+	let userBodyweight: null | number = $state(toHomeUnit(workoutRunes.workoutData?.userBodyweight));
+	let userBodyweightKg = $derived(typeof userBodyweight === 'number' ? toKg(userBodyweight, homeWeightUnit) : null);
+	// For routines set to "ask each time"
+	let sessionWeightUnit: WeightUnit = $state(homeWeightUnit);
 	let overwriteWorkoutDialogOpen = $state(false);
 	let finishingBlock = $state(false);
 	let takeItEasy = $state(true);
@@ -73,7 +83,7 @@
 			if (workoutRunes.editingWorkoutId === null) workoutData = data;
 			else workoutData = workoutRunes.workoutData as TodaysWorkoutData;
 
-			userBodyweight = userBodyweight ?? workoutData.userBodyweight;
+			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
 			if (workoutData.activeBlock !== undefined) useActiveMesocycle = true;
 		});
 	});
@@ -99,7 +109,7 @@
 
 	async function startWorkout(fromDialog = false, mode: 'keepCurrent' | 'overwrite' = 'overwrite') {
 		if (workoutRunes.editingWorkoutId) {
-			if (workoutRunes.workoutData) workoutRunes.workoutData.userBodyweight = userBodyweight;
+			if (workoutRunes.workoutData) workoutRunes.workoutData.userBodyweight = userBodyweightKg;
 			workoutRunes.saveStoresToLocalStorage();
 			await goto('./exercises?editing');
 			return;
@@ -113,7 +123,9 @@
 
 		const newWorkoutData = buildWorkoutData();
 		if (newWorkoutData === null) return;
-		newWorkoutData.userBodyweight = userBodyweight;
+		newWorkoutData.userBodyweight = userBodyweightKg;
+		const askForUnit = useActiveMesocycle && selectedRoutine?.weightUnit === 'ASK';
+		newWorkoutData.sessionWeightUnit = askForUnit || !useActiveMesocycle ? sessionWeightUnit : undefined;
 
 		if (mode === 'overwrite') {
 			workoutRunes.workoutData = newWorkoutData;
@@ -123,11 +135,14 @@
 		workoutRunes.saveStoresToLocalStorage();
 
 		const workoutOfMesocycle = workoutRunes.workoutData.workoutOfMesocycle;
-		let exercisesLink = `./exercises?userBodyweight=${userBodyweight}`;
+		let exercisesLink = `./exercises?userBodyweight=${userBodyweightKg}`;
 		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
 		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
 		if (workoutOfMesocycle) exercisesLink += `&splitDayIndex=${workoutOfMesocycle.splitDayIndex}`;
 		if (workoutOfMesocycle && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
+		if (workoutOfMesocycle && workoutRunes.workoutData.sessionWeightUnit) {
+			exercisesLink += `&sessionUnit=${workoutRunes.workoutData.sessionWeightUnit}`;
+		}
 		goto(exercisesLink);
 	}
 
@@ -204,7 +219,7 @@
 			startWorkout();
 		}}
 	>
-		<Label for="user-bodyweight">Bodyweight</Label>
+		<Label for="user-bodyweight">Bodyweight ({unitLabel(homeWeightUnit)})</Label>
 		<Input id="user-bodyweight" placeholder="Type here" type="number" min={1} step={0.01} bind:value={userBodyweight} />
 		{#if workoutRunes.editingWorkoutId !== null && workoutRunes.workoutData}
 			<div class="grid grid-cols-2 gap-x-2 gap-y-1.5">
@@ -290,6 +305,23 @@
 				</button>
 			{/each}
 		</div>
+		{#if selectedRoutine?.weightUnit === 'ASK'}
+			<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+				<span class="text-sm font-medium" id="session-unit-label">This gym uses</span>
+				<ToggleGroup.Root
+					aria-labelledby="session-unit-label"
+					onValueChange={(value) => {
+						if (value === 'KG' || value === 'LB') sessionWeightUnit = value;
+					}}
+					type="single"
+					value={sessionWeightUnit}
+					variant="outline"
+				>
+					<ToggleGroup.Item aria-label="Kilograms" value="KG">kg</ToggleGroup.Item>
+					<ToggleGroup.Item aria-label="Pounds" value="LB">lb</ToggleGroup.Item>
+				</ToggleGroup.Root>
+			</div>
+		{/if}
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>
 		{#if $navigating}

@@ -3,7 +3,8 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { convertCamelCaseToNormal } from '$lib/utils';
-	import type { WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+	import { switchExerciseUnit, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+	import { unitLabel } from '$lib/utils/weightUnits';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -29,6 +30,13 @@
 	let originalSetLoads = $state(exercise.sets.map((set) => set.load));
 	let isContextMenuOpen = $state(false);
 
+	function toggleUnit() {
+		const to = (exercise.weightUnit ?? 'KG') === 'KG' ? 'LB' : 'KG';
+		exercise = switchExerciseUnit($state.snapshot(exercise), to, workoutRunes.workoutData?.userBodyweight ?? 0);
+		originalSetLoads = exercise.sets.map((set) => set.load);
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+	}
+
 	function skipSetsLeft() {
 		exercise.sets.forEach((set) => {
 			if (set.completed) return;
@@ -42,6 +50,17 @@
 <div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto truncate">{exercise.name}</span>
+		{#if !readOnly && !reordering}
+			<button
+				class="mr-1 rounded border px-1.5 text-xs font-medium text-muted-foreground"
+				aria-label="{exercise.name} unit: {unitLabel(exercise.weightUnit ?? 'KG')}, switch"
+				data-testid="{exercise.name}-unit-toggle"
+				onclick={toggleUnit}
+				type="button"
+			>
+				{unitLabel(exercise.weightUnit ?? 'KG')}
+			</button>
+		{/if}
 		{#if !readOnly}
 			{#if reordering}
 				<div role="button" tabindex="0" use:dragHandle>

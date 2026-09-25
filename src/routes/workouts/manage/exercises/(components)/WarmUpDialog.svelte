@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { defaultWeightStep, snapToStep } from '$lib/utils/weightUnits';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -45,6 +46,9 @@
 		oneRepMaxCalculatorOpen = false;
 	}
 
+	// Round warm-up weights to the exercise unit's usual step (2.5 kg / 5 lb)
+	let warmUpStep = $derived(defaultWeightStep(workoutRunes.exerciseWarmUpDialogExercise?.weightUnit ?? 'KG'));
+
 	function generateWarmUp(e: SubmitEvent) {
 		e.preventDefault();
 		if (oneRepMax === undefined || totalWarmUpSets === undefined) return;
@@ -53,7 +57,7 @@
 		for (let i = 0; i < totalWarmUpSets; i++) {
 			warmUpSets.push({
 				reps: Math.round(10 - (7 / (totalWarmUpSets - 1)) * i),
-				load: Math.round((oneRepMax * (0.4 + (0.4 / (totalWarmUpSets - 1)) * i)) / 2.5) * 2.5,
+				load: snapToStep(oneRepMax * (0.4 + (0.4 / (totalWarmUpSets - 1)) * i), warmUpStep),
 				oneRMPercentage: 40 + (40 / (totalWarmUpSets - 1)) * i
 			});
 		}

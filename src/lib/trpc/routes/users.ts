@@ -334,6 +334,7 @@ export const users = t.router({
 					workout.exercisesPerformed.map((exercise, exerciseIdx) => {
 						const prismaWorkoutExercise: WorkoutExercise = {
 							id: workoutExerciseIds[workoutIdx][exerciseIdx],
+							weightUnit: 'KG',
 							bodyweightFraction: typeof exercise.bodyweight === 'number' ? 1 : null, // Assumption (full bodyweight)
 							changeAmount: null,
 							changeType: null,
@@ -516,7 +517,8 @@ export const users = t.router({
 				quotesDisplayModes: true,
 				motivationalQuotesEnabled: true,
 				welcomeBackEnabled: true,
-				welcomeBackAfterDays: true
+				welcomeBackAfterDays: true,
+				homeWeightUnit: true
 			}
 		});
 
@@ -533,7 +535,8 @@ export const users = t.router({
 				motivationalQuotesEnabled: z.boolean().optional(),
 				quotesDisplayModes: z.array(QuotesDisplayModeSchema).min(1).optional(),
 				welcomeBackEnabled: z.boolean().optional(),
-				welcomeBackAfterDays: z.number().int().min(1).max(60).optional()
+				welcomeBackAfterDays: z.number().int().min(1).max(60).optional(),
+				homeWeightUnit: z.enum(['KG', 'LB']).optional()
 			})
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -544,7 +547,8 @@ export const users = t.router({
 					quotesDisplayModes: input.quotesDisplayModes ?? ['PRE_WORKOUT'],
 					motivationalQuotesEnabled: input.motivationalQuotesEnabled ?? false,
 					welcomeBackEnabled: input.welcomeBackEnabled ?? true,
-					welcomeBackAfterDays: input.welcomeBackAfterDays ?? 7
+					welcomeBackAfterDays: input.welcomeBackAfterDays ?? 7,
+					homeWeightUnit: input.homeWeightUnit ?? 'KG'
 				},
 				update: {
 					...(input.motivationalQuotesEnabled !== undefined && {
@@ -552,14 +556,16 @@ export const users = t.router({
 					}),
 					...(input.quotesDisplayModes !== undefined && { quotesDisplayModes: input.quotesDisplayModes }),
 					...(input.welcomeBackEnabled !== undefined && { welcomeBackEnabled: input.welcomeBackEnabled }),
-					...(input.welcomeBackAfterDays !== undefined && { welcomeBackAfterDays: input.welcomeBackAfterDays })
+					...(input.welcomeBackAfterDays !== undefined && { welcomeBackAfterDays: input.welcomeBackAfterDays }),
+					...(input.homeWeightUnit !== undefined && { homeWeightUnit: input.homeWeightUnit })
 				},
 				select: {
 					id: true,
 					quotesDisplayModes: true,
 					motivationalQuotesEnabled: true,
 					welcomeBackEnabled: true,
-					welcomeBackAfterDays: true
+					welcomeBackAfterDays: true,
+					homeWeightUnit: true
 				}
 			});
 

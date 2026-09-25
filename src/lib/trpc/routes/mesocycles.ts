@@ -36,6 +36,7 @@ const zodUpdateExerciseSplitInput = z.strictObject({
 			name: z.string(),
 			dayIndex: z.number().int(),
 			isRestDay: z.boolean(),
+			weightUnit: z.enum(['KG', 'LB', 'ASK']).optional(),
 			/** Where this routine was before the edit; null for a new routine */
 			previousDayIndex: z.number().int().nullable().optional()
 		})

@@ -1,6 +1,8 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
+import { resolveExerciseUnit } from '$lib/utils/weightUnits';
 import {
+	convertExerciseLoads,
 	getBlockWeek,
 	isDeloadWeek,
 	progressiveOverloadMagic,
@@ -17,6 +19,8 @@ import {
 import {
 	Prisma,
 	WorkoutStatus,
+	type RoutineWeightUnit,
+	type WeightUnit as WeightUnitType,
 	type Mesocycle,
 	type PrismaPromise,
 	type WorkoutExercise,
@@ -40,11 +44,16 @@ type TodaysWorkoutData = {
 	activeBlock?: ActiveBlockData;
 	/** Set when it has been long enough since the last workout for an easier first session back */
 	welcomeBack?: { daysSinceLastWorkout: number };
+	/** Unit for bodyweight and a starting choice for routines set to "ask each time" */
+	homeWeightUnit: WeightUnitType;
+	/** Unit picked at the start of this workout, for routines set to "ask each time" */
+	sessionWeightUnit?: WeightUnitType;
 };
 
 export type RoutineOption = {
 	splitDayIndex: number;
 	name: string;
+	weightUnit: RoutineWeightUnit;
 	workoutExercises: Pick<WorkoutExercise, 'name' | 'targetMuscleGroup' | 'customMuscleGroup'>[];
 	lastDoneAt: Date | null;
 };
@@ -275,7 +284,7 @@ export const workouts = t.router({
 			}),
 			prisma.userSettings.findUnique({
 				where: { userId: ctx.userId },
-				select: { welcomeBackEnabled: true, welcomeBackAfterDays: true }
+				select: { welcomeBackEnabled: true, welcomeBackAfterDays: true, homeWeightUnit: true }
 			})
 		]);
 
@@ -284,7 +293,8 @@ export const workouts = t.router({
 			userBodyweight: lastWorkout?.userBodyweight ?? null,
 			startedAt: new Date(),
 			endedAt: null,
-			note: null
+			note: null,
+			homeWeightUnit: userSettings?.homeWeightUnit ?? 'KG'
 		};
 
 		// Settings default to on, after 7 days
@@ -324,6 +334,7 @@ export const workouts = t.router({
 			.map((splitDay) => ({
 				splitDayIndex: splitDay.dayIndex,
 				name: splitDay.name,
+				weightUnit: splitDay.weightUnit,
 				workoutExercises: splitDay.mesocycleSplitDayExercises,
 				lastDoneAt: workoutsOfMesocycle.find((wm) => wm.splitDayIndex === splitDay.dayIndex)?.workout.startedAt ?? null
 			}));
@@ -343,7 +354,9 @@ export const workouts = t.router({
 			z.strictObject({
 				userBodyweight: z.number(),
 				splitDayIndex: z.number().int(),
-				welcomeBack: z.boolean().optional()
+				welcomeBack: z.boolean().optional(),
+				/** Unit chosen at the start of the workout, for routines set to "ask each time" */
+				sessionUnit: z.enum(['KG', 'LB']).optional()
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -365,13 +378,26 @@ export const workouts = t.router({
 			if (!data || !todaysSplitDay || todaysSplitDay.isRestDay) return workoutExercisesWithPreviousData;
 
 			const exerciseNames = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => exercise.name);
-			const exerciseHistory = await getExerciseHistory(ctx.userId, exerciseNames);
+			const [exerciseHistory, userSettings] = await Promise.all([
+				getExerciseHistory(ctx.userId, exerciseNames),
+				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } })
+			]);
+
+			// Each exercise's unit: its own choice, else the routine's, else the one picked for this workout
+			const sessionUnit = input.sessionUnit ?? userSettings?.homeWeightUnit ?? 'KG';
+			todaysSplitDay.mesocycleSplitDayExercises.forEach((exercise) => {
+				exercise.weightUnit = resolveExerciseUnit(exercise.weightUnit, todaysSplitDay.weightUnit, sessionUnit);
+			});
+			const unitByExerciseName = new Map(
+				todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => [exercise.name, exercise.weightUnit ?? 'KG'])
+			);
 
 			const weekNumber = getBlockWeek(data.startDate!);
 			let mode: ProgressionMode = 'normal';
 			if (isDeloadWeek(data.weeklyRIR, weekNumber)) mode = 'deload';
 			else if (input.welcomeBack) mode = 'welcomeBack';
 
+			// Suggestions are worked out in kg, then shown in each exercise's unit
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
 				data,
 				weekNumber,
@@ -379,7 +405,7 @@ export const workouts = t.router({
 				splitDayIndex,
 				exerciseHistory,
 				mode
-			);
+			).map((exercise) => convertExerciseLoads(exercise, 'toDisplay'));
 
 			// "Previous" for comparisons: the last time each of today's exercises was done
 			const lastPerformances = exerciseNames
@@ -387,7 +413,11 @@ export const workouts = t.router({
 				.filter((performance) => performance !== undefined);
 			if (lastPerformances.length > 0) {
 				workoutExercisesWithPreviousData.previousWorkoutData = {
-					exercises: lastPerformances.map((performance) => performance.exercise),
+					// In today's unit for each exercise, so it compares like with like
+					exercises: lastPerformances.map(({ exercise }) => {
+						const weightUnit = unitByExerciseName.get(exercise.name) ?? exercise.weightUnit;
+						return convertExerciseLoads({ ...exercise, weightUnit }, 'toDisplay');
+					}),
 					userBodyweight: lastPerformances.at(-1)!.oldUserBodyweight
 				};
 			}
@@ -460,7 +490,7 @@ export const workouts = t.router({
 		// Update the routine's exercises in the block according to this workout
 		const mesocycleData = await prisma.mesocycle.findFirst({
 			where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
-			select: { mesocycleExerciseSplitDays: { select: { id: true, dayIndex: true } } }
+			select: { mesocycleExerciseSplitDays: { select: { id: true, dayIndex: true, weightUnit: true } } }
 		});
 		const todaysSplitDay = mesocycleData?.mesocycleExerciseSplitDays.find(
 			(splitDay) => splitDay.dayIndex === workoutOfMesocycle.splitDayIndex
@@ -476,9 +506,14 @@ export const workouts = t.router({
 				}),
 				prisma.mesocycleExerciseTemplate.createMany({
 					data: workoutExercises.map((ex, exerciseIdx) => {
-						const { workoutId, ...exercise } = ex;
+						const { workoutId, weightUnit, ...exercise } = ex;
+						// Remember an exercise's own unit (e.g. lb machines at a kg gym), but not for routines
+						// used at many gyms, where the unit is picked again each workout
+						const rememberedUnit =
+							todaysSplitDay.weightUnit !== 'ASK' && weightUnit !== todaysSplitDay.weightUnit ? weightUnit : null;
 						return {
 							...exercise,
+							weightUnit: rememberedUnit,
 							mesocycleExerciseSplitDayId: todaysSplitDay.id,
 							sets: input.workoutExercisesSets[exerciseIdx].length
 						};

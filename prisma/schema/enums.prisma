@@ -45,3 +45,15 @@ enum QuotesDisplayMode {
   POST_WORKOUT
   BETWEEN_SETS
 }
+
+enum WeightUnit {
+  KG
+  LB
+}
+
+/// A routine's unit; ASK means choose it when starting a workout (for routines used at many gyms)
+enum RoutineWeightUnit {
+  KG
+  LB
+  ASK
+}

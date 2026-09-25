@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { fromKg, roundWeight } from '$lib/utils/weightUnits';
 	import * as Card from '$lib/components/ui/card';
 	import { Label } from '$lib/components/ui/label';
 	import * as Popover from '$lib/components/ui/popover';
@@ -88,7 +90,7 @@
 				nonSkippedExercises.map((ex) => {
 					if (!selectedSets.includes(setIdx.toString())) return null;
 					if (!ex.sets[setIdx]) return null;
-					return ex.sets[setIdx].load;
+					return roundWeight(fromKg(ex.sets[setIdx].load, $page.data.homeWeightUnit));
 				})
 			);
 		} else {
@@ -96,7 +98,8 @@
 				nonSkippedExercises.map((ex) => {
 					if (!selectedSets.includes(setIdx.toString())) return null;
 					if (!ex.sets[setIdx]) return null;
-					return ex.sets[setIdx].load + ex.bodyweightFraction! * ex.workout.userBodyweight;
+					const totalKg = ex.sets[setIdx].load + ex.bodyweightFraction! * ex.workout.userBodyweight;
+					return roundWeight(fromKg(totalKg, $page.data.homeWeightUnit));
 				})
 			);
 		}

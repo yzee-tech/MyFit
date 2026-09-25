@@ -24,6 +24,7 @@ const createOrEditExerciseSplit = async (
 
 	const exerciseSplitDays: ExerciseSplitDay[] = input.splitDays.map((splitDay) => ({
 		...splitDay,
+		weightUnit: splitDay.weightUnit ?? 'KG',
 		id: createId(),
 		exerciseSplitId: exerciseSplit.id
 	}));

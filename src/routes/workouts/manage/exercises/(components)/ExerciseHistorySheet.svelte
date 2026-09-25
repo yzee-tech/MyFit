@@ -61,6 +61,7 @@
 				{@const wm = exercise.workout.workoutOfMesocycle}
 				<div class="mb-1 mt-4 flex items-start gap-1">
 					<Button
+						aria-label="Copy these sets"
 						onclick={() => workoutRunes.copyExerciseSetNumbersFromHistory(exercise)}
 						size="icon"
 						variant="secondary"

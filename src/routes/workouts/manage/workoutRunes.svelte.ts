@@ -1,7 +1,9 @@
+import type { WeightUnit } from '$lib/utils/prismaEnums';
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
 import {
 	type WorkoutExerciseInProgress,
+	convertExerciseLoads,
 	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate
 } from '$lib/utils/workoutUtils';
 import type { Prisma } from '@prisma/client';
@@ -53,7 +55,9 @@ function createWorkoutRunes() {
 	function addExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
 		if (workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name)) return false;
-		workoutExercises.push(createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise));
+		// New exercises start in the unit picked for this workout (or the home unit)
+		const weightUnit = workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
+		workoutExercises.push({ ...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise), weightUnit });
 		saveStoresToLocalStorage();
 		return true;
 	}
@@ -61,10 +65,13 @@ function createWorkoutRunes() {
 	function editExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
 		if (!editingExercise || editingExerciseIndex === undefined || workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name, editingExerciseIndex)) return false;
-		workoutExercises[editingExerciseIndex] = createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
-			exercise,
-			workoutExercises[editingExerciseIndex].sets
-		);
+		workoutExercises[editingExerciseIndex] = {
+			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
+				exercise,
+				workoutExercises[editingExerciseIndex].sets
+			),
+			weightUnit: workoutExercises[editingExerciseIndex].weightUnit
+		};
 		saveStoresToLocalStorage();
 		return true;
 	}
@@ -103,6 +110,11 @@ function createWorkoutRunes() {
 	) {
 		const exerciseToEdit = workoutExercises?.find((ex) => ex.name === exerciseHistorySheetName);
 		if (!exerciseToEdit) return;
+		// History is stored in kg; copy it in the unit this exercise is shown in
+		exerciseFromHistory = convertExerciseLoads(
+			{ ...exerciseFromHistory, weightUnit: exerciseToEdit.weightUnit ?? 'KG' },
+			'toDisplay'
+		);
 
 		for (let i = 0; i < exerciseToEdit.sets.length; i++) {
 			if (!exerciseFromHistory.sets[i]) break;
@@ -120,17 +132,19 @@ function createWorkoutRunes() {
 		exerciseHistorySheetOpen = false;
 	}
 
-	function loadWorkout(workout: FullWorkoutWithMesoData) {
+	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {
 		editingWorkoutId = workout.id;
 		workoutData = {
 			startedAt: workout.startedAt,
 			endedAt: workout.endedAt,
 			userBodyweight: workout.userBodyweight,
 			workoutExercises: [],
-			note: workout.note
+			note: workout.note,
+			homeWeightUnit
 		};
+		// Saved loads are in kg; show them in the unit each exercise was done in
 		workoutExercises = workout.workoutExercises.map((ex) => {
-			const { id, workoutId, ...exercise } = ex;
+			const { id, workoutId, ...exercise } = convertExerciseLoads(ex, 'toDisplay');
 			return {
 				...exercise,
 				sets: ex.sets.map((set) => {

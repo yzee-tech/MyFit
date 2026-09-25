@@ -80,5 +80,8 @@ model UserSettings {
   welcomeBackEnabled   Boolean @default(true)
   welcomeBackAfterDays Int     @default(7)
 
+  /// Unit for bodyweight, charts and stats; weights are always stored in kg
+  homeWeightUnit WeightUnit @default(KG)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
