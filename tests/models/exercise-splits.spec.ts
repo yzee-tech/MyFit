@@ -1,5 +1,8 @@
 import { test, expect } from '../fixtures';
-import { createTemplateExerciseSplit } from './commonFunctions';
+import { createMesocycle, createTemplateExerciseSplit } from './commonFunctions';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 test.beforeEach(async ({ page }) => {
 	await page.goto('/exercise-splits');
@@ -82,7 +85,6 @@ test('edit an exercise split', async ({ page }) => {
 	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('Pull Push Legs (edited)');
 	// Delete a routine from the middle; it has exercises, so confirm
@@ -97,4 +99,65 @@ test('edit an exercise split', async ({ page }) => {
 	});
 	await page.getByRole('link', { name: 'Pull Push Legs (edited) 5 routines' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs (edited) Pull APush ALegs APush BLegs B');
+});
+
+test('editing a library can update the current block, keeping its sets and link', async ({ page, userData }) => {
+	await createMesocycle(page);
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
+	// The block remembers 5 sets of barbell rows (e.g. changed during a workout)
+	await prisma.mesocycleExerciseTemplate.updateMany({
+		where: { name: 'Barbell rows', mesocycleExerciseSplitDay: { mesocycleId: block.id } },
+		data: { sets: 5 }
+	});
+
+	// Edit straight away, no pop-up; rename the first routine
+	await page.goto('/exercise-splits');
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
+	await page.getByLabel('exercise-split-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL('/exercise-splits/manage/structure');
+	await page.getByLabel('Routine 1 name').fill('Hotel – Pull');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByLabel('Also update my current block “MyMeso”')).toBeChecked();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library and current block updated' })).toBeVisible({
+		timeout: 10000
+	});
+
+	const routines = await prisma.mesocycleExerciseSplitDay.findMany({
+		where: { mesocycleId: block.id },
+		include: { mesocycleSplitDayExercises: true },
+		orderBy: { dayIndex: 'asc' }
+	});
+	expect(routines.map((routine) => routine.name)).toEqual([
+		'Hotel – Pull',
+		'Push A',
+		'Legs A',
+		'Pull B',
+		'Push B',
+		'Legs B'
+	]);
+	const rows = routines[0].mesocycleSplitDayExercises.find((exercise) => exercise.name === 'Barbell rows')!;
+	expect(rows.sets).toEqual(5);
+	// Still linked to the library it came from
+	const library = await prisma.exerciseSplit.findFirstOrThrow({ where: { userId: userData.userId } });
+	expect((await prisma.mesocycle.findUniqueOrThrow({ where: { id: block.id } })).exerciseSplitId).toEqual(library.id);
+
+	// Untick to change only the library
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
+	await page.getByLabel('exercise-split-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Routine 1 name').fill('Home – Pull');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByLabel('Also update my current block “MyMeso”').click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Exercise split edited successfully' })).toBeVisible({
+		timeout: 10000
+	});
+	const firstRoutine = await prisma.mesocycleExerciseSplitDay.findFirstOrThrow({
+		where: { mesocycleId: block.id, dayIndex: 0 }
+	});
+	expect(firstRoutine.name).toEqual('Hotel – Pull');
 });

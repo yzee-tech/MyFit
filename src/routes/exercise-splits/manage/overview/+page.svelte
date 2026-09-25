@@ -11,8 +11,25 @@
 	import ExerciseSplitExercisesCharts from '../../(components)/ExerciseSplitExercisesCharts.svelte';
 	import { trpc } from '$lib/trpc/client';
 	import { TRPCClientError } from '@trpc/client';
+	import { onMount } from 'svelte';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Label } from '$lib/components/ui/label';
+	import { mesocycleExerciseSplitRunes } from '../../../mesocycles/[mesocycleId]/edit-split/mesocycleExerciseSplitRunes.svelte';
 
 	let savingExerciseSplit = $state(false);
+
+	// Editing a library can also update the current block made from it
+	let activeBlock: { id: string; name: string } | null = $state(null);
+	let updateActiveBlock = $state(true);
+	onMount(async () => {
+		const id = exerciseSplitRunes.editingExerciseSplitId;
+		if (id) activeBlock = await trpc().exerciseSplits.findActiveBlockForLibrary.query(id);
+	});
+
+	/** Routines as saved: without the editor's note of each routine's earlier name */
+	function routinesToSave() {
+		return exerciseSplitRunes.splitDays.map(({ previousName, ...splitDay }, idx) => ({ ...splitDay, dayIndex: idx }));
+	}
 
 	async function createOrEditExerciseSplit() {
 		const id = exerciseSplitRunes.editingExerciseSplitId;
@@ -30,10 +47,7 @@
 		try {
 			const { message } = await trpc().exerciseSplits.create.mutate({
 				splitName: exerciseSplitRunes.splitName,
-				splitDays: exerciseSplitRunes.splitDays.map((splitDay, idx) => ({
-					...splitDay,
-					dayIndex: idx
-				})),
+				splitDays: routinesToSave(),
 				splitExercises: exerciseSplitRunes.splitExercises.map((dayExercises) =>
 					dayExercises.map((exercise, idx) => ({ ...exercise, exerciseIndex: idx }))
 				)
@@ -50,16 +64,22 @@
 				id,
 				splitData: {
 					splitName: exerciseSplitRunes.splitName,
-					splitDays: exerciseSplitRunes.splitDays.map((splitDay, idx) => ({
-						...splitDay,
-						dayIndex: idx
-					})),
+					splitDays: routinesToSave(),
 					splitExercises: exerciseSplitRunes.splitExercises.map((dayExercises) =>
 						dayExercises.map((exercise, idx) => ({ ...exercise, exerciseIndex: idx }))
 					)
-				}
+				},
+				updateBlock:
+					activeBlock && updateActiveBlock
+						? {
+								mesocycleId: activeBlock.id,
+								previousRoutineNames: exerciseSplitRunes.splitDays.map((splitDay) => splitDay.previousName ?? null)
+							}
+						: undefined
 			});
 			toast.success(message);
+			// The block's routines changed: drop any unsaved copy of them held by its editor
+			if (activeBlock && updateActiveBlock) mesocycleExerciseSplitRunes.resetStores();
 		} catch (error) {
 			if (error instanceof TRPCClientError) toast.error(error.message);
 		}
@@ -83,6 +103,19 @@
 		</Card.Root>
 	</Tabs.Content>
 </Tabs.Root>
+
+{#if activeBlock}
+	<div class="mt-4 flex items-start gap-3 rounded-md border p-4">
+		<Checkbox id="update-active-block" class="mt-0.5" bind:checked={updateActiveBlock} />
+		<div class="grid gap-1">
+			<Label for="update-active-block">Also update my current block “{activeBlock.name}”</Label>
+			<p class="text-sm text-muted-foreground">
+				Its routines get these exercises, and new routines are added. Workouts, sets and exercise overrides are kept.
+				Routines you removed here stay in the block.
+			</p>
+		</div>
+	</div>
+{/if}
 
 <div class="mt-auto grid grid-cols-2 gap-1">
 	<Button href="./exercises" variant="secondary">Previous</Button>
