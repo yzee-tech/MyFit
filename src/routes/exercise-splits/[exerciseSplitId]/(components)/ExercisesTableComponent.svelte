@@ -24,8 +24,9 @@
 			<div class="flex items-center gap-3">
 				<div class="mr-auto flex flex-col">
 					<span class="truncate text-lg font-semibold">{selectedSplitDay.name}</span>
-					<span class="font-sembold text-sm text-muted-foreground">
-						Day {parseInt(selectedDayIndex) + 1}
+					<span class="text-sm font-semibold text-muted-foreground">
+						{selectedSplitDay.exercises.length}
+						{selectedSplitDay.exercises.length === 1 ? 'exercise' : 'exercises'}
 					</span>
 				</div>
 			</div>

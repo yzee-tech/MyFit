@@ -257,12 +257,11 @@ test('extract exercise split from mesocycle', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Extract split' }).click();
 	await page.getByPlaceholder('Type here').fill('MyMeso exercise split');
 	await page.getByRole('button', { name: 'Yes, extract' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split created successfully' })).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible();
 	await page.getByRole('link', { name: 'Routine libraries' }).click();
 	await page.getByRole('link', { name: 'MyMeso exercise split 6 routines' }).click();
-	await page.getByRole('tab', { name: 'Exercises' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull A Day 1 Lat pulldowns Straight sets of 5 to 15 reps Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
+	await expect(page.getByRole('main')).toContainText(
+		'Pull A 4 exercises Lat pulldowns Straight sets of 5 to 15 reps Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
 	);
 });
 

@@ -196,7 +196,7 @@ export const exerciseSplits = t.router({
 
 	create: t.procedure.input(zodExerciseSplitInput).mutation(async ({ input, ctx }) => {
 		await createOrEditExerciseSplit(input, ctx.userId);
-		return { message: 'Exercise split created successfully' };
+		return { message: 'Routine library created' };
 	}),
 
 	/** The current block that saving this library can update, if any */
@@ -245,12 +245,12 @@ export const exerciseSplits = t.router({
 
 			await createOrEditExerciseSplit(input.splitData, ctx.userId, input.id, blockQueries);
 			return {
-				message: input.updateBlock ? 'Routine library and current block updated' : 'Exercise split edited successfully'
+				message: input.updateBlock ? 'Routine library and current block updated' : 'Routine library saved'
 			};
 		}),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
 		await prisma.exerciseSplit.delete({ where: { userId: ctx.userId, id: input } });
-		return { message: 'Exercise split deleted successfully' };
+		return { message: 'Routine library deleted' };
 	})
 });
