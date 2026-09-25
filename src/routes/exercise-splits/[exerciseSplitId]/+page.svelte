@@ -30,7 +30,6 @@
 
 	let { data } = $props();
 	let exerciseSplit: FullExerciseSplit | 'loading' = $state('loading');
-	let editExerciseSplitNoteDrawerOpen = $state(false);
 	let deleteConfirmDrawerOpen = $state(false);
 	let callingDeleteEndpoint = $state(false);
 
@@ -71,7 +70,7 @@
 	function loadExerciseSplit(mode: 'edit' | 'clone') {
 		if (exerciseSplit === 'loading') return;
 		if (mode === 'edit') {
-			editExerciseSplitNoteDrawerOpen = true;
+			editExerciseSplit();
 		} else if (mode === 'clone') {
 			exerciseSplitRunes.loadExerciseSplit(getExerciseSplitWithoutIds(exerciseSplit));
 			goto(`/exercise-splits/manage/structure`);
@@ -191,11 +190,3 @@
 		</Button>
 	</ResponsiveDialog>
 {/if}
-
-<ResponsiveDialog title="Note" bind:open={editExerciseSplitNoteDrawerOpen}>
-	{#snippet description()}
-		Editing a routine library won't change the routines of mesocycles already using it. To change those, use the
-		<b>Routines</b> tab in <b>View mesocycle</b>
-	{/snippet}
-	<Button onclick={editExerciseSplit}>Continue</Button>
-</ResponsiveDialog>

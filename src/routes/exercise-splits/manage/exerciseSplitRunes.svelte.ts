@@ -14,7 +14,10 @@ export type FullExerciseSplitWithoutIdsOrIndex = Omit<
 	})[];
 };
 
-type ExerciseSplitDayWithoutIds = Omit<Prisma.ExerciseSplitDayCreateWithoutExerciseSplitInput, 'dayIndex'>;
+type ExerciseSplitDayWithoutIds = Omit<Prisma.ExerciseSplitDayCreateWithoutExerciseSplitInput, 'dayIndex'> & {
+	/** The routine's name before this edit (unset for a new routine), to find it in the current block */
+	previousName?: string;
+};
 
 export function createExerciseSplitRunes() {
 	let splitName = $state('');
@@ -136,7 +139,8 @@ export function createExerciseSplitRunes() {
 		splitDays = routines.map((splitDay) => ({
 			name: splitDay.name,
 			isRestDay: false,
-			weightUnit: splitDay.weightUnit ?? 'KG'
+			weightUnit: splitDay.weightUnit ?? 'KG',
+			...(editingId && { previousName: splitDay.name })
 		}));
 		splitExercises = routines.map((splitDay) => splitDay.exercises);
 		selectedSplitDayIndex = 0;
