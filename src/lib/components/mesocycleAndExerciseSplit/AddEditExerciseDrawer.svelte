@@ -15,6 +15,9 @@
 	import { ChangeType, MuscleGroup, SetType } from '$lib/utils/prismaEnums';
 	import type { Mesocycle } from '@prisma/client';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
+	import type { WeightSetLike } from '$lib/utils/weightSets';
+	import { unitLabel } from '$lib/utils/weightUnits';
 	import { toast } from 'svelte-sonner';
 	import CheckIcon from 'virtual:icons/lucide/check';
 	import ChevronLeft from 'virtual:icons/lucide/chevron-left';
@@ -50,6 +53,16 @@
 	type FullExerciseTemplate = NonUndefined<PropsType['editingExercise']>;
 
 	let { ...props }: PropsType = $props();
+
+	// The weights a gym has; none means standard steps (2.5 kg / 5 lb)
+	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
+	const weightSetLabel = (weightSet: WeightSetLike) => `${weightSet.name} (${unitLabel(weightSet.unit)})`;
+	function weightSetOption(weightSetId: string | null | undefined) {
+		const weightSet = weightSets.find((set) => set.id === weightSetId);
+		return weightSet
+			? { value: weightSet.id, label: weightSetLabel(weightSet) }
+			: { value: '', label: 'Standard steps' };
+	}
 	let allGroupedExercises = $state(commonExercisePerMuscleGroup);
 
 	onMount(async () => {
@@ -479,6 +492,31 @@
 					type="number"
 					bind:value={currentExercise.repRangeEnd}
 				/>
+			</div>
+			<div class="col-span-2 flex w-full flex-col gap-1.5">
+				{#key currentExercise}
+					<Select.Root
+						name="exercise-weight-set"
+						onSelectedChange={(v) => (currentExercise.weightSetId = v?.value || null)}
+						selected={weightSetOption(currentExercise.weightSetId)}
+					>
+						<Select.Label class="p-0 text-sm font-medium leading-none">Weights available</Select.Label>
+						<Select.Trigger aria-label="Weights available">
+							<Select.Value placeholder="Standard steps" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item label="Standard steps" value="" />
+							{#each weightSets as weightSet (weightSet.id)}
+								<Select.Item label={weightSetLabel(weightSet)} value={weightSet.id} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				{/key}
+				{#if weightSets.length === 0}
+					<span class="text-xs text-muted-foreground">
+						To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set in Settings.
+					</span>
+				{/if}
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">
 				<Label for="exercise-note">Note</Label>

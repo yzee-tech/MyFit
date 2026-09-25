@@ -28,6 +28,20 @@ model User {
   workouts       Workout[]
   migratedFromV2 Boolean?
   settings       UserSettings?
+  weightSets     WeightSet[]
+}
+
+/// Weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20
+model WeightSet {
+  id      String     @id @default(cuid()) /// @zod.string.cuid2()
+  name    String
+  unit    WeightUnit
+  /// In `unit`, sorted ascending
+  weights Float[]
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+
+  @@index([userId])
 }
 
 model Account {

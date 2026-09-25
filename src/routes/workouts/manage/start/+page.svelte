@@ -21,6 +21,8 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
+	import type { WeightSetLike } from '$lib/utils/weightSets';
+	import * as Select from '$lib/components/ui/select';
 
 	type TodaysWorkoutData = RouterOutputs['workouts']['getTodaysWorkoutData'];
 	type RoutineOption = NonNullable<TodaysWorkoutData['activeBlock']>['routines'][number];
@@ -62,8 +64,12 @@
 		typeof kg === 'number' ? roundWeight(fromKg(kg, homeWeightUnit)) : null;
 	let userBodyweight: null | number = $state(toHomeUnit(workoutRunes.workoutData?.userBodyweight));
 	let userBodyweightKg = $derived(typeof userBodyweight === 'number' ? toKg(userBodyweight, homeWeightUnit) : null);
-	// For routines set to "ask each time"
+	// For routines set to "ask each time": this gym's unit, and the weights it has
 	let sessionWeightUnit: WeightUnit = $state(homeWeightUnit);
+	let sessionWeightSetId: string | null = $state(null);
+	const weightSets: WeightSetLike[] = $page.data.weightSets ?? [];
+	let sessionWeightSetOptions = $derived(weightSets.filter((weightSet) => weightSet.unit === sessionWeightUnit));
+	let sessionWeightSet = $derived(sessionWeightSetOptions.find((weightSet) => weightSet.id === sessionWeightSetId));
 	let overwriteWorkoutDialogOpen = $state(false);
 	let finishingBlock = $state(false);
 	let takeItEasy = $state(true);
@@ -126,6 +132,7 @@
 		newWorkoutData.userBodyweight = userBodyweightKg;
 		const askForUnit = useActiveMesocycle && selectedRoutine?.weightUnit === 'ASK';
 		newWorkoutData.sessionWeightUnit = askForUnit || !useActiveMesocycle ? sessionWeightUnit : undefined;
+		newWorkoutData.sessionWeightSetId = askForUnit || !useActiveMesocycle ? sessionWeightSet?.id : undefined;
 
 		if (mode === 'overwrite') {
 			workoutRunes.workoutData = newWorkoutData;
@@ -142,6 +149,9 @@
 		if (workoutOfMesocycle && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
 		if (workoutOfMesocycle && workoutRunes.workoutData.sessionWeightUnit) {
 			exercisesLink += `&sessionUnit=${workoutRunes.workoutData.sessionWeightUnit}`;
+		}
+		if (workoutOfMesocycle && workoutRunes.workoutData.sessionWeightSetId) {
+			exercisesLink += `&sessionWeightSetId=${workoutRunes.workoutData.sessionWeightSetId}`;
 		}
 		goto(exercisesLink);
 	}
@@ -321,6 +331,29 @@
 					<ToggleGroup.Item aria-label="Pounds" value="LB">lb</ToggleGroup.Item>
 				</ToggleGroup.Root>
 			</div>
+			{#if sessionWeightSetOptions.length > 0}
+				<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+					<span class="text-sm font-medium">Weights here</span>
+					{#key sessionWeightUnit}
+						<Select.Root
+							onSelectedChange={(v) => (sessionWeightSetId = v?.value || null)}
+							selected={sessionWeightSet
+								? { value: sessionWeightSet.id, label: sessionWeightSet.name }
+								: { value: '', label: 'Standard steps' }}
+						>
+							<Select.Trigger aria-label="Weights here" class="w-48">
+								<Select.Value placeholder="Standard steps" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item label="Standard steps" value="" />
+								{#each sessionWeightSetOptions as weightSet (weightSet.id)}
+									<Select.Item label={weightSet.name} value={weightSet.id} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/key}
+				</div>
+			{/if}
 		{/if}
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>

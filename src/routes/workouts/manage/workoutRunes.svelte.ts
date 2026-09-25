@@ -1,3 +1,6 @@
+import { page } from '$app/stores';
+import { get } from 'svelte/store';
+import type { WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
@@ -55,9 +58,17 @@ function createWorkoutRunes() {
 	function addExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
 		if (workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name)) return false;
-		// New exercises start in the unit picked for this workout (or the home unit)
-		const weightUnit = workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
-		workoutExercises.push({ ...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise), weightUnit });
+		// New exercises use their own weight set, else the gym's picked for this workout; and start in
+		// that weight set's unit, else the unit picked for this workout (or the home unit)
+		const weightSetId = exercise.weightSetId ?? workoutData?.sessionWeightSetId ?? null;
+		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
+		const weightSetUnit = weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit;
+		const weightUnit = weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
+		workoutExercises.push({
+			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise),
+			weightUnit,
+			weightSetId
+		});
 		saveStoresToLocalStorage();
 		return true;
 	}

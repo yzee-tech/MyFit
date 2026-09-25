@@ -15,13 +15,15 @@ export const load = async (event) => {
 	if (isNaN(splitDayIndex) || splitDayIndex < 0) error(400, 'Invalid split day index');
 
 	const sessionUnit = event.url.searchParams.get('sessionUnit');
+	const sessionWeightSetId = event.url.searchParams.get('sessionWeightSetId') ?? undefined;
 
 	const trpc = createCaller(await createContext(event));
 	const serverData = trpc.workouts.getWorkoutExercisesWithPreviousData({
 		userBodyweight,
 		splitDayIndex,
 		welcomeBack: event.url.searchParams.has('welcomeBack'),
-		sessionUnit: sessionUnit === 'KG' || sessionUnit === 'LB' ? sessionUnit : undefined
+		sessionUnit: sessionUnit === 'KG' || sessionUnit === 'LB' ? sessionUnit : undefined,
+		sessionWeightSetId
 	});
 	return { serverData };
 };

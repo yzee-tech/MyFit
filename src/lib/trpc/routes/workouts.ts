@@ -48,6 +48,8 @@ type TodaysWorkoutData = {
 	homeWeightUnit: WeightUnitType;
 	/** Unit picked at the start of this workout, for routines set to "ask each time" */
 	sessionWeightUnit?: WeightUnitType;
+	/** Weights this gym has, picked at the start of a workout for routines set to "ask each time" */
+	sessionWeightSetId?: string;
 };
 
 export type RoutineOption = {
@@ -356,7 +358,9 @@ export const workouts = t.router({
 				splitDayIndex: z.number().int(),
 				welcomeBack: z.boolean().optional(),
 				/** Unit chosen at the start of the workout, for routines set to "ask each time" */
-				sessionUnit: z.enum(['KG', 'LB']).optional()
+				sessionUnit: z.enum(['KG', 'LB']).optional(),
+				/** Weights this gym has, for routines set to "ask each time" */
+				sessionWeightSetId: z.string().cuid2().optional()
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -378,15 +382,33 @@ export const workouts = t.router({
 			if (!data || !todaysSplitDay || todaysSplitDay.isRestDay) return workoutExercisesWithPreviousData;
 
 			const exerciseNames = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => exercise.name);
-			const [exerciseHistory, userSettings] = await Promise.all([
+			const [exerciseHistory, userSettings, weightSets] = await Promise.all([
 				getExerciseHistory(ctx.userId, exerciseNames),
-				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } })
+				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } }),
+				prisma.weightSet.findMany({
+					where: { userId: ctx.userId },
+					select: { id: true, name: true, unit: true, weights: true }
+				})
 			]);
+			const weightSetById = new Map(weightSets.map((weightSet) => [weightSet.id, weightSet]));
+			const askEachTime = todaysSplitDay.weightUnit === 'ASK';
 
-			// Each exercise's unit: its own choice, else the routine's, else the one picked for this workout
+			// Each exercise's unit: its own choice, else its weight set's (in a routine for one gym), else
+			// the routine's, else the one picked for this workout
 			const sessionUnit = input.sessionUnit ?? userSettings?.homeWeightUnit ?? 'KG';
+			const sessionWeightSet = input.sessionWeightSetId ? weightSetById.get(input.sessionWeightSetId) : undefined;
 			todaysSplitDay.mesocycleSplitDayExercises.forEach((exercise) => {
-				exercise.weightUnit = resolveExerciseUnit(exercise.weightUnit, todaysSplitDay.weightUnit, sessionUnit);
+				const ownWeightSet = exercise.weightSetId ? weightSetById.get(exercise.weightSetId) : undefined;
+				exercise.weightUnit = resolveExerciseUnit(
+					exercise.weightUnit,
+					todaysSplitDay.weightUnit,
+					sessionUnit,
+					ownWeightSet?.unit
+				);
+				// At a gym picked for this workout, its weights apply unless the exercise has its own in this unit
+				if (askEachTime && sessionWeightSet && ownWeightSet?.unit !== exercise.weightUnit) {
+					exercise.weightSetId = sessionWeightSet.id;
+				}
 			});
 			const unitByExerciseName = new Map(
 				todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => [exercise.name, exercise.weightUnit ?? 'KG'])
@@ -404,7 +426,8 @@ export const workouts = t.router({
 				input.userBodyweight,
 				splitDayIndex,
 				exerciseHistory,
-				mode
+				mode,
+				weightSets
 			).map((exercise) => convertExerciseLoads(exercise, 'toDisplay'));
 
 			// "Previous" for comparisons: the last time each of today's exercises was done
@@ -490,7 +513,16 @@ export const workouts = t.router({
 		// Update the routine's exercises in the block according to this workout
 		const mesocycleData = await prisma.mesocycle.findFirst({
 			where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
-			select: { mesocycleExerciseSplitDays: { select: { id: true, dayIndex: true, weightUnit: true } } }
+			select: {
+				mesocycleExerciseSplitDays: {
+					select: {
+						id: true,
+						dayIndex: true,
+						weightUnit: true,
+						mesocycleSplitDayExercises: { select: { name: true, weightSetId: true } }
+					}
+				}
+			}
 		});
 		const todaysSplitDay = mesocycleData?.mesocycleExerciseSplitDays.find(
 			(splitDay) => splitDay.dayIndex === workoutOfMesocycle.splitDayIndex
@@ -500,6 +532,10 @@ export const workouts = t.router({
 		}
 
 		if (workoutOfMesocycle.workoutStatus === null) {
+			// Routines used at many gyms keep their own weight set links, not the gym picked for this workout
+			const routineWeightSetIds = new Map(
+				todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => [exercise.name, exercise.weightSetId])
+			);
 			transactionQueries.push(
 				prisma.mesocycleExerciseTemplate.deleteMany({
 					where: { mesocycleExerciseSplitDayId: todaysSplitDay.id }
@@ -511,9 +547,12 @@ export const workouts = t.router({
 						// used at many gyms, where the unit is picked again each workout
 						const rememberedUnit =
 							todaysSplitDay.weightUnit !== 'ASK' && weightUnit !== todaysSplitDay.weightUnit ? weightUnit : null;
+						const weightSetId =
+							todaysSplitDay.weightUnit === 'ASK' ? (routineWeightSetIds.get(ex.name) ?? null) : ex.weightSetId;
 						return {
 							...exercise,
 							weightUnit: rememberedUnit,
+							weightSetId,
 							mesocycleExerciseSplitDayId: todaysSplitDay.id,
 							sets: input.workoutExercisesSets[exerciseIdx].length
 						};

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
 	import { formatWeight, fromKg } from '$lib/utils/weightUnits';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -92,7 +94,11 @@
 	function getNextLoad(setIdx: number) {
 		if (!['Down'].includes(exercise.setType)) return;
 		if (typeof exercise.sets[0].load !== 'number') return;
-		return floorToNearestMultiple(calculateNextLoad(setIdx), exercise.minimumWeightChange ?? 5).toString();
+		// Down to the weight the gym has, else the weight step
+		const nextLoad = calculateNextLoad(setIdx);
+		const weights = availableWeightsFor(exercise, $page.data.weightSets ?? []);
+		if (weights) return (weightsAround(weights, nextLoad).below ?? weights[0]).toString();
+		return floorToNearestMultiple(nextLoad, exercise.minimumWeightChange ?? 5).toString();
 	}
 
 	function getRemainingMyorepMatchReps(setIdx: number) {

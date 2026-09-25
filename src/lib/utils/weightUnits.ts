@@ -45,14 +45,16 @@ export function formatWeight(kg: number, unit: WeightUnit): string {
 }
 
 /**
- * The unit an exercise is shown in: its own override, else its routine's unit, else (for
- * routines used at many gyms) the unit chosen for this workout
+ * The unit an exercise is shown in: its own override; else, for routines used at many gyms, the
+ * unit chosen for this workout; else its weight set's unit, else its routine's unit
  */
 export function resolveExerciseUnit(
 	exerciseUnit: WeightUnit | null | undefined,
 	routineUnit: RoutineWeightUnit,
-	sessionUnit: WeightUnit
+	sessionUnit: WeightUnit,
+	weightSetUnit?: WeightUnit
 ): WeightUnit {
 	if (exerciseUnit) return exerciseUnit;
-	return routineUnit === 'ASK' ? sessionUnit : routineUnit;
+	if (routineUnit === 'ASK') return sessionUnit;
+	return weightSetUnit ?? routineUnit;
 }

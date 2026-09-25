@@ -10,6 +10,7 @@ import {
 	weeklyRIRFromWeeksPerRIR,
 	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate,
 	switchExerciseUnit,
+	getNextWeightHint,
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
@@ -22,6 +23,14 @@ import {
 	snapToStep,
 	toKg
 } from '../../src/lib/utils/weightUnits';
+import {
+	availableWeightsFor,
+	expandRange,
+	formatWeightList,
+	nextWeightUp,
+	normalizeWeights,
+	type WeightSetLike
+} from '../../src/lib/utils/weightSets';
 import { test, expect } from '../fixtures';
 import { testMesocycle } from './data';
 
@@ -258,4 +267,109 @@ test('switching an exercise to lb mid-workout: done sets keep their weight, the 
 	expect(inLb.sets[0].reps).toEqual(12);
 	expect(inLb.sets[1].load).toEqual(90); // next real lb weight
 	expect(inLb.sets[1].reps!).toBeLessThanOrEqual(12); // a touch heavier, so not more reps
+});
+
+// Weight sets: the building gym's dumbbells go 5–10 kg by 1, then 14 and 20
+const buildingDumbbells: WeightSetLike = {
+	id: 'building-db',
+	name: 'Building – Dumbbells',
+	unit: 'KG',
+	weights: [5, 6, 7, 8, 9, 10, 14, 20]
+};
+
+/** The test block with Barbell rows at 8–12 reps using a weight set, no set to failure */
+function blockWithWeightSet(weightSetId: string | null = buildingDumbbells.id) {
+	const block = structuredClone(testMesocycle);
+	block.lastSetToFailure = false;
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	Object.assign(rows, { repRangeStart: 8, repRangeEnd: 12, weightSetId });
+	return block;
+}
+
+function rowsSuggestion(lastTime: TestSet[], weightSets: WeightSetLike[]) {
+	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
+	const output = progressiveOverloadMagic(blockWithWeightSet(), 1, 100, 0, history, 'normal', weightSets);
+	return output.find((exercise) => exercise.name === 'Barbell rows')!;
+}
+
+const sets = (load: number, ...reps: number[]) => reps.map((r) => ({ reps: r, load, RIR: 3 }));
+
+test('weight sets: building, formatting and which weights an exercise can use', () => {
+	expect(expandRange(5, 10, 1)).toEqual([5, 6, 7, 8, 9, 10]);
+	expect(expandRange(2.5, 10, 2.5)).toEqual([2.5, 5, 7.5, 10]);
+	expect(expandRange(10, 5, 1)).toEqual([]);
+	expect(normalizeWeights([14, 5, 5, 20, 0, 6.001])).toEqual([5, 6, 14, 20]);
+	expect(formatWeightList(buildingDumbbells.weights)).toEqual('5–10 by 1, 14, 20');
+	expect(nextWeightUp(buildingDumbbells.weights, 10)).toEqual(14);
+	expect(nextWeightUp(buildingDumbbells.weights, 20)).toBeNull();
+
+	const weightSets = [buildingDumbbells];
+	expect(availableWeightsFor({ weightSetId: 'building-db', weightUnit: 'KG' }, weightSets)).toEqual(
+		buildingDumbbells.weights
+	);
+	// Only in the set's own unit, and only if it exists
+	expect(availableWeightsFor({ weightSetId: 'building-db', weightUnit: 'LB' }, weightSets)).toBeNull();
+	expect(availableWeightsFor({ weightSetId: 'gone', weightUnit: 'KG' }, weightSets)).toBeNull();
+	expect(availableWeightsFor({ weightSetId: null, weightUnit: 'KG' }, weightSets)).toBeNull();
+	// A kg routine's exercise takes its weight set's unit; "ask each time" uses the gym's
+	expect(resolveExerciseUnit(null, 'KG', 'KG', 'LB')).toEqual('LB');
+	expect(resolveExerciseUnit(null, 'ASK', 'KG', 'LB')).toEqual('KG');
+	expect(resolveExerciseUnit('KG', 'LB', 'LB', 'LB')).toEqual('KG');
+});
+
+test('weight sets: a big jump means staying at the weight and adding reps, with a next-weight note', () => {
+	// 10 kg × 12, 12, 11: 14 kg would only be about 6 reps, under the 8-rep minimum
+	const rows = rowsSuggestion(sets(10, 12, 12, 11), [buildingDumbbells]);
+	rows.sets.forEach((set) => expect(set.load).toEqual(10));
+	expect(rows.sets.map((set) => set.reps)).toEqual([13, 13, 12]); // past the top of the range is fine
+
+	const hint = getNextWeightHint(rows, buildingDumbbells.weights, 100);
+	expect(hint).toEqual({ currentWeight: 10, nextWeight: 14, moreReps: 8 });
+	// No note while still inside the rep range, or without a weight set
+	expect(
+		getNextWeightHint(rowsSuggestion(sets(10, 9, 9, 9), [buildingDumbbells]), buildingDumbbells.weights, 100)
+	).toBeNull();
+	expect(getNextWeightHint(rows, null, 100)).toBeNull();
+});
+
+test('weight sets: moves up to the next weight once it keeps the reps in range', () => {
+	// 10 kg × 21 is about the same effort as 14 kg × 8
+	const rows = rowsSuggestion(sets(10, 21, 21, 21), [buildingDumbbells]);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(14);
+		expect(set.reps!).toBeGreaterThanOrEqual(8);
+	});
+	expect(getNextWeightHint(rows, buildingDumbbells.weights, 100)).toBeNull();
+});
+
+test('weight sets: a weight the gym lacks becomes one it has, with reps adjusted', () => {
+	// Last time 14 kg somewhere else; this hotel only has 12 and 16 kg
+	const hotel: WeightSetLike = { ...buildingDumbbells, weights: [12, 16] };
+	const rows = rowsSuggestion(sets(14, 8, 8, 8), [hotel]);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(12);
+		expect(set.reps!).toBeGreaterThan(8); // lighter, so more reps for the same effort
+	});
+
+	// Between two weights, the one that keeps the reps in the 8–12 range wins over the nearest:
+	// 9.4 kg is nearest 9 kg, but that would be too many reps; 10 kg keeps them in range
+	const tenOrNine = rowsSuggestion(sets(9.4, 11, 11, 11), [{ ...buildingDumbbells, weights: [9, 10] }]);
+	tenOrNine.sets.forEach((set) => {
+		expect(set.load).toEqual(10);
+		expect(set.reps!).toBeGreaterThanOrEqual(8);
+		expect(set.reps!).toBeLessThanOrEqual(12);
+	});
+});
+
+test('weight sets: switching units uses the weight set in the new unit', () => {
+	const exercise = blockWithWeightSet('club-db').mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find(
+		(ex) => ex.name === 'Barbell rows'
+	)!;
+	const clubDumbbells: WeightSetLike = { id: 'club-db', name: 'Club', unit: 'LB', weights: [80, 95, 110] };
+	const inProgress = createWorkoutExerciseInProgressFromMesocycleExerciseTemplate({ ...exercise, sets: 1 });
+	inProgress.sets[0] = { ...inProgress.sets[0], reps: 10, load: 40, RIR: 2, completed: false };
+
+	// 40 kg = 88.2 lb: not on 5 lb steps here, but one of the club's weights
+	const inLb = switchExerciseUnit(inProgress, 'LB', 100, [clubDumbbells]);
+	expect([80, 95]).toContain(inLb.sets[0].load);
 });

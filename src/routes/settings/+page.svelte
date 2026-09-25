@@ -15,6 +15,7 @@
 	import MotivationalQuotes from '$lib/components/settings/MotivationalQuotes.svelte';
 	import WelcomeBack from '$lib/components/settings/WelcomeBack.svelte';
 	import HomeUnit from '$lib/components/settings/HomeUnit.svelte';
+	import WeightSets from '$lib/components/settings/WeightSets.svelte';
 
 	let hasError = $state(false);
 	let quotesEnabled = $state(false);
@@ -162,6 +163,7 @@
 		</Card.Root>
 	{:else}
 		<HomeUnit homeWeightUnit={$page.data.homeWeightUnit} />
+		<WeightSets homeWeightUnit={$page.data.homeWeightUnit} weightSets={$page.data.weightSets} />
 		<WelcomeBack
 			welcomeBackEnabled={$page.data.userSettings.welcomeBackEnabled}
 			welcomeBackAfterDays={$page.data.userSettings.welcomeBackAfterDays}

@@ -4,6 +4,7 @@ import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Prisma } from '@prisma/client';
 import { defaultWeightStep, fromKg, roundWeight, snapToStep, toKg } from './weightUnits';
+import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
 
 export function getSetVolume(set: SetDetails, userBodyweight: number, bodyweightFraction: number | null) {
 	const setVolume = (set.reps + set.RIR) * set.load + (bodyweightFraction ?? 0) * userBodyweight;
@@ -352,7 +353,7 @@ function adjustIdealPerformance(actualPerformances: number[], idealPerformance: 
 	return adjustedIdealPerformance;
 }
 
-function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number) {
+function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
 	let loadIncreasedForOneOfSameLoadSets = false;
 
@@ -367,9 +368,15 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 
 		// TODO: #107
 		if (set.reps > repRangeEnd || loadIncreasedForOneOfSameLoadSets) {
-			// The weight step is in the exercise's unit (e.g. 5 lb); loads here are in kg
+			// Weights and steps are in the exercise's unit (e.g. 5 lb); loads here are in kg
 			const unit = ex.weightUnit ?? 'KG';
-			newLoad += toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
+			if (weights) {
+				// The next weight the gym has; at the top of the set, stay and keep adding reps
+				const nextWeight = nextWeightUp(weights, roundWeight(fromKg(set.load, unit)));
+				if (nextWeight !== null) newLoad = toKg(nextWeight, unit);
+			} else {
+				newLoad += toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
+			}
 		}
 		if (sameLoadSetType && newLoad > set.load) {
 			loadIncreasedForOneOfSameLoadSets = true;
@@ -407,6 +414,70 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 	});
 }
 
+/** Reps at a new load (kg) for the same effort as a set, e.g. 10 kg × 12 → 14 kg × 6 */
+function repsAtLoad(
+	ex: Pick<WorkoutExerciseInProgress, 'bodyweightFraction'>,
+	set: { reps: number; load: number; RIR: number },
+	newLoad: number,
+	userBodyweight: number
+) {
+	return solveBergerFormula({
+		variableToSolve: 'NewReps',
+		knownValues: {
+			oldSet: { reps: set.reps, load: set.load, RIR: set.RIR, miniSets: [] },
+			newSet: { load: newLoad, RIR: set.RIR, miniSets: [] },
+			bodyweightFraction: ex.bodyweightFraction ?? null,
+			newUserBodyweight: userBodyweight,
+			oldUserBodyweight: userBodyweight,
+			overloadPercentage: 0
+		}
+	});
+}
+
+function repRangeOfSet(ex: WorkoutExerciseInProgress, setIdx: number) {
+	const isTopSet = ex.setType === 'TopBackoff' && setIdx === 0;
+	return {
+		start: isTopSet && typeof ex.topRepRangeStart === 'number' ? ex.topRepRangeStart : ex.repRangeStart,
+		end: isTopSet && typeof ex.topRepRangeEnd === 'number' ? ex.topRepRangeEnd : ex.repRangeEnd
+	};
+}
+
+type SuggestedSet = WorkoutExerciseInProgress['sets'][number];
+
+/** Moves a set to a new load (kg), recalculating reps so the effort stays the same */
+function moveSetToLoad(
+	ex: WorkoutExerciseInProgress,
+	set: SuggestedSet,
+	newLoad: number,
+	userBodyweight: number,
+	snapMiniSetLoad: (kg: number) => number
+): SuggestedSet {
+	const miniSets = set.miniSets.map((miniSet) =>
+		miniSet.load === undefined ? miniSet : { ...miniSet, load: snapMiniSetLoad(miniSet.load) }
+	);
+	if (
+		set.load === undefined ||
+		set.reps === undefined ||
+		set.RIR === undefined ||
+		Math.abs(newLoad - set.load) < 1e-9
+	) {
+		return { ...set, load: newLoad, miniSets };
+	}
+	const cleanedMiniSets = cleanupInProgressMiniSets(set.miniSets);
+	const newReps = solveBergerFormula({
+		variableToSolve: 'NewReps',
+		knownValues: {
+			oldSet: { reps: set.reps, load: set.load, RIR: set.RIR, miniSets: cleanedMiniSets },
+			newSet: { load: newLoad, RIR: set.RIR, miniSets: cleanedMiniSets },
+			bodyweightFraction: ex.bodyweightFraction ?? null,
+			newUserBodyweight: userBodyweight,
+			oldUserBodyweight: userBodyweight,
+			overloadPercentage: 0
+		}
+	});
+	return { ...set, load: newLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
+}
+
 /**
  * Moves each suggested load (in kg) to the nearest weight on the exercise unit's steps, and
  * recalculates reps so the effort stays the same. Used when the last performance was in the
@@ -416,48 +487,117 @@ export function snapSetsToUnitSteps(ex: WorkoutExerciseInProgress, userBodyweigh
 	const unit = ex.weightUnit ?? 'KG';
 	const step = ex.minimumWeightChange ?? defaultWeightStep(unit);
 	const snapKg = (kg: number) => toKg(snapToStep(fromKg(kg, unit), step), unit);
+	ex.sets = ex.sets.map((set) =>
+		set.load === undefined ? set : moveSetToLoad(ex, set, snapKg(set.load), userBodyweight, snapKg)
+	);
+}
 
-	ex.sets = ex.sets.map((set) => {
-		if (set.load === undefined) return set;
-		const snappedLoad = snapKg(set.load);
-		const miniSets = set.miniSets.map((miniSet) =>
-			miniSet.load === undefined ? miniSet : { ...miniSet, load: snapKg(miniSet.load) }
-		);
-		if (set.reps === undefined || set.RIR === undefined || Math.abs(snappedLoad - set.load) < 1e-9) {
-			return { ...set, load: snappedLoad, miniSets };
+/**
+ * Moves each suggested load (in kg) to a weight the gym has (`weights`, in the exercise's unit),
+ * recalculating reps. Picks the nearest weight, unless only the other neighbour keeps the reps
+ * in the rep range, e.g. 14 kg × 8 with only 12 and 16 kg → 12 kg × 11.
+ */
+export function snapSetsToAvailableWeights(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[]) {
+	const unit = ex.weightUnit ?? 'KG';
+	const nearestKg = (kg: number) => {
+		const value = fromKg(kg, unit);
+		const { below, above } = weightsAround(weights, value);
+		if (below === null || above === null) return toKg((below ?? above)!, unit);
+		return toKg(value - below <= above - value ? below : above, unit);
+	};
+
+	function pickLoad(set: SuggestedSet, setIdx: number): number {
+		const load = set.load!;
+		const value = fromKg(load, unit);
+		const { below, above } = weightsAround(weights, value);
+		if (below === null || above === null || below === above) return nearestKg(load);
+		const candidates = value - below <= above - value ? [below, above] : [above, below];
+		if (set.reps === undefined || set.RIR === undefined) return toKg(candidates[0], unit);
+		const { start, end } = repRangeOfSet(ex, setIdx);
+		const oldSet = { reps: set.reps, load, RIR: set.RIR };
+		const inRange = (weight: number) => {
+			const reps = Math.round(repsAtLoad(ex, oldSet, toKg(weight, unit), userBodyweight));
+			return reps >= start && reps <= end;
+		};
+		const pick = candidates.find(inRange) ?? candidates[0];
+		return toKg(pick, unit);
+	}
+
+	// Sets meant to share a load keep sharing it
+	const sameLoadSetType = ['Straight', 'Myorep', 'MyorepMatch'].includes(ex.setType);
+	const pickedLoads = new Map<number, number>();
+	ex.sets = ex.sets.map((set, setIdx) => {
+		// Bodyweight only (no added load) stays as is
+		if (set.load === undefined || set.load <= 0) return set;
+		let newLoad = sameLoadSetType ? pickedLoads.get(set.load) : undefined;
+		if (newLoad === undefined) {
+			newLoad = pickLoad(set, setIdx);
+			if (sameLoadSetType) pickedLoads.set(set.load, newLoad);
 		}
-		const cleanedMiniSets = cleanupInProgressMiniSets(set.miniSets);
-		const newReps = solveBergerFormula({
-			variableToSolve: 'NewReps',
-			knownValues: {
-				oldSet: { reps: set.reps, load: set.load, RIR: set.RIR, miniSets: cleanedMiniSets },
-				newSet: { load: snappedLoad, RIR: set.RIR, miniSets: cleanedMiniSets },
-				bodyweightFraction: ex.bodyweightFraction ?? null,
-				newUserBodyweight: userBodyweight,
-				oldUserBodyweight: userBodyweight,
-				overloadPercentage: 0
-			}
-		});
-		return { ...set, load: snappedLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
+		return moveSetToLoad(ex, set, newLoad, userBodyweight, nearestKg);
 	});
+}
+
+/**
+ * When the next weight is too big a jump to reach the rep range yet, e.g. 10 kg × 12 with
+ * 14 kg next (about 6 reps): the next weight, and about how many more reps to do first at the
+ * current weight. Loads are in the exercise's unit, as shown in a workout.
+ */
+export function getNextWeightHint(
+	ex: WorkoutExerciseInProgress,
+	weights: number[] | null,
+	userBodyweightKg: number | null | undefined
+): { currentWeight: number; nextWeight: number; moreReps: number } | null {
+	if (!weights) return null;
+	const setIdx = ex.sets.findIndex(
+		(set) => set.reps !== undefined && set.RIR !== undefined && set.load !== undefined && set.load > 0
+	);
+	if (setIdx === -1) return null;
+	const set = ex.sets[setIdx] as { reps: number; load: number; RIR: number };
+	const { start, end } = repRangeOfSet(ex, setIdx);
+	if (set.reps < end) return null;
+
+	const nextWeight = nextWeightUp(weights, set.load);
+	if (nextWeight === null) return null;
+
+	const unit = ex.weightUnit ?? 'KG';
+	const bodyweight = userBodyweightKg ?? 0;
+	const current = { ...set, load: toKg(set.load, unit) };
+	const repsAtNextWeight = Math.round(repsAtLoad(ex, current, toKg(nextWeight, unit), bodyweight));
+	if (repsAtNextWeight >= start) return null;
+
+	// Reps at the current weight that match the bottom of the rep range at the next weight
+	const readyReps = repsAtLoad(
+		ex,
+		{ reps: start, load: toKg(nextWeight, unit), RIR: set.RIR },
+		current.load,
+		bodyweight
+	);
+	const moreReps = Math.max(1, Math.ceil(readyReps - 1e-9) - set.reps);
+	return { currentWeight: set.load, nextWeight, moreReps };
 }
 
 type SetWithLoads = { load?: number; miniSets: { load?: number }[] };
 
 /**
  * Switches an in-progress exercise to the other unit. Loads are in the exercise's unit.
- * Sets already done keep the exact weight lifted; sets still to do move to the new unit's
- * steps (default steps, since a custom step belongs to the old unit) with reps adjusted.
+ * Sets already done keep the exact weight lifted; sets still to do move to the exercise's
+ * weight set in the new unit, or else the new unit's standard steps (a custom step belongs to
+ * the old unit), with reps adjusted.
  */
 export function switchExerciseUnit(
 	ex: WorkoutExerciseInProgress,
 	to: 'KG' | 'LB',
-	userBodyweightKg: number
+	userBodyweightKg: number,
+	weightSets: WeightSetLike[] = []
 ): WorkoutExerciseInProgress {
 	if ((ex.weightUnit ?? 'KG') === to) return ex;
 	const inKg = convertExerciseLoads(ex, 'toKg');
 	const snapped: WorkoutExerciseInProgress = structuredClone({ ...inKg, weightUnit: to, minimumWeightChange: null });
-	snapSetsToUnitSteps(snapped, userBodyweightKg);
+	// The exercise's weight set, if it's in the new unit; otherwise the new unit's standard steps
+	const weights = availableWeightsFor(snapped, weightSets);
+	if (weights) snapSetsToAvailableWeights(snapped, userBodyweightKg, weights);
+	else snapSetsToUnitSteps(snapped, userBodyweightKg);
 	const merged = {
 		...inKg,
 		weightUnit: to,
@@ -505,7 +645,8 @@ export function progressiveOverloadMagic(
 	userBodyweight: number,
 	splitDayIndex: number,
 	exerciseHistory: ExerciseHistory = {},
-	mode: ProgressionMode = 'normal'
+	mode: ProgressionMode = 'normal',
+	weightSets: WeightSetLike[] = []
 ) {
 	const { mesocycleExerciseSplitDays, ...mesocycle } = mesocycleWithProgressionData;
 
@@ -528,13 +669,19 @@ export function progressiveOverloadMagic(
 
 		const routineSetCount = ex.sets.length;
 
+		// Only weights this gym has (from the exercise's weight set), else steps of the exercise's unit
+		const weights = availableWeightsFor(ex, weightSets);
 		const unitChanged = (lastPerformance.exercise.weightUnit ?? 'KG') !== (ex.weightUnit ?? 'KG');
+		const snapToRealWeights = () => {
+			if (weights) snapSetsToAvailableWeights(ex, userBodyweight, weights);
+			else if (unitChanged) snapSetsToUnitSteps(ex, userBodyweight);
+		};
 
 		// Easy sessions repeat the last numbers instead of trying to beat them
 		if (easySession) {
 			ex.sets = lastPerformance.exercise.sets.map((oldSet) => addExtraSetProperties(oldSet));
 			fitSetsToRoutine(ex, routineSetCount);
-			if (unitChanged) snapSetsToUnitSteps(ex, userBodyweight);
+			snapToRealWeights();
 			return;
 		}
 
@@ -585,8 +732,8 @@ export function progressiveOverloadMagic(
 		}
 
 		fitSetsToRoutine(ex, routineSetCount);
-		ex.sets = increaseLoadOfSets(ex, userBodyweight);
-		if (unitChanged) snapSetsToUnitSteps(ex, userBodyweight);
+		ex.sets = increaseLoadOfSets(ex, userBodyweight, weights);
+		snapToRealWeights();
 	});
 
 	// Deload: half the sets

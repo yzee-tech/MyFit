@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { defaultWeightStep, snapToStep } from '$lib/utils/weightUnits';
+	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
+	import { page } from '$app/stores';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -46,8 +48,19 @@
 		oneRepMaxCalculatorOpen = false;
 	}
 
-	// Round warm-up weights to the exercise unit's usual step (2.5 kg / 5 lb)
+	// Round warm-up weights to the nearest weight the gym has, else the unit's usual step (2.5 kg / 5 lb)
 	let warmUpStep = $derived(defaultWeightStep(workoutRunes.exerciseWarmUpDialogExercise?.weightUnit ?? 'KG'));
+	let warmUpWeights = $derived(
+		workoutRunes.exerciseWarmUpDialogExercise
+			? availableWeightsFor(workoutRunes.exerciseWarmUpDialogExercise, $page.data.weightSets ?? [])
+			: null
+	);
+	function roundWarmUpWeight(value: number) {
+		if (!warmUpWeights) return snapToStep(value, warmUpStep);
+		const { below, above } = weightsAround(warmUpWeights, value);
+		if (below === null || above === null) return (below ?? above)!;
+		return value - below <= above - value ? below : above;
+	}
 
 	function generateWarmUp(e: SubmitEvent) {
 		e.preventDefault();
@@ -57,7 +70,7 @@
 		for (let i = 0; i < totalWarmUpSets; i++) {
 			warmUpSets.push({
 				reps: Math.round(10 - (7 / (totalWarmUpSets - 1)) * i),
-				load: snapToStep(oneRepMax * (0.4 + (0.4 / (totalWarmUpSets - 1)) * i), warmUpStep),
+				load: roundWarmUpWeight(oneRepMax * (0.4 + (0.4 / (totalWarmUpSets - 1)) * i)),
 				oneRMPercentage: 40 + (40 / (totalWarmUpSets - 1)) * i
 			});
 		}
