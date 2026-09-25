@@ -8,7 +8,7 @@ export async function createTemplateExerciseSplit(page: Page) {
 	await page.waitForURL('/exercise-splits/manage/exercises');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split created successfully' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible({
 		timeout: 10000
 	});
 	await page.waitForURL('/exercise-splits');

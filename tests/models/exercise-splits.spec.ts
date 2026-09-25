@@ -34,7 +34,7 @@ test('create an exercise split', async ({ page }) => {
 
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split created successfully' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible({
 		timeout: 10000
 	});
 	await expect(page.getByRole('main')).toContainText('Pull Push Legs 1 routine');
@@ -43,11 +43,13 @@ test('create an exercise split', async ({ page }) => {
 test('create exercise split from PPL template', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
 	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs Pull APush ALegs APull BPush BLegs B');
-	await expect(page.getByRole('tabpanel')).not.toContainText('Rest');
-	await page.getByRole('tab', { name: 'Exercises' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull APush ALegs APull BPush BLegs B Pull A Day 1 Pull-ups Straight sets of 5 to 15 reps BW Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
+	// The library's name as the title, then its routines' exercises: no info tab or charts
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Pull Push Legs');
+	await expect(page.getByRole('main')).toContainText('Routine library · 6 routines');
+	await expect(page.getByRole('tab', { name: 'Info' })).toHaveCount(0);
+	await expect(page.getByRole('main')).not.toContainText('Rest');
+	await expect(page.getByRole('main')).toContainText(
+		'Pull APush ALegs APull BPush BLegs B Pull A 4 exercises Pull-ups Straight sets of 5 to 15 reps BW Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
 	);
 });
 
@@ -62,9 +64,9 @@ test('create a clone of a split', async ({ page }) => {
 	await page.waitForURL('/exercise-splits/manage/exercises');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').first().filter({ hasText: 'Exercise split created successfully' })).toBeVisible(
-		{ timeout: 10000 }
-	);
+	await expect(page.getByRole('status').first().filter({ hasText: 'Routine library created' })).toBeVisible({
+		timeout: 10000
+	});
 	await expect(page.locator('div').filter({ hasText: 'Pull Push Legs (clone) 6 routines' }).nth(1)).toBeVisible();
 });
 
@@ -74,7 +76,7 @@ test('delete an exercise split', async ({ page }) => {
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split deleted successfully' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library deleted' })).toBeVisible({
 		timeout: 10000
 	});
 	await expect(page.getByRole('main')).toContainText('No routine libraries found');
@@ -94,11 +96,12 @@ test('edit an exercise split', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split edited successfully' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({
 		timeout: 10000
 	});
 	await page.getByRole('link', { name: 'Pull Push Legs (edited) 5 routines' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs (edited) Pull APush ALegs APush BLegs B');
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Pull Push Legs (edited)');
+	await expect(page.getByRole('main')).toContainText('Pull APush ALegs APush BLegs B');
 });
 
 test('editing a library can update the current block, keeping its sets and link', async ({ page, userData }) => {
@@ -153,7 +156,7 @@ test('editing a library can update the current block, keeping its sets and link'
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByLabel('Also update my current block “MyMeso”').click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Exercise split edited successfully' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({
 		timeout: 10000
 	});
 	const firstRoutine = await prisma.mesocycleExerciseSplitDay.findFirstOrThrow({
