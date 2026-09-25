@@ -17,7 +17,8 @@ export const load = async (event) => {
 	const trpc = createCaller(await createContext(event));
 	const serverData = trpc.workouts.getWorkoutExercisesWithPreviousData({
 		userBodyweight,
-		splitDayIndex
+		splitDayIndex,
+		welcomeBack: event.url.searchParams.has('welcomeBack')
 	});
 	return { serverData };
 };

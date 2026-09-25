@@ -1,11 +1,12 @@
 import { MuscleGroup } from '$lib/utils/prismaEnums';
+import { suggestWeeklyRIR, weeklyRIRFromWeeksPerRIR } from '$lib/utils/workoutUtils';
 import type { Prisma, Mesocycle } from '@prisma/client';
 import type { FullExerciseSplit } from '../../exercise-splits/manage/exerciseSplitRunes.svelte';
 
 type MesocycleWithoutIds = Omit<Mesocycle, 'id' | 'exerciseSplitId' | 'userId'>;
 const defaultMesocycle: MesocycleWithoutIds = {
 	name: '',
-	RIRProgression: [1, 3, 3, 3],
+	weeklyRIR: suggestWeeklyRIR(5),
 	startDate: null,
 	endDate: null,
 	startOverloadPercentage: 2.5,
@@ -33,6 +34,8 @@ export function createMesocycleRunes() {
 
 	let selectedExerciseSplit: FullExerciseSplit | null = $state(null);
 	let minSets = $state(2);
+	/** Routines of the selected library left out of the new block */
+	let excludedRoutineIndexes: number[] = $state([]);
 	let editingMesocycleId: string | null = $state(null);
 
 	if (globalThis.localStorage) {
@@ -44,8 +47,17 @@ export function createMesocycleRunes() {
 				selectedExerciseSplit,
 				mesocycleExerciseTemplates,
 				mesocycleCyclicSetChanges,
-				minSets
+				minSets,
+				excludedRoutineIndexes = []
 			} = JSON.parse(savedState));
+		// Block setups saved before weekly plans existed
+		const legacyMesocycle = mesocycle as MesocycleWithoutIds & { RIRProgression?: number[] };
+		if (!Array.isArray(legacyMesocycle.weeklyRIR)) {
+			mesocycle.weeklyRIR = legacyMesocycle.RIRProgression
+				? weeklyRIRFromWeeksPerRIR(legacyMesocycle.RIRProgression)
+				: suggestWeeklyRIR(5);
+			delete legacyMesocycle.RIRProgression;
+		}
 	}
 
 	function resetStores() {
@@ -54,6 +66,7 @@ export function createMesocycleRunes() {
 		mesocycleCyclicSetChanges = [];
 		selectedExerciseSplit = null;
 		minSets = 2;
+		excludedRoutineIndexes = [];
 		editingMesocycleId = null;
 		saveStoresToLocalStorage();
 	}
@@ -159,12 +172,34 @@ export function createMesocycleRunes() {
 				selectedExerciseSplit,
 				mesocycleExerciseTemplates,
 				mesocycleCyclicSetChanges,
-				minSets
+				minSets,
+				excludedRoutineIndexes
 			})
 		);
 	}
 
+	/** Indexes of the library's routines that go into the block (rest days never do) */
+	function getIncludedRoutineIndexes() {
+		if (!selectedExerciseSplit) return [];
+		return selectedExerciseSplit.exerciseSplitDays
+			.map((splitDay, idx) => ({ splitDay, idx }))
+			.filter(({ splitDay, idx }) => !splitDay.isRestDay && !excludedRoutineIndexes.includes(idx))
+			.map(({ idx }) => idx);
+	}
+
+	function setRoutineIncluded(idx: number, included: boolean) {
+		excludedRoutineIndexes = included
+			? excludedRoutineIndexes.filter((excludedIdx) => excludedIdx !== idx)
+			: [...excludedRoutineIndexes, idx];
+		saveStoresToLocalStorage();
+	}
+
 	return {
+		getIncludedRoutineIndexes,
+		setRoutineIncluded,
+		get excludedRoutineIndexes() {
+			return excludedRoutineIndexes;
+		},
 		get editingMesocycleId() {
 			return editingMesocycleId;
 		},
@@ -181,6 +216,7 @@ export function createMesocycleRunes() {
 			return selectedExerciseSplit;
 		},
 		set selectedExerciseSplit(exerciseSplit) {
+			if (exerciseSplit?.id !== selectedExerciseSplit?.id) excludedRoutineIndexes = [];
 			selectedExerciseSplit = exerciseSplit;
 			generateMesocycleExerciseTemplates();
 			saveStoresToLocalStorage();

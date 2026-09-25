@@ -37,7 +37,7 @@
 			return;
 		}
 		if (selectedExerciseSplit === null) {
-			toast.error('Select an exercise split');
+			toast.error('Select a routine library');
 			return;
 		}
 		mesocycleRunes.saveStoresToLocalStorage();
@@ -48,7 +48,7 @@
 <H3>Progression</H3>
 
 {#if mesocycleRunes.editingMesocycleId === null}
-	<span class="mb-0.5 text-sm font-medium">Starting exercise split</span>
+	<span class="mb-0.5 text-sm font-medium">Routine library</span>
 	<Popover.Root>
 		<Popover.Trigger asChild let:builder>
 			<Button class="w-full justify-between" builders={[builder]} role="combobox" variant="outline">
@@ -88,7 +88,7 @@
 									{exerciseSplit.name}
 								</Command.Item>
 							{:else}
-								<div class="text-sm p-2">No exercise splits found</div>
+								<div class="text-sm p-2">No routine libraries found</div>
 							{/each}
 						</div>
 					{/if}
@@ -98,7 +98,7 @@
 	</Popover.Root>
 {:else}
 	<div class="muted-text-box flex justify-between gap-2 text-sm">
-		Starting exercise split cannot be changed
+		Routine library cannot be changed
 		<InfoPopover ariaLabel="exercise-split-editing-info">
 			To modify the split, use the <b>Split</b> tab in <b>View mesocycle</b>
 		</InfoPopover>

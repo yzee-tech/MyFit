@@ -9,12 +9,9 @@ test('create an exercise split', async ({ page }) => {
 	await page.getByLabel('exercise-split-new-options').click();
 	await page.getByRole('menuitem', { name: 'Start from scratch' }).click();
 	await page.getByPlaceholder('Type here').fill('Pull Push Legs');
-	await page.getByRole('button', { name: 'Remove' }).click({
-		clickCount: 5
-	});
-
-	await page.getByPlaceholder('Day 1').fill('Pull');
-	await page.getByRole('row', { name: '2' }).getByRole('checkbox').click();
+	// A new library starts with a single routine
+	await expect(page.getByLabel('Routine 2 name')).toHaveCount(0);
+	await page.getByLabel('Routine 1 name').fill('Pull');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByLabel('add-exercise').click();
@@ -37,22 +34,23 @@ test('create an exercise split', async ({ page }) => {
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise split created successfully' })).toBeVisible({
 		timeout: 10000
 	});
-	await expect(page.getByRole('main')).toContainText('Pull Push Legs 2 days / cycle');
+	await expect(page.getByRole('main')).toContainText('Pull Push Legs 1 routine');
 });
 
 test('create exercise split from PPL template', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 7 days / cycle' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs Pull APush ALegs APull BPush BLegs BRest');
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
+	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs Pull APush ALegs APull BPush BLegs B');
+	await expect(page.getByRole('tabpanel')).not.toContainText('Rest');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull APush ALegs APull BPush BLegs BRest Pull A Day 1 Pull-ups Straight sets of 5 to 15 reps BW Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
+		'Pull APush ALegs APull BPush BLegs B Pull A Day 1 Pull-ups Straight sets of 5 to 15 reps BW Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
 	);
 });
 
 test('create a clone of a split', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 7 days / cycle' }).click();
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Clone' }).click();
 	await page.getByPlaceholder('Type here').click();
@@ -64,38 +62,39 @@ test('create a clone of a split', async ({ page }) => {
 	await expect(page.getByRole('status').first().filter({ hasText: 'Exercise split created successfully' })).toBeVisible(
 		{ timeout: 10000 }
 	);
-	await expect(page.locator('div').filter({ hasText: 'Pull Push Legs (clone) 7 days' }).nth(1)).toBeVisible();
+	await expect(page.locator('div').filter({ hasText: 'Pull Push Legs (clone) 6 routines' }).nth(1)).toBeVisible();
 });
 
 test('delete an exercise split', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 7 days / cycle' }).click();
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise split deleted successfully' })).toBeVisible({
 		timeout: 10000
 	});
-	await expect(page.getByRole('main')).toContainText('No exercise splits found');
+	await expect(page.getByRole('main')).toContainText('No routine libraries found');
 });
 
 test('edit an exercise split', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 7 days / cycle' }).click();
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('Pull Push Legs (edited)');
-	await page.getByRole('row', { name: 'Legs B' }).getByRole('checkbox').click();
-	await page.getByRole('button', { name: 'Remove' }).click();
+	// Delete a routine from the middle; it has exercises, so confirm
+	await page.getByLabel('Delete routine 4').click();
+	await page.getByRole('button', { name: 'Delete', exact: true }).click();
+	await expect(page.getByLabel('Routine 4 name')).toHaveValue('Push B');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise split edited successfully' })).toBeVisible({
 		timeout: 10000
 	});
-	await page.getByRole('link', { name: 'Pull Push Legs (edited) 6' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs (edited) Pull APush ALegs APull BPush BRest');
+	await page.getByRole('link', { name: 'Pull Push Legs (edited) 5 routines' }).click();
+	await expect(page.getByRole('tabpanel')).toContainText('Pull Push Legs (edited) Pull APush ALegs APush BLegs B');
 });

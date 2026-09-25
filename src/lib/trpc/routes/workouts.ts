@@ -1,9 +1,10 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
-import { arraySum } from '$lib/utils';
 import {
 	getBlockWeek,
+	isDeloadWeek,
 	progressiveOverloadMagic,
+	type ProgressionMode,
 	type ExerciseHistory,
 	type WorkoutExerciseInProgress,
 	type WorkoutExerciseWithSets
@@ -37,6 +38,8 @@ type TodaysWorkoutData = {
 	};
 	note: string | null;
 	activeBlock?: ActiveBlockData;
+	/** Set when it has been long enough since the last workout for an easier first session back */
+	welcomeBack?: { daysSinceLastWorkout: number };
 };
 
 export type RoutineOption = {
@@ -74,13 +77,23 @@ export type ActiveMesocycleWithProgressionData = Prisma.MesocycleGetPayload<{
 	include: ReturnType<typeof createActiveMesocycleWithProgressionDataInclude>;
 }>;
 
+/** Whether a workout on this date falls in a deload week of the block */
+async function isInDeloadWeek(userId: string, mesocycleId: string, workoutDate: Date | string) {
+	const mesocycle = await prisma.mesocycle.findFirst({
+		where: { id: mesocycleId, userId },
+		select: { startDate: true, weeklyRIR: true }
+	});
+	if (!mesocycle?.startDate) return false;
+	return isDeloadWeek(mesocycle.weeklyRIR, getBlockWeek(mesocycle.startDate, new Date(workoutDate)));
+}
+
 /** How many past performances of an exercise feed its progression */
 const EXERCISE_HISTORY_LENGTH = 8;
 
 /** Recent performances of each named exercise across all of the user's workouts, oldest first */
 async function getExerciseHistory(userId: string, exerciseNames: string[]): Promise<ExerciseHistory> {
 	const pastExercises = await prisma.workoutExercise.findMany({
-		where: { name: { in: exerciseNames }, workout: { userId } },
+		where: { name: { in: exerciseNames }, workout: { userId, isDeload: false } },
 		include: {
 			sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
 			workout: { select: { userBodyweight: true } }
@@ -254,11 +267,17 @@ export const workouts = t.router({
 	}),
 
 	getTodaysWorkoutData: t.procedure.query(async ({ ctx }) => {
-		const lastWorkout = await prisma.workout.findFirst({
-			where: { userId: ctx.userId },
-			select: { userBodyweight: true },
-			orderBy: { startedAt: 'desc' }
-		});
+		const [lastWorkout, userSettings] = await Promise.all([
+			prisma.workout.findFirst({
+				where: { userId: ctx.userId },
+				select: { userBodyweight: true, startedAt: true },
+				orderBy: { startedAt: 'desc' }
+			}),
+			prisma.userSettings.findUnique({
+				where: { userId: ctx.userId },
+				select: { welcomeBackEnabled: true, welcomeBackAfterDays: true }
+			})
+		]);
 
 		const todaysWorkoutData: TodaysWorkoutData = {
 			workoutExercises: [],
@@ -267,6 +286,14 @@ export const workouts = t.router({
 			endedAt: null,
 			note: null
 		};
+
+		// Settings default to on, after 7 days
+		const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
+		const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
+		if (lastWorkout && welcomeBackEnabled) {
+			const daysSinceLastWorkout = Math.floor((Date.now() - lastWorkout.startedAt.getTime()) / (24 * 60 * 60 * 1000));
+			if (daysSinceLastWorkout >= welcomeBackAfterDays) todaysWorkoutData.welcomeBack = { daysSinceLastWorkout };
+		}
 
 		const data = await prisma.mesocycle.findFirst({
 			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
@@ -290,7 +317,7 @@ export const workouts = t.router({
 
 		const { mesocycleExerciseSplitDays, workoutsOfMesocycle, ...mesocycle } = data;
 		const weekNumber = getBlockWeek(mesocycle.startDate!);
-		const totalWeeks = arraySum(mesocycle.RIRProgression);
+		const totalWeeks = mesocycle.weeklyRIR.length;
 
 		const routines: RoutineOption[] = mesocycleExerciseSplitDays
 			.filter((splitDay) => !splitDay.isRestDay)
@@ -312,7 +339,13 @@ export const workouts = t.router({
 	}),
 
 	getWorkoutExercisesWithPreviousData: t.procedure
-		.input(z.strictObject({ userBodyweight: z.number(), splitDayIndex: z.number().int() }))
+		.input(
+			z.strictObject({
+				userBodyweight: z.number(),
+				splitDayIndex: z.number().int(),
+				welcomeBack: z.boolean().optional()
+			})
+		)
 		.query(async ({ ctx, input }) => {
 			const { splitDayIndex } = input;
 			const data: ActiveMesocycleWithProgressionData | null = await prisma.mesocycle.findFirst({
@@ -334,12 +367,18 @@ export const workouts = t.router({
 			const exerciseNames = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => exercise.name);
 			const exerciseHistory = await getExerciseHistory(ctx.userId, exerciseNames);
 
+			const weekNumber = getBlockWeek(data.startDate!);
+			let mode: ProgressionMode = 'normal';
+			if (isDeloadWeek(data.weeklyRIR, weekNumber)) mode = 'deload';
+			else if (input.welcomeBack) mode = 'welcomeBack';
+
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
 				data,
-				getBlockWeek(data.startDate!),
+				weekNumber,
 				input.userBodyweight,
 				splitDayIndex,
-				exerciseHistory
+				exerciseHistory,
+				mode
 			);
 
 			// "Previous" for comparisons: the last time each of today's exercises was done
@@ -368,6 +407,7 @@ export const workouts = t.router({
 
 		const { workoutOfMesocycle } = input.workoutData;
 		if (workoutOfMesocycle) {
+			workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycle.id, workout.startedAt);
 			workout.workoutOfMesocycle = {
 				create: {
 					mesocycleId: workoutOfMesocycle.mesocycle.id,
@@ -471,8 +511,11 @@ export const workouts = t.router({
 			};
 
 			const workoutOfMesocycle = await prisma.workoutOfMesocycle.findFirst({
-				where: { workoutId: input.id }
+				where: { workoutId: input.id, workout: { userId: ctx.userId } }
 			});
+			if (workoutOfMesocycle) {
+				workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt);
+			}
 
 			const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.data.workoutExercises.map((ex) => ({
 				...ex,
@@ -503,7 +546,7 @@ export const workouts = t.router({
 				);
 
 			const transactionQueries = [
-				prisma.workout.delete({ where: { id: input.id } }),
+				prisma.workout.delete({ where: { id: input.id, userId: ctx.userId } }),
 				prisma.workout.create({ data: workout }),
 				prisma.workoutExercise.createMany({ data: workoutExercises }),
 				prisma.workoutExerciseSet.createMany({ data: workoutExercisesSets }),

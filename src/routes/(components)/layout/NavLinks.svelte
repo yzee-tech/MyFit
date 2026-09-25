@@ -9,7 +9,7 @@
 		{ text: 'Dashboard', href: '/dashboard' },
 		{ text: 'Exercise stats', href: '/exercise-stats' },
 		null,
-		{ text: 'Exercise splits', href: '/exercise-splits' },
+		{ text: 'Routine libraries', href: '/exercise-splits' },
 		{ text: 'Mesocycles', href: '/mesocycles' },
 		{ text: 'Workouts', href: '/workouts' },
 		null,

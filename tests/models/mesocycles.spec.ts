@@ -14,9 +14,11 @@ test('create a mesocycle', async ({ page }) => {
 	await expect(page.getByRole('main')).toContainText('Active No active mesocycle All No mesocycles found');
 	await page.getByLabel('create-new-mesocycle').click();
 	await page.getByLabel('Mesocycle name').fill('My Mesocycle');
-	await page.getByLabel('Mesocycle duration').fill('12');
-	await page.getByRole('combobox').click();
-	await page.getByRole('option', { name: '3 RIR' }).click();
+	await page.getByLabel('Mesocycle duration').fill('6');
+	// Suggested plan for 6 weeks, then make week 1 easier
+	await expect(page.getByLabel('Week 6 effort')).toContainText('Deload');
+	await page.getByLabel('Week 1 effort').click();
+	await page.getByRole('option', { name: '4 RIR' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByText('Pick one').click();
@@ -25,6 +27,8 @@ test('create a mesocycle', async ({ page }) => {
 	await page.locator('span > .absolute').click();
 	await page.getByRole('button', { name: 'Next' }).click();
 
+	// Leave one routine out of the block
+	await page.getByLabel('Include Legs B').click();
 	await page.getByLabel('Sets per exercise').fill('4');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
@@ -34,12 +38,23 @@ test('create a mesocycle', async ({ page }) => {
 	});
 	await page.getByRole('link', { name: 'My Mesocycle Unused' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('My Mesocycle No dates available Unused');
+	await expect(page.getByRole('tabpanel')).toContainText('Weekly effort 6 weeks');
+	await expect(page.getByTestId('mesocycle-weekly-effort').locator('> *')).toHaveText([
+		'W1: 4 RIR',
+		'W2: 2 RIR',
+		'W3: 2 RIR',
+		'W4: 1 RIR',
+		'W5: 0 RIR',
+		'W6: Deload'
+	]);
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'RIR progression 12 cycles 2 1 0 Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure Force RIR matching'
+		'Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure'
 	);
 
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Pull-ups 4 Straight sets of 5 to 15 reps');
+	await expect(page.getByRole('main')).toContainText('Pull APush ALegs APull BPush B');
+	await expect(page.getByRole('main')).not.toContainText('Legs B');
 });
 
 test('delete a mesocycle', async ({ page }) => {
@@ -83,7 +98,7 @@ test('edit a mesocycle', async ({ page }) => {
 	await page.locator('#mesocycle-force-RIR-matching').click();
 	await page.getByLabel('Take last set to failure').click();
 	await page.locator('span > .absolute').click();
-	await expect(page.getByRole('main')).toContainText('Starting exercise split cannot be changed');
+	await expect(page.getByRole('main')).toContainText('Routine library cannot be changed');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
@@ -93,8 +108,16 @@ test('edit a mesocycle', async ({ page }) => {
 
 	await page.getByRole('link', { name: 'MesoName (edited) Unused' }).click();
 	await expect(page.locator('h3')).toContainText('MesoName (edited)');
+	await expect(page.getByRole('tabpanel')).toContainText('Weekly effort 5 weeks');
+	await expect(page.getByTestId('mesocycle-weekly-effort').locator('> *')).toHaveText([
+		'W1: 3 RIR',
+		'W2: 2 RIR',
+		'W3: 1 RIR',
+		'W4: 0 RIR',
+		'W5: Deload'
+	]);
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'RIR progression 10 cycles 3 2 1 0 Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure Force RIR matching'
+		'Start exercise template Pull Push Legs Start overload percentage 1.25% Last set to failure'
 	);
 });
 
@@ -142,7 +165,7 @@ test("edit mesocycle's exercise split", async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: 'MesoName Unused' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(`MesoName No dates available Unused`);
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Face pulls 3 Straight sets of 15 to 30 reps Rear delts');
 	await page.getByRole('button', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -156,53 +179,70 @@ test("edit mesocycle's exercise split", async ({ page }) => {
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
 	).toBeVisible({ timeout: 10000 });
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Face pulls 4 Straight sets of 15 to 30 reps Rear delts');
 });
 
-test('disallow exercise split editing after workout added', async ({ page }) => {
+test('add routines mid-block; trained routines keep their workouts', async ({ page }) => {
 	await createMesocycle(page, { exerciseSplitCreated: true });
 	await page.getByRole('link', { name: 'Workouts' }).click();
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
+	await pickRoutine(page, 'Legs A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByTestId('Pull-ups-menu-button').click();
-	await page.getByRole('menuitem', { name: 'Delete' }).click();
-	await page.getByTestId('Barbell rows-menu-button').click();
-	await page.getByRole('menuitem', { name: 'Delete' }).click();
-	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
-	await page.getByRole('menuitem', { name: 'Delete' }).click();
-
-	await page.locator('[id="Face\\ pulls-set-1-reps"]').fill('13');
-	await page.locator('[id="Face\\ pulls-set-2-reps"]').fill('11');
-	await page.locator('[id="Face\\ pulls-set-3-reps"]').fill('11');
-	await page.locator('[id="Face\\ pulls-set-1-load"]').fill('10');
-	await page.getByTestId('Face pulls-set-1-action').click();
-	await page.getByTestId('Face pulls-set-2-action').click();
-	await page.getByTestId('Face pulls-set-3-action').click();
+	for (const exercise of ['Barbell good mornings', 'Barbell squats', 'Leg extensions']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Calf\\ raises-set-1-reps"]').fill('12');
+	await page.locator('[id="Calf\\ raises-set-2-reps"]').fill('12');
+	await page.locator('[id="Calf\\ raises-set-3-reps"]').fill('11');
+	await page.locator('[id="Calf\\ raises-set-1-load"]').fill('50');
+	await page.getByTestId('Calf raises-set-1-action').click();
+	await page.getByTestId('Calf raises-set-2-action').click();
+	await page.getByTestId('Calf raises-set-3-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.waitForURL('/workouts');
 
-	const lockedText =
-		"Cannot change the length or rest days of the mesocycle's exercise split after workouts have been added";
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
-	await expect(page.getByRole('main')).toContainText(new Date().toLocaleDateString('en-US'));
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await page.getByRole('button', { name: 'Edit' }).click();
-	await page.getByLabel('mesocycle-exercise-split-edit').click();
-	await expect(page.getByText(lockedText)).toBeInViewport();
-	await expect(page.getByRole('button').filter({ hasText: 'Remove' })).toBeDisabled();
-	await expect(page.getByRole('button').filter({ hasText: 'Add' })).toBeDisabled();
+	// Legs A (3rd) was trained, so it can't be deleted; Push A (2nd) can
+	await expect(page.getByLabel('Delete routine 3')).toBeDisabled();
+	await page.getByLabel('Delete routine 2').click();
+	await page.getByRole('button', { name: 'Delete', exact: true }).click();
+	await page.getByRole('button', { name: 'Add routine' }).click();
+	await page.getByLabel('Routine 6 name').fill('Hotel gym - Full body');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('tab', { name: 'Hotel gym - Full body' }).click();
+	await page.getByLabel('add-exercise').click();
+	await page.getByRole('option', { name: 'Barbell bench press', exact: true }).click();
+	await page.getByLabel('Sets').fill('3');
+	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
+	).toBeVisible({ timeout: 10000 });
+
+	// Legs A moved up a position and still shows its workout; the new routine can be picked
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText('Legs A Done today');
+	await expect(page.getByRole('main')).not.toContainText('Push A');
+	await expect(page.getByRole('main')).toContainText('Hotel gym - Full body Not done yet');
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Legs A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Calf\\ raises-set-1-load"]')).toHaveValue('50');
 });
 
 test('extract exercise split from mesocycle', async ({ page }) => {
 	await createMesocycle(page, { exerciseSplitCreated: true });
 	await page.getByRole('link', { name: 'MyMeso' }).first().click();
 	await expect(page.getByRole('main')).toContainText(new Date().toLocaleDateString('en-US'));
-	await page.getByRole('tab', { name: 'Split' }).click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
 	await page.getByRole('button', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('tabpanel').getByRole('list').getByRole('button').first().click();
@@ -218,8 +258,8 @@ test('extract exercise split from mesocycle', async ({ page }) => {
 	await page.getByPlaceholder('Type here').fill('MyMeso exercise split');
 	await page.getByRole('button', { name: 'Yes, extract' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise split created successfully' })).toBeVisible();
-	await page.getByRole('link', { name: 'Exercise splits' }).click();
-	await page.getByRole('link', { name: 'MyMeso exercise split 7 days' }).click();
+	await page.getByRole('link', { name: 'Routine libraries' }).click();
+	await page.getByRole('link', { name: 'MyMeso exercise split 6 routines' }).click();
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Pull A Day 1 Lat pulldowns Straight sets of 5 to 15 reps Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
@@ -230,11 +270,6 @@ test('finish a block once its weeks are over', async ({ page, userData }) => {
 	await page.getByLabel('create-new-mesocycle').click();
 	await page.getByLabel('Mesocycle name').fill('OneWeekBlock');
 	await page.getByLabel('Mesocycle duration').fill('1');
-	await page.getByRole('combobox').click();
-	await page.getByRole('option', { name: '3 RIR' }).click();
-	await page.getByRole('option', { name: '2 RIR' }).click();
-	await page.getByRole('option', { name: '1 RIR' }).click();
-	await page.keyboard.press('Escape');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByText('Pick one').click();
 	await page.getByRole('option', { name: 'Pull Push Legs' }).click();

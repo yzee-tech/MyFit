@@ -5,7 +5,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { getRIRForWeek } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort } from '$lib/utils/workoutUtils';
 	import { workoutRunes } from '../../workouts/manage/workoutRunes.svelte';
 	import WorkoutProgressionChart from './WorkoutProgressionChart.svelte';
 	import ChevronRight from 'virtual:icons/lucide/chevron-right';
@@ -40,7 +40,7 @@
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					{block.mesocycle.name}
-					<Badge variant="secondary">{getRIRForWeek(block.mesocycle.RIRProgression, block.weekNumber)} RIR</Badge>
+					<Badge variant="secondary">{formatWeekEffort(block.mesocycle.weeklyRIR, block.weekNumber)}</Badge>
 				</Card.Title>
 				<Card.Description>
 					{#if block.blockFinished}

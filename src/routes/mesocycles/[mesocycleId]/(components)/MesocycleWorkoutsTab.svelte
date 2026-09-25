@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { arraySum, dateToCalendarDate } from '$lib/utils';
+	import { dateToCalendarDate } from '$lib/utils';
 	import { getLocalTimeZone, isSameDay, today } from '@internationalized/date';
 	import type { DateRange } from 'bits-ui';
 	import CustomRangeCalendar from './CustomRangeCalendar.svelte';
@@ -14,12 +14,11 @@
 	}));
 	const startDate = workoutStartDates[0]?.date;
 
-	const completedMesocycleWorkouts = mesocycle.workoutsOfMesocycle.length;
-	const totalMesocycleWorkouts = mesocycle.mesocycleExerciseSplitDays.length * arraySum(mesocycle.RIRProgression);
-	const remainingMesocycleWorkouts = totalMesocycleWorkouts - completedMesocycleWorkouts;
-	const endDate = mesocycle.endDate
-		? workoutStartDates.at(-1)?.date
-		: today(getLocalTimeZone()).add({ days: remainingMesocycleWorkouts });
+	// Planned end: the last day of the block's final week
+	const plannedEndDate = mesocycle.startDate
+		? dateToCalendarDate(mesocycle.startDate).add({ days: mesocycle.weeklyRIR.length * 7 - 1 })
+		: today(getLocalTimeZone());
+	const endDate = mesocycle.endDate ? workoutStartDates.at(-1)?.date : plannedEndDate;
 
 	let dateRange: DateRange = $state({ start: startDate, end: endDate });
 	let filteredWorkoutsOfMesocycle = $derived(

@@ -3,5 +3,5 @@
 	const { children } = $props();
 </script>
 
-<H2>Edit mesocycle split</H2>
+<H2>Edit mesocycle routines</H2>
 {@render children()}

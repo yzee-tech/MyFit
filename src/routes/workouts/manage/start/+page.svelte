@@ -14,7 +14,7 @@
 	import { trpc } from '$lib/trpc/client.js';
 	import type { RouterOutputs } from '$lib/trpc/router.js';
 	import { cn, convertCamelCaseToNormal } from '$lib/utils.js';
-	import { getRIRForWeek } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, isDeloadWeek } from '$lib/utils/workoutUtils';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
@@ -56,11 +56,16 @@
 	let userBodyweight: null | number = $state(workoutRunes.workoutData?.userBodyweight ?? null);
 	let overwriteWorkoutDialogOpen = $state(false);
 	let finishingBlock = $state(false);
+	let takeItEasy = $state(true);
 
 	let activeBlock = $derived(workoutData === 'loading' ? undefined : workoutData.activeBlock);
 	let selectedRoutine = $derived(
 		activeBlock?.routines.find((routine) => routine.splitDayIndex === selectedRoutineIndex)
 	);
+	let deloadWeek = $derived(
+		activeBlock ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, activeBlock.weekNumber) : false
+	);
+	let welcomeBack = $derived(workoutData === 'loading' ? undefined : workoutData.welcomeBack);
 	let canStart = $derived(userBodyweight !== null && (!useActiveMesocycle || selectedRoutine !== undefined));
 
 	$effect(() => {
@@ -122,6 +127,7 @@
 		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
 		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
 		if (workoutOfMesocycle) exercisesLink += `&splitDayIndex=${workoutOfMesocycle.splitDayIndex}`;
+		if (workoutOfMesocycle && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
 		goto(exercisesLink);
 	}
 
@@ -226,14 +232,35 @@
 			</div>
 		{/if}
 	</form>
+	{#if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null && deloadWeek}
+		<Card.Root class="mb-1">
+			<Card.Header>
+				<Card.Title>Deload week</Card.Title>
+				<Card.Description>
+					Same weights as last time with half the sets, stopping well short of failure. This week doesn't count as the
+					baseline for your next workouts.
+				</Card.Description>
+			</Card.Header>
+		</Card.Root>
+	{:else if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null && welcomeBack}
+		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+			<div class="flex flex-col gap-1">
+				<Label for="take-it-easy">Welcome back: take it easy today</Label>
+				<p class="text-sm text-muted-foreground">
+					It's been {welcomeBack.daysSinceLastWorkout} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
+				</p>
+			</div>
+			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />
+		</div>
+	{/if}
 	{#if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null}
 		<div class="mb-1 flex items-baseline justify-between px-1">
 			<span class="font-semibold">Pick a routine</span>
 			<span class="text-sm text-muted-foreground">
-				Week {Math.min(activeBlock.weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {getRIRForWeek(
-					activeBlock.mesocycle.RIRProgression,
+				Week {Math.min(activeBlock.weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
+					activeBlock.mesocycle.weeklyRIR,
 					activeBlock.weekNumber
-				)} RIR
+				)}
 			</span>
 		</div>
 		{#if activeBlock.routines.length === 0}

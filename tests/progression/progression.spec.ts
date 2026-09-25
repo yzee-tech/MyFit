@@ -1,7 +1,13 @@
 import {
+	DELOAD_RIR,
+	DELOAD_WEEK,
+	formatWeekEffort,
 	getBlockWeek,
 	getRIRForWeek,
+	isDeloadWeek,
 	progressiveOverloadMagic,
+	suggestWeeklyRIR,
+	weeklyRIRFromWeeksPerRIR,
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
@@ -9,7 +15,7 @@ import { test, expect } from '../fixtures';
 import { testMesocycle } from './data';
 
 test('progress first cycle, no changes', () => {
-	const currentRIR = getRIRForWeek(testMesocycle.RIRProgression, 1);
+	const currentRIR = getRIRForWeek(testMesocycle.weeklyRIR, 1);
 
 	for (let i = 0; i < testMesocycle.mesocycleExerciseSplitDays.length; i++) {
 		const output = progressiveOverloadMagic(testMesocycle, 1, 100, i);
@@ -120,8 +126,67 @@ test('block weeks follow the calendar', () => {
 });
 
 test('RIR stays at the last week once a block runs past its length', () => {
-	// [1, 3, 3, 3]: 3 weeks at 3 RIR, 3 at 2, 3 at 1, 1 at 0 = 10 weeks
-	expect(getRIRForWeek(testMesocycle.RIRProgression, 1)).toEqual(3);
-	expect(getRIRForWeek(testMesocycle.RIRProgression, 10)).toEqual(0);
-	expect(getRIRForWeek(testMesocycle.RIRProgression, 12)).toEqual(0);
+	// 3 weeks at 3 RIR, 3 at 2, 3 at 1, 1 at 0 = 10 weeks
+	expect(getRIRForWeek(testMesocycle.weeklyRIR, 1)).toEqual(3);
+	expect(getRIRForWeek(testMesocycle.weeklyRIR, 10)).toEqual(0);
+	expect(getRIRForWeek(testMesocycle.weeklyRIR, 12)).toEqual(0);
+});
+
+test('weekly plans: suggested plans and converting the old format', () => {
+	expect(suggestWeeklyRIR(1)).toEqual([2]);
+	expect(suggestWeeklyRIR(3)).toEqual([3, 2, 0]);
+	expect(suggestWeeklyRIR(5)).toEqual([3, 2, 1, 0, DELOAD_WEEK]);
+	// Old format: weeks per RIR level, done from the highest RIR down
+	expect(weeklyRIRFromWeeksPerRIR([1, 3, 3, 3])).toEqual([3, 3, 3, 2, 2, 2, 1, 1, 1, 0]);
+	expect(weeklyRIRFromWeeksPerRIR([2, 0, 1])).toEqual([2, 0, 0]);
+
+	const plan = [3, 1, DELOAD_WEEK];
+	expect(isDeloadWeek(plan, 3)).toBe(true);
+	expect(getRIRForWeek(plan, 3)).toEqual(DELOAD_RIR);
+	expect(formatWeekEffort(plan, 2)).toEqual('1 RIR');
+	expect(formatWeekEffort(plan, 3)).toEqual('Deload');
+});
+
+test('deload: same weights and reps target as last time, half the sets, easy effort', () => {
+	const lastTime = [
+		{ reps: 12, load: 20, RIR: 1 },
+		{ reps: 11, load: 20, RIR: 1 },
+		{ reps: 10, load: 20, RIR: 0 }
+	];
+	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
+	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history, 'deload');
+	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
+
+	expect(rows.sets).toHaveLength(2); // 3 sets in the routine, halved and rounded up
+	rows.sets.forEach((set, idx) => {
+		expect(set.load).toEqual(20);
+		expect(set.RIR).toEqual(DELOAD_RIR);
+		// Easier: fewer reps than last time, never more
+		expect(set.reps!).toBeLessThanOrEqual(lastTime[idx].reps);
+	});
+});
+
+test('welcome back: repeat last numbers with 1 extra RIR, no set to failure', () => {
+	const lastTime = [
+		{ reps: 12, load: 20, RIR: 3 },
+		{ reps: 12, load: 20, RIR: 3 },
+		{ reps: 11, load: 20, RIR: 3 }
+	];
+	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
+	// Week 1 of the test plan is 3 RIR, so welcome back asks for 4
+	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history, 'welcomeBack');
+	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
+
+	expect(rows.sets).toHaveLength(3);
+	rows.sets.forEach((set, idx) => {
+		expect(set.load).toEqual(20);
+		expect(set.RIR).toEqual(4);
+		expect(set.reps).toEqual(lastTime[idx].reps - 1);
+	});
+
+	// Normal progression from the same history pushes past last time instead
+	const normal = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history).find(
+		(exercise) => exercise.name === 'Barbell rows'
+	)!;
+	expect(normal.sets.some((set, idx) => set.reps! > lastTime[idx].reps || set.load! > 20)).toBe(true);
 });

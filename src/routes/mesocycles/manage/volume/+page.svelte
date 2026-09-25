@@ -7,6 +7,7 @@
 	import { mesocycleRunes } from '../mesocycleRunes.svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import type { FullExerciseSplit } from '../../../exercise-splits/manage/exerciseSplitRunes.svelte';
 	import { goto } from '$app/navigation';
 
@@ -28,14 +29,37 @@
 
 	function submitVolume(e: SubmitEvent) {
 		e.preventDefault();
+		if (!data.editing && mesocycleRunes.getIncludedRoutineIndexes().length === 0) {
+			toast.error('Include at least one routine');
+			return;
+		}
 		mesocycleRunes.setSetsOfAllExercises(setsPerExercise);
 		goto('./overview');
 	}
 </script>
 
-<H3>Sets</H3>
+<H3>Routines & sets</H3>
 {#if exerciseSplit !== 'loading' || data.editing}
 	<form class="flex grow flex-col gap-1.5" onsubmit={submitVolume}>
+		{#if exerciseSplit !== 'loading'}
+			<span class="text-sm font-medium">Routines in this mesocycle</span>
+			<ul class="mb-3 flex flex-col gap-1">
+				{#each exerciseSplit.exerciseSplitDays as routine, idx}
+					{#if !routine.isRestDay}
+						<li class="flex items-center gap-3 rounded-lg border bg-card px-4 py-2">
+							<Checkbox
+								id="include-routine-{idx}"
+								aria-label="Include {routine.name}"
+								checked={!mesocycleRunes.excludedRoutineIndexes.includes(idx)}
+								onCheckedChange={(checked) => mesocycleRunes.setRoutineIncluded(idx, checked === true)}
+							/>
+							<Label class="grow" for="include-routine-{idx}">{routine.name}</Label>
+							<span class="text-xs text-muted-foreground">{routine.exercises.length} exercises</span>
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		{/if}
 		<Label for="sets-per-exercise">Sets per exercise</Label>
 		<Input id="sets-per-exercise" type="number" min={1} max={20} required bind:value={setsPerExercise} />
 		<p class="text-sm text-muted-foreground">

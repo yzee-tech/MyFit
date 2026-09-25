@@ -107,3 +107,9 @@ export function getSetsPerformedPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMe
 
 	return setsPerformedPerMuscleGroup;
 }
+
+/** e.g. "1 routine" or "6 routines"; rest days from the old fixed rotation don't count */
+export function formatRoutineCount(splitDays: { isRestDay: boolean }[]) {
+	const count = splitDays.filter((splitDay) => !splitDay.isRestDay).length;
+	return `${count} ${count === 1 ? 'routine' : 'routines'}`;
+}

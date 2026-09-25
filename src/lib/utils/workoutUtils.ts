@@ -190,17 +190,58 @@ export function createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
 	return { ...exercise, sets: newSets.slice(0, sets) };
 }
 
-export function getRIRForWeek(rirArray: number[], cycle: number): number {
-	rirArray = rirArray.slice().reverse();
-	let cumulativeWeeks = 0;
-	for (let i = 0; i < rirArray.length; i++) {
-		cumulativeWeeks += rirArray[i];
-		if (cycle <= cumulativeWeeks) return rirArray.length - i - 1;
-	}
-	// Past the planned length (block not finished yet): keep the last week's RIR
-	const lastRIR = rirArray.findLastIndex((weeks) => weeks > 0);
-	return lastRIR === -1 ? 0 : rirArray.length - lastRIR - 1;
+/** Marks a deload week in a block's weekly RIR plan */
+export const DELOAD_WEEK = -1;
+/** Effort of a deload week: stop well short of failure */
+export const DELOAD_RIR = 4;
+
+/** The plan entry for a 1-based week; past the planned length, the last week's entry applies */
+function getWeekPlanEntry(weeklyRIR: number[], week: number): number {
+	if (weeklyRIR.length === 0) return 0;
+	return weeklyRIR[Math.min(Math.max(week, 1), weeklyRIR.length) - 1];
 }
+
+export function isDeloadWeek(weeklyRIR: number[], week: number): boolean {
+	return getWeekPlanEntry(weeklyRIR, week) === DELOAD_WEEK;
+}
+
+export function getRIRForWeek(weeklyRIR: number[], week: number): number {
+	const entry = getWeekPlanEntry(weeklyRIR, week);
+	return entry === DELOAD_WEEK ? DELOAD_RIR : entry;
+}
+
+/**
+ * Converts the old "weeks per RIR level" format (index = RIR, done from the highest RIR down)
+ * into one RIR per week
+ */
+export function weeklyRIRFromWeeksPerRIR(weeksPerRIR: number[]): number[] {
+	return weeksPerRIR.flatMap((weeks, rir) => Array<number>(weeks).fill(rir)).toSorted((a, b) => b - a);
+}
+
+/**
+ * A starting plan for a block: effort builds from 3 RIR to 0 RIR, and blocks of 4+ weeks
+ * end with a deload week
+ */
+export function suggestWeeklyRIR(weeks: number): number[] {
+	const workingWeeks = weeks >= 4 ? weeks - 1 : weeks;
+	const plan = Array.from({ length: workingWeeks }, (_, idx) =>
+		workingWeeks === 1 ? 2 : Math.round(3 - (3 * idx) / (workingWeeks - 1))
+	);
+	if (weeks >= 4) plan.push(DELOAD_WEEK);
+	return plan;
+}
+
+/** e.g. "2 RIR" or "Deload" */
+export function formatWeekEffort(weeklyRIR: number[], week: number): string {
+	return isDeloadWeek(weeklyRIR, week) ? 'Deload' : `${getRIRForWeek(weeklyRIR, week)} RIR`;
+}
+
+/**
+ * - `normal`: beat last time
+ * - `deload`: same weights and reps as last time, half the sets, easy effort
+ * - `welcomeBack`: first workout after a break; same weights and reps as last time, 1 extra RIR
+ */
+export type ProgressionMode = 'normal' | 'deload' | 'welcomeBack';
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -363,16 +404,34 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 	});
 }
 
+/**
+ * The routine decides how many sets: drop extra sets from the last time, and fill missing ones
+ * with a copy of the last suggested set
+ */
+function fitSetsToRoutine(ex: WorkoutExerciseInProgress, routineSetCount: number) {
+	ex.sets = ex.sets.slice(0, routineSetCount);
+	const lastSuggestedSet = ex.sets.findLast((set) => set.reps !== undefined);
+	if (!lastSuggestedSet) return;
+	const copyOfLastSet = () => ({ ...lastSuggestedSet, miniSets: structuredClone(lastSuggestedSet.miniSets) });
+	while (ex.sets.length < routineSetCount) ex.sets.push(copyOfLastSet());
+	ex.sets = ex.sets.map((set) => (set.reps === undefined ? copyOfLastSet() : set));
+}
+
 export function progressiveOverloadMagic(
 	mesocycleWithProgressionData: ActiveMesocycleWithProgressionData,
 	cycleNumber: number,
 	userBodyweight: number,
 	splitDayIndex: number,
-	exerciseHistory: ExerciseHistory = {}
+	exerciseHistory: ExerciseHistory = {},
+	mode: ProgressionMode = 'normal'
 ) {
 	const { mesocycleExerciseSplitDays, ...mesocycle } = mesocycleWithProgressionData;
 
-	const currentCycleRIR = getRIRForWeek(mesocycle.RIRProgression, cycleNumber);
+	const weekRIR = getRIRForWeek(mesocycle.weeklyRIR, cycleNumber);
+	let currentCycleRIR = weekRIR;
+	if (mode === 'deload') currentCycleRIR = DELOAD_RIR;
+	else if (mode === 'welcomeBack') currentCycleRIR = Math.min(weekRIR + 1, DELOAD_RIR);
+	const easySession = mode !== 'normal';
 	const todaysSplitDay = mesocycleExerciseSplitDays[splitDayIndex];
 	const workoutExercises = todaysSplitDay.mesocycleSplitDayExercises.map((fullExercise) => {
 		const { mesocycleExerciseSplitDayId, ...exercise } = fullExercise;
@@ -386,6 +445,14 @@ export function progressiveOverloadMagic(
 		if (!lastPerformance?.exercise) return;
 
 		const routineSetCount = ex.sets.length;
+
+		// Easy sessions repeat the last numbers instead of trying to beat them
+		if (easySession) {
+			ex.sets = lastPerformance.exercise.sets.map((oldSet) => addExtraSetProperties(oldSet));
+			fitSetsToRoutine(ex, routineSetCount);
+			return;
+		}
+
 		const averageDropOffs = generateAveragePerformanceDropOffs(allPreviousPerformances);
 		const lastDropOffs = generateAveragePerformanceDropOffs([
 			allPreviousPerformances[allPreviousPerformances.length - 1]
@@ -432,18 +499,14 @@ export function progressiveOverloadMagic(
 			}
 		}
 
-		// The routine decides how many sets: drop extra sets from the last time, and fill
-		// missing ones with a copy of the last suggested set
-		ex.sets = ex.sets.slice(0, routineSetCount);
-		const lastSuggestedSet = ex.sets.findLast((set) => set.reps !== undefined);
-		if (lastSuggestedSet) {
-			ex.sets = ex.sets.map((set) =>
-				set.reps === undefined ? { ...lastSuggestedSet, miniSets: structuredClone(lastSuggestedSet.miniSets) } : set
-			);
-		}
-
+		fitSetsToRoutine(ex, routineSetCount);
 		ex.sets = increaseLoadOfSets(ex, userBodyweight);
 	});
+
+	// Deload: half the sets
+	if (mode === 'deload') {
+		workoutExercises.forEach((ex) => (ex.sets = ex.sets.slice(0, Math.ceil(ex.sets.length / 2))));
+	}
 
 	// RIR adjustment
 	workoutExercises.forEach((ex) => {
@@ -451,15 +514,17 @@ export function progressiveOverloadMagic(
 			const oldRIR = set.RIR ?? currentCycleRIR;
 			set.RIR = currentCycleRIR;
 
-			// Last set to failure
-			const lastSetToFailure = ex.lastSetToFailure ?? mesocycle.lastSetToFailure;
+			// Last set to failure (not in easy sessions)
+			const lastSetToFailure = !easySession && (ex.lastSetToFailure ?? mesocycle.lastSetToFailure);
 			if (idx === ex.sets.length - 1 && lastSetToFailure) set.RIR = 0;
 
 			// Adjust reps when RIR changed
 			const RIRDifference = set.RIR - oldRIR;
 			if (set.reps === undefined) return;
 
-			if (RIRDifference > 0 && !(ex.forceRIRMatching ?? mesocycle.forceRIRMatching)) return;
+			// Easy sessions always take reps off to match the easier effort
+			const forceRIRMatching = easySession || (ex.forceRIRMatching ?? mesocycle.forceRIRMatching);
+			if (RIRDifference > 0 && !forceRIRMatching) return;
 
 			// For TopBackoff, use topRepRangeStart for first set, regular repRangeStart for others
 			const isTopSet = ex.setType === 'TopBackoff' && idx === 0;
@@ -467,8 +532,9 @@ export function progressiveOverloadMagic(
 				isTopSet && typeof ex.topRepRangeStart === 'number' ? ex.topRepRangeStart : ex.repRangeStart;
 
 			// If the RIR adjustment we are about to make causes reps to fall outside of lower rep range
+			// (a deload is meant to be easy, so there reps may drop below the range)
 			const adjustedReps = set.reps - RIRDifference;
-			if (adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
+			if (mode !== 'deload' && adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
 				const maxRIR = Math.max(set.reps - repRangeStart, 0);
 				set.RIR = maxRIR;
 				set.reps -= maxRIR - oldRIR;

@@ -9,13 +9,16 @@ export type FullMesocycleWithExerciseSplit = Prisma.MesocycleGetPayload<{
 type MesocycleExerciseSplitDayWithoutIds = Omit<
 	Prisma.MesocycleExerciseSplitDayCreateWithoutMesocycleInput,
 	'mesocycleSplitDayExercises' | 'dayIndex'
->;
+> & {
+	/** Position of this routine when editing started (null for new ones), so logged workouts can follow it */
+	previousDayIndex: number | null;
+};
 
 export function createMesocycleExerciseSplitRunes() {
 	let mesocycle: RouterOutputs['mesocycles']['findById'] = $state(null);
-	let splitDays: MesocycleExerciseSplitDayWithoutIds[] = $state(
-		Array.from({ length: 7 }).map(() => ({ name: '', isRestDay: false }))
-	);
+	let splitDays: MesocycleExerciseSplitDayWithoutIds[] = $state([
+		{ name: '', isRestDay: false, previousDayIndex: null }
+	]);
 	let splitExercises: MesocycleExerciseTemplateWithoutIdsOrIndex[][] = $state([]);
 
 	let selectedSplitDayIndex: number = $state(0);
@@ -25,47 +28,38 @@ export function createMesocycleExerciseSplitRunes() {
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('mesocycleExerciseSplitRunes');
 		if (savedState) ({ splitDays, splitExercises, mesocycle } = JSON.parse(savedState));
+		// Edits saved by an older version don't know where routines came from: start over from the block
+		if (splitDays.some((splitDay) => splitDay.previousDayIndex === undefined)) mesocycle = null;
 	}
 
 	function addSplitDay() {
-		splitDays.push({ name: '', isRestDay: false });
+		splitDays.push({ name: '', isRestDay: false, previousDayIndex: null });
 	}
 
-	function removeSplitDay() {
-		splitDays.pop();
-	}
-
-	function toggleSplitDay(idx: number, markAsRest: boolean) {
-		if (!markAsRest) splitDays[idx].isRestDay = false;
-		else {
-			splitDays[idx].isRestDay = true;
-			splitDays[idx].name = '';
-		}
+	function removeSplitDay(idx: number) {
+		splitDays.splice(idx, 1);
+		splitExercises.splice(idx, 1);
+		if (selectedSplitDayIndex >= splitDays.length) selectedSplitDayIndex = splitDays.length - 1;
+		saveStoresToLocalStorage();
 	}
 
 	function validateSplitStructure() {
-		const splitDayNames = splitDays.filter((splitDay) => !splitDay.isRestDay).map((splitDay) => splitDay.name);
-
-		return new Set(splitDayNames).size === splitDayNames.length;
-	}
-
-	function getDataLossDays() {
-		const dataLossDays: number[] = [];
-		for (let i = 0; i < splitExercises.length; i++) {
-			if (splitDays[i] === undefined && splitExercises[i].length === 0) continue;
-			if (splitDays[i] === undefined && splitExercises[i].length > 0) dataLossDays.push(i);
-			else if (splitDays[i].isRestDay && splitExercises[i].length > 0) dataLossDays.push(i);
-		}
-		return dataLossDays;
+		const routineNames = splitDays.map((splitDay) => splitDay.name.trim());
+		return new Set(routineNames).size === routineNames.length;
 	}
 
 	function updateSplitExercisesStructure() {
-		for (let i = 0; i < splitDays.length; i++) {
-			if (splitDays[i].isRestDay || splitExercises[i] === undefined) splitExercises[i] = [];
-		}
+		for (let i = 0; i < splitDays.length; i++) splitExercises[i] ??= [];
 		splitExercises.length = splitDays.length;
-		selectedSplitDayIndex = splitDays.findIndex((splitDay) => !splitDay.isRestDay);
+		selectedSplitDayIndex = 0;
 		saveStoresToLocalStorage();
+	}
+
+	/** Routines already trained in this block can't be deleted, or their workouts would lose their routine */
+	function routineHasWorkouts(idx: number) {
+		const previousDayIndex = splitDays[idx]?.previousDayIndex;
+		if (previousDayIndex === null || previousDayIndex === undefined || !mesocycle) return false;
+		return mesocycle.workoutsOfMesocycle.some((wm) => wm.splitDayIndex === previousDayIndex);
 	}
 
 	function exerciseNameExists(exerciseName: string, exceptIndex?: number) {
@@ -130,7 +124,7 @@ export function createMesocycleExerciseSplitRunes() {
 
 	function resetStores() {
 		mesocycle = null;
-		splitDays = Array.from({ length: 7 }).map(() => ({ name: '', isRestDay: false }));
+		splitDays = [{ name: '', isRestDay: false, previousDayIndex: null }];
 		splitExercises = [];
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
@@ -144,11 +138,14 @@ export function createMesocycleExerciseSplitRunes() {
 
 		resetStores();
 		mesocycle = structuredClone($state.snapshot(mesocycleWithExerciseSplit));
-		splitDays = mesocycleWithExerciseSplit.mesocycleExerciseSplitDays.map((splitDay) => {
-			const { id, mesocycleId, mesocycleSplitDayExercises, ...rest } = splitDay;
-			return rest;
-		});
-		splitExercises = mesocycleWithExerciseSplit.mesocycleExerciseSplitDays.map((splitDay) =>
+		// Rest days belonged to the old fixed rotation; only routines are edited
+		const routines = mesocycleWithExerciseSplit.mesocycleExerciseSplitDays.filter((splitDay) => !splitDay.isRestDay);
+		splitDays = routines.map((splitDay) => ({
+			name: splitDay.name,
+			isRestDay: false,
+			previousDayIndex: splitDay.dayIndex
+		}));
+		splitExercises = routines.map((splitDay) =>
 			splitDay.mesocycleSplitDayExercises.map((exercise) => {
 				const { id, mesocycleExerciseSplitDayId, ...rest } = exercise;
 				return rest;
@@ -187,9 +184,8 @@ export function createMesocycleExerciseSplitRunes() {
 		},
 		addSplitDay,
 		removeSplitDay,
-		toggleSplitDay,
 		validateSplitStructure,
-		getDataLossDays,
+		routineHasWorkouts,
 		updateSplitExercisesStructure,
 		addExercise,
 		editExercise,

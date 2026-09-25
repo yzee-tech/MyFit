@@ -5,6 +5,7 @@ import { createContext } from '$lib/trpc/context';
 import { QuotesDisplayModeSchema } from '$lib/zodSchemas';
 
 const QuotesDisplayModesArraySchema = z.array(QuotesDisplayModeSchema).min(1);
+const defaultWelcomeBack = { welcomeBackEnabled: true, welcomeBackAfterDays: 7 };
 
 export const load: PageServerLoad = async (event) => {
 	event.depends('settings:userSettings');
@@ -18,7 +19,8 @@ export const load: PageServerLoad = async (event) => {
 				hasError: false,
 				userSettings: {
 					motivationalQuotesEnabled: false,
-					quotesDisplayModes: [QuotesDisplayModeSchema.Values.PRE_WORKOUT]
+					quotesDisplayModes: [QuotesDisplayModeSchema.Values.PRE_WORKOUT],
+					...defaultWelcomeBack
 				}
 			};
 		}
@@ -31,7 +33,9 @@ export const load: PageServerLoad = async (event) => {
 				quotesDisplayModes: validatedQuotesDisplayModes.success
 					? validatedQuotesDisplayModes.data
 					: [QuotesDisplayModeSchema.Values.PRE_WORKOUT],
-				motivationalQuotesEnabled: Boolean(userSettings.motivationalQuotesEnabled)
+				motivationalQuotesEnabled: Boolean(userSettings.motivationalQuotesEnabled),
+				welcomeBackEnabled: userSettings.welcomeBackEnabled,
+				welcomeBackAfterDays: userSettings.welcomeBackAfterDays
 			}
 		};
 	} catch (error) {
@@ -41,7 +45,8 @@ export const load: PageServerLoad = async (event) => {
 			hasError: true,
 			userSettings: {
 				motivationalQuotesEnabled: false,
-				quotesDisplayModes: [QuotesDisplayModeSchema.Values.PRE_WORKOUT]
+				quotesDisplayModes: [QuotesDisplayModeSchema.Values.PRE_WORKOUT],
+				...defaultWelcomeBack
 			},
 			errorMessage: error instanceof Error ? error.message : 'Failed to load settings:'
 		};

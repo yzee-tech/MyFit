@@ -76,5 +76,9 @@ model UserSettings {
   motivationalQuotesEnabled Boolean             @default(false)
   quotesDisplayModes        QuotesDisplayMode[] @default([PRE_WORKOUT])
 
+  /// After this many days without any workout, the next one repeats last numbers with 1 extra RIR
+  welcomeBackEnabled   Boolean @default(true)
+  welcomeBackAfterDays Int     @default(7)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
