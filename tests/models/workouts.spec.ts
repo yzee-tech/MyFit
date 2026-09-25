@@ -523,13 +523,20 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('kg');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
 
+	// Copying last time's sets from history (stored in kg) shows them in this exercise's unit: 90 lb = 40.82 kg
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	await page.getByRole('button', { name: 'Copy these sets' }).first().click();
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40.82');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('12');
+
 	// Switch this exercise back to lb: the planned sets snap to 90 lb
 	await page.getByTestId('Barbell rows-unit-toggle').click();
 	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('lb');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('90');
 });
 
-test('home unit in lb: bodyweight shown and entered in lb', async ({ page }) => {
+test('home unit in lb: bodyweight shown and entered in lb', async ({ page, userData }) => {
 	await createSplitAndMesoForTest(page);
 	await page.goto('/settings');
 	await page.getByLabel('Home unit pounds').click();
@@ -541,4 +548,30 @@ test('home unit in lb: bodyweight shown and entered in lb', async ({ page }) => 
 	await page.getByRole('button', { name: 'Next' }).click();
 	// 220 lb is sent as kg
 	await expect(page).toHaveURL(/userBodyweight=99\.79/);
+
+	for (const exercise of ['Pull-ups', 'Barbell rows', 'Dumbbell bicep curls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.locator('[id="Face\\ pulls-set-1-reps"]').fill('20');
+	await page.locator('[id="Face\\ pulls-set-2-reps"]').fill('20');
+	await page.locator('[id="Face\\ pulls-set-3-reps"]').fill('20');
+	await page.locator('[id="Face\\ pulls-set-1-load"]').fill('10');
+	await page.getByTestId('Face pulls-set-1-action').click();
+	await page.getByTestId('Face pulls-set-2-action').click();
+	await page.getByTestId('Face pulls-set-3-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	// Stored in kg, shown in lb
+	const saved = await prisma.workout.findFirstOrThrow({
+		where: { userId: userData.userId },
+		include: { workoutExercises: { include: { sets: true } } }
+	});
+	expect(saved.userBodyweight).toBeCloseTo(99.79, 1);
+	expect(saved.workoutExercises[0].weightUnit).toEqual('KG');
+	expect(saved.workoutExercises[0].sets[0].load).toBeCloseTo(10);
+	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await expect(page.getByRole('tabpanel')).toContainText('User bodyweight 220 lb');
 });
