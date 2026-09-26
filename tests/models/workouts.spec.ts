@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createMesocycle, pickRoutine } from './commonFunctions';
+import { createExercises, createMesocycle, pickExercise, pickRoutine } from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -14,14 +14,15 @@ async function createSplitAndMesoForTest(page: Page) {
 	await page.goto('/workouts');
 }
 
-test('create workout', async ({ page }) => {
+test('create workout', async ({ page, userData }) => {
+	await createExercises(userData.userId, ['Barbell bench press']);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByRole('option', { name: 'Barbell bench press', exact: true }).click();
+	await pickExercise(page, 'Barbell bench press');
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -45,15 +46,26 @@ test('create workout', async ({ page }) => {
 	);
 });
 
-test('create workout with all set types', async ({ page }) => {
+test('create workout with all set types', async ({ page, userData }) => {
+	await createExercises(userData.userId, [
+		'Barbell bench press',
+		'Dumbbell bicep curls',
+		'Leaning dumbbell lateral raises',
+		'Incline dumbbell press',
+		{
+			name: 'Leg press',
+			targetMuscleGroup: 'Quads',
+			bodyweightFraction: 0.5,
+			note: 'Feet high for quad focus, push up, control return.'
+		}
+	]);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').click();
-	await page.getByRole('option', { name: 'Barbell bench press', exact: true }).click();
+	await pickExercise(page, 'Barbell bench press');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
@@ -68,8 +80,7 @@ test('create workout with all set types', async ({ page }) => {
 	await page.getByTestId('Barbell bench press-set-2-action').click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').click();
-	await page.getByRole('option', { name: 'Dumbbell bicep curls' }).click();
+	await pickExercise(page, 'Dumbbell bicep curls');
 	await page.getByLabel('Sets').fill('2');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
 	await page.getByRole('option', { name: 'Myorep match' }).first().click();
@@ -91,8 +102,7 @@ test('create workout with all set types', async ({ page }) => {
 	await page.getByTestId('Dumbbell bicep curls-set-2-mini-set-1-action').click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').click();
-	await page.getByRole('option', { name: 'Leaning dumbbell lateral' }).click();
+	await pickExercise(page, 'Leaning dumbbell lateral raises');
 	await page.getByLabel('Sets').fill('2');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
 	await page.getByRole('option', { name: 'Drop' }).click();
@@ -121,8 +131,7 @@ test('create workout with all set types', async ({ page }) => {
 	await page.getByTestId('Leaning dumbbell lateral raises-set-2-mini-set-1-action').click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').click();
-	await page.getByRole('option', { name: 'Incline dumbbell press' }).click();
+	await pickExercise(page, 'Incline dumbbell press');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
 	await page.getByRole('option', { name: 'V2' }).click();
 	await page.getByLabel('Sets').fill('2');
@@ -138,12 +147,9 @@ test('create workout with all set types', async ({ page }) => {
 	await page.getByTestId('Incline dumbbell press-set-2-action').click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').click();
-	await page.getByRole('option', { name: 'Leg press' }).click();
+	await pickExercise(page, 'Leg press');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
 	await page.getByRole('option', { name: 'Myorep', exact: true }).click();
-	await page.getByLabel('Bodyweight fraction').click();
-	await page.getByPlaceholder('Fraction').fill('0.5');
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -175,7 +181,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'New workout Exercises Pull A Week 1 Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Reps Load (+BW) RIR Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
+		'New workout Exercises Pull A Week 1 Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Reps +/− kg (BW) RIR Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Reps Load RIR Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR Previous Next'
 	);
 	await page.locator('#Pull-ups-set-1-reps').fill('12');
 	await page.locator('#Pull-ups-set-2-reps').fill('11');
@@ -223,16 +229,17 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	);
 });
 
-test('create workout without using active mesocycle', async ({ page }) => {
+test('create workout without using active mesocycle', async ({ page, userData }) => {
+	await createExercises(userData.userId, ['Barbell bench press']);
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
-	await page.getByLabel('Use active mesocycle').click();
+	await pickRoutine(page, 'Blank workout');
 	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	await page.getByLabel('add-exercise').click();
-	await page.getByRole('option', { name: 'Barbell bench press', exact: true }).click();
+	await pickExercise(page, 'Barbell bench press');
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -390,8 +397,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByTestId('Pull-ups-menu-button').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Sets').fill('2');
-	await page.getByPlaceholder('Exercise cues, machine').click();
-	await page.getByPlaceholder('Exercise cues, machine').fill('Custom note');
+	await page.getByPlaceholder('For this routine').fill('Custom note');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
 	await expect(page.getByRole('main')).toContainText('Custom note');
 

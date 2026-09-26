@@ -4,6 +4,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Switch } from '$lib/components/ui/switch';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { trpc } from '$lib/trpc/client';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
@@ -15,7 +16,7 @@
 
 	let { weightSets, homeWeightUnit }: { weightSets: WeightSetLike[]; homeWeightUnit: WeightUnit } = $props();
 
-	type Draft = { id?: string; name: string; unit: WeightUnit; weights: number[] };
+	type Draft = { id?: string; name: string; unit: WeightUnit; weights: number[]; isAssistance: boolean };
 	let draft: Draft | null = $state(null);
 	let saving = $state(false);
 
@@ -26,8 +27,14 @@
 
 	function startEditing(weightSet?: WeightSetLike) {
 		draft = weightSet
-			? { id: weightSet.id, name: weightSet.name, unit: weightSet.unit, weights: [...weightSet.weights] }
-			: { name: '', unit: homeWeightUnit, weights: [] };
+			? {
+					id: weightSet.id,
+					name: weightSet.name,
+					unit: weightSet.unit,
+					weights: [...weightSet.weights],
+					isAssistance: weightSet.isAssistance ?? false
+				}
+			: { name: '', unit: homeWeightUnit, weights: [], isAssistance: false };
 		rangeFrom = rangeTo = rangeStep = singleWeight = undefined;
 	}
 
@@ -99,7 +106,7 @@
 				<div class="mr-auto flex min-w-0 flex-col">
 					<span class="font-medium">{weightSet.name}</span>
 					<span class="text-sm text-muted-foreground">
-						{formatWeightList(weightSet.weights)}
+						{weightSet.isAssistance ? 'Assistance: ' : ''}{formatWeightList(weightSet.weights)}
 						{unitLabel(weightSet.unit)}
 					</span>
 				</div>
@@ -145,6 +152,15 @@
 						<ToggleGroup.Item aria-label="Weight set in kilograms" value="KG">kg</ToggleGroup.Item>
 						<ToggleGroup.Item aria-label="Weight set in pounds" value="LB">lb</ToggleGroup.Item>
 					</ToggleGroup.Root>
+				</div>
+				<div class="flex items-start justify-between gap-4">
+					<div class="grid gap-0.5">
+						<Label for="weight-set-assistance">Assisted machine</Label>
+						<span class="text-xs text-muted-foreground">
+							The weights are help, e.g. an assisted pull-up machine's 5–50 kg. Logged as negative loads.
+						</span>
+					</div>
+					<Switch id="weight-set-assistance" bind:checked={draft.isAssistance} />
 				</div>
 
 				<div class="grid gap-1.5">

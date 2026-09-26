@@ -1,6 +1,12 @@
 import { expect, test } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createMesocycle, createTemplateExerciseSplit, pickRoutine } from './commonFunctions';
+import {
+	createExercises,
+	createMesocycle,
+	createTemplateExerciseSplit,
+	pickExercise,
+	pickRoutine
+} from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -174,7 +180,6 @@ test("edit mesocycle's exercise split", async ({ page }) => {
 	await page.getByLabel('Sets').click();
 	await page.getByLabel('Sets').fill('4');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
@@ -183,7 +188,8 @@ test("edit mesocycle's exercise split", async ({ page }) => {
 	await expect(page.getByRole('main')).toContainText('Face pulls 4 Straight sets of 15 to 30 reps Rear delts');
 });
 
-test('add routines mid-block; trained routines keep their workouts', async ({ page }) => {
+test('add routines mid-block; trained routines keep their workouts', async ({ page, userData }) => {
+	await createExercises(userData.userId, ['Barbell bench press']);
 	await createMesocycle(page, { exerciseSplitCreated: true });
 	await page.getByRole('link', { name: 'Workouts' }).click();
 	await page.getByLabel('create-workout').click();
@@ -218,10 +224,9 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('tab', { name: 'Hotel gym - Full body' }).click();
 	await page.getByLabel('add-exercise').click();
-	await page.getByRole('option', { name: 'Barbell bench press', exact: true }).click();
+	await pickExercise(page, 'Barbell bench press');
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
@@ -238,7 +243,8 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await expect(page.locator('[id="Calf\\ raises-set-1-load"]')).toHaveValue('50');
 });
 
-test('extract exercise split from mesocycle', async ({ page }) => {
+test('extract exercise split from mesocycle', async ({ page, userData }) => {
+	await createExercises(userData.userId, [{ name: 'Lat pulldowns', targetMuscleGroup: 'Lats' }]);
 	await createMesocycle(page, { exerciseSplitCreated: true });
 	await page.getByRole('link', { name: 'MyMeso' }).first().click();
 	await expect(page.getByRole('main')).toContainText(new Date().toLocaleDateString('en-US'));
@@ -247,10 +253,9 @@ test('extract exercise split from mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('tabpanel').getByRole('list').getByRole('button').first().click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByPlaceholder('Type here or search...').fill('Lat pulldowns');
-	await page.locator('#exercise-involves-bodyweight').click();
+	// Swap Pull-ups for Lat pulldowns, keeping the routine's sets and reps
+	await pickExercise(page, 'Lat pulldowns');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	await page.getByLabel('mesocycle-options').click();

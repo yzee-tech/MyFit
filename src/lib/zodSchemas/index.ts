@@ -30,7 +30,7 @@ export const MesocycleExerciseTemplateScalarFieldEnumSchema = z.enum(['id','name
 
 export const UserScalarFieldEnumSchema = z.enum(['id','name','email','emailVerified','image','createdAt','updatedAt','migratedFromV2']);
 
-export const WeightSetScalarFieldEnumSchema = z.enum(['id','name','unit','weights','userId']);
+export const WeightSetScalarFieldEnumSchema = z.enum(['id','name','unit','weights','isAssistance','userId']);
 
 export const AccountScalarFieldEnumSchema = z.enum(['userId','type','provider','providerAccountId','refresh_token','access_token','expires_at','token_type','scope','id_token','session_state','createdAt','updatedAt']);
 
@@ -44,7 +44,7 @@ export const WorkoutOfMesocycleScalarFieldEnumSchema = z.enum(['id','workoutId',
 
 export const WorkoutScalarFieldEnumSchema = z.enum(['id','userBodyweight','startedAt','endedAt','userId','note','isDeload']);
 
-export const WorkoutExerciseScalarFieldEnumSchema = z.enum(['id','exerciseIndex','name','workoutId','targetMuscleGroup','customMuscleGroup','bodyweightFraction','setType','changeType','changeAmount','repRangeStart','repRangeEnd','note','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
+export const WorkoutExerciseScalarFieldEnumSchema = z.enum(['id','exerciseIndex','name','workoutId','targetMuscleGroup','customMuscleGroup','bodyweightFraction','setType','changeType','changeAmount','repRangeStart','repRangeEnd','note','exerciseNote','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
 
 export const WorkoutExerciseSetScalarFieldEnumSchema = z.enum(['id','setIndex','workoutExerciseId','reps','load','RIR','skipped']);
 
@@ -295,6 +295,10 @@ export const WeightSetSchema = z.object({
    * In `unit`, sorted ascending
    */
   weights: z.number().array(),
+  /**
+   * An assisted machine's settings: each weight is help, so it's logged as a negative load
+   */
+  isAssistance: z.boolean(),
   userId: z.string(),
 })
 
@@ -424,7 +428,14 @@ export const WorkoutExerciseSchema = z.object({
   changeAmount: z.number().nullable(),
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
+  /**
+   * The routine's note for this exercise that day
+   */
   note: z.string().nullable(),
+  /**
+   * The exercise's own note that day
+   */
+  exerciseNote: z.string().nullable(),
   overloadPercentage: z.number().nullable(),
   lastSetToFailure: z.boolean().nullable(),
   forceRIRMatching: z.boolean().nullable(),
@@ -835,6 +846,7 @@ export const WeightSetSelectSchema: z.ZodType<Prisma.WeightSetSelect> = z.object
   name: z.boolean().optional(),
   unit: z.boolean().optional(),
   weights: z.boolean().optional(),
+  isAssistance: z.boolean().optional(),
   userId: z.boolean().optional(),
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
 }).strict()
@@ -1018,6 +1030,7 @@ export const WorkoutExerciseSelectSchema: z.ZodType<Prisma.WorkoutExerciseSelect
   repRangeStart: z.boolean().optional(),
   repRangeEnd: z.boolean().optional(),
   note: z.boolean().optional(),
+  exerciseNote: z.boolean().optional(),
   overloadPercentage: z.boolean().optional(),
   lastSetToFailure: z.boolean().optional(),
   forceRIRMatching: z.boolean().optional(),
@@ -1933,6 +1946,7 @@ export const WeightSetWhereInputSchema: z.ZodType<Prisma.WeightSetWhereInput> = 
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   unit: z.union([ z.lazy(() => EnumWeightUnitFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional(),
   weights: z.lazy(() => FloatNullableListFilterSchema).optional(),
+  isAssistance: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
 }).strict();
@@ -1942,6 +1956,7 @@ export const WeightSetOrderByWithRelationInputSchema: z.ZodType<Prisma.WeightSet
   name: z.lazy(() => SortOrderSchema).optional(),
   unit: z.lazy(() => SortOrderSchema).optional(),
   weights: z.lazy(() => SortOrderSchema).optional(),
+  isAssistance: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional(),
   user: z.lazy(() => UserOrderByWithRelationInputSchema).optional()
 }).strict();
@@ -1957,6 +1972,7 @@ export const WeightSetWhereUniqueInputSchema: z.ZodType<Prisma.WeightSetWhereUni
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   unit: z.union([ z.lazy(() => EnumWeightUnitFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional(),
   weights: z.lazy(() => FloatNullableListFilterSchema).optional(),
+  isAssistance: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
 }).strict());
@@ -1966,6 +1982,7 @@ export const WeightSetOrderByWithAggregationInputSchema: z.ZodType<Prisma.Weight
   name: z.lazy(() => SortOrderSchema).optional(),
   unit: z.lazy(() => SortOrderSchema).optional(),
   weights: z.lazy(() => SortOrderSchema).optional(),
+  isAssistance: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => WeightSetCountOrderByAggregateInputSchema).optional(),
   _avg: z.lazy(() => WeightSetAvgOrderByAggregateInputSchema).optional(),
@@ -1982,6 +1999,7 @@ export const WeightSetScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Wei
   name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   unit: z.union([ z.lazy(() => EnumWeightUnitWithAggregatesFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional(),
   weights: z.lazy(() => FloatNullableListFilterSchema).optional(),
+  isAssistance: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
 }).strict();
 
@@ -2434,6 +2452,7 @@ export const WorkoutExerciseWhereInputSchema: z.ZodType<Prisma.WorkoutExerciseWh
   repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
+  exerciseNote: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
   forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
@@ -2462,6 +2481,7 @@ export const WorkoutExerciseOrderByWithRelationInputSchema: z.ZodType<Prisma.Wor
   repRangeStart: z.lazy(() => SortOrderSchema).optional(),
   repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
   note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
+  exerciseNote: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   overloadPercentage: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -2496,6 +2516,7 @@ export const WorkoutExerciseWhereUniqueInputSchema: z.ZodType<Prisma.WorkoutExer
   repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
   repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
+  exerciseNote: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
   forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
@@ -2524,6 +2545,7 @@ export const WorkoutExerciseOrderByWithAggregationInputSchema: z.ZodType<Prisma.
   repRangeStart: z.lazy(() => SortOrderSchema).optional(),
   repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
   note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
+  exerciseNote: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   overloadPercentage: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -2557,6 +2579,7 @@ export const WorkoutExerciseScalarWhereWithAggregatesInputSchema: z.ZodType<Pris
   repRangeStart: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
   repRangeEnd: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
   note: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
+  exerciseNote: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
   overloadPercentage: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
   lastSetToFailure: z.union([ z.lazy(() => BoolNullableWithAggregatesFilterSchema),z.boolean() ]).optional().nullable(),
   forceRIRMatching: z.union([ z.lazy(() => BoolNullableWithAggregatesFilterSchema),z.boolean() ]).optional().nullable(),
@@ -3577,6 +3600,7 @@ export const WeightSetCreateInputSchema: z.ZodType<Prisma.WeightSetCreateInput> 
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutWeightSetsInputSchema)
 }).strict();
 
@@ -3585,6 +3609,7 @@ export const WeightSetUncheckedCreateInputSchema: z.ZodType<Prisma.WeightSetUnch
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional(),
   userId: z.string()
 }).strict();
 
@@ -3593,6 +3618,7 @@ export const WeightSetUpdateInputSchema: z.ZodType<Prisma.WeightSetUpdateInput> 
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutWeightSetsNestedInputSchema).optional()
 }).strict();
 
@@ -3601,6 +3627,7 @@ export const WeightSetUncheckedUpdateInputSchema: z.ZodType<Prisma.WeightSetUnch
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -3609,6 +3636,7 @@ export const WeightSetCreateManyInputSchema: z.ZodType<Prisma.WeightSetCreateMan
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional(),
   userId: z.string()
 }).strict();
 
@@ -3617,6 +3645,7 @@ export const WeightSetUpdateManyMutationInputSchema: z.ZodType<Prisma.WeightSetU
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
 export const WeightSetUncheckedUpdateManyInputSchema: z.ZodType<Prisma.WeightSetUncheckedUpdateManyInput> = z.object({
@@ -3624,6 +3653,7 @@ export const WeightSetUncheckedUpdateManyInputSchema: z.ZodType<Prisma.WeightSet
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -4048,6 +4078,7 @@ export const WorkoutExerciseCreateInputSchema: z.ZodType<Prisma.WorkoutExerciseC
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -4075,6 +4106,7 @@ export const WorkoutExerciseUncheckedCreateInputSchema: z.ZodType<Prisma.Workout
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -4100,6 +4132,7 @@ export const WorkoutExerciseUpdateInputSchema: z.ZodType<Prisma.WorkoutExerciseU
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -4127,6 +4160,7 @@ export const WorkoutExerciseUncheckedUpdateInputSchema: z.ZodType<Prisma.Workout
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -4153,6 +4187,7 @@ export const WorkoutExerciseCreateManyInputSchema: z.ZodType<Prisma.WorkoutExerc
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -4177,6 +4212,7 @@ export const WorkoutExerciseUpdateManyMutationInputSchema: z.ZodType<Prisma.Work
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -4201,6 +4237,7 @@ export const WorkoutExerciseUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Wor
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -5333,6 +5370,7 @@ export const WeightSetCountOrderByAggregateInputSchema: z.ZodType<Prisma.WeightS
   name: z.lazy(() => SortOrderSchema).optional(),
   unit: z.lazy(() => SortOrderSchema).optional(),
   weights: z.lazy(() => SortOrderSchema).optional(),
+  isAssistance: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -5344,6 +5382,7 @@ export const WeightSetMaxOrderByAggregateInputSchema: z.ZodType<Prisma.WeightSet
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   unit: z.lazy(() => SortOrderSchema).optional(),
+  isAssistance: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -5351,6 +5390,7 @@ export const WeightSetMinOrderByAggregateInputSchema: z.ZodType<Prisma.WeightSet
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   unit: z.lazy(() => SortOrderSchema).optional(),
+  isAssistance: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -5641,6 +5681,7 @@ export const WorkoutExerciseCountOrderByAggregateInputSchema: z.ZodType<Prisma.W
   repRangeStart: z.lazy(() => SortOrderSchema).optional(),
   repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
   note: z.lazy(() => SortOrderSchema).optional(),
+  exerciseNote: z.lazy(() => SortOrderSchema).optional(),
   overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
   lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
   forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
@@ -5678,6 +5719,7 @@ export const WorkoutExerciseMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Wor
   repRangeStart: z.lazy(() => SortOrderSchema).optional(),
   repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
   note: z.lazy(() => SortOrderSchema).optional(),
+  exerciseNote: z.lazy(() => SortOrderSchema).optional(),
   overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
   lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
   forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
@@ -5703,6 +5745,7 @@ export const WorkoutExerciseMinOrderByAggregateInputSchema: z.ZodType<Prisma.Wor
   repRangeStart: z.lazy(() => SortOrderSchema).optional(),
   repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
   note: z.lazy(() => SortOrderSchema).optional(),
+  exerciseNote: z.lazy(() => SortOrderSchema).optional(),
   overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
   lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
   forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
@@ -7689,6 +7732,7 @@ export const WorkoutExerciseCreateWithoutExerciseInputSchema: z.ZodType<Prisma.W
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -7715,6 +7759,7 @@ export const WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema: z.ZodType
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -7900,6 +7945,7 @@ export const WorkoutExerciseScalarWhereInputSchema: z.ZodType<Prisma.WorkoutExer
   repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
+  exerciseNote: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
   forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
@@ -9187,6 +9233,7 @@ export const WeightSetCreateWithoutUserInputSchema: z.ZodType<Prisma.WeightSetCr
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional()
 }).strict();
 
 export const WeightSetUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.WeightSetUncheckedCreateWithoutUserInput> = z.object({
@@ -9194,6 +9241,7 @@ export const WeightSetUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.We
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional()
 }).strict();
 
 export const WeightSetCreateOrConnectWithoutUserInputSchema: z.ZodType<Prisma.WeightSetCreateOrConnectWithoutUserInput> = z.object({
@@ -9427,6 +9475,7 @@ export const WeightSetScalarWhereInputSchema: z.ZodType<Prisma.WeightSetScalarWh
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   unit: z.union([ z.lazy(() => EnumWeightUnitFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional(),
   weights: z.lazy(() => FloatNullableListFilterSchema).optional(),
+  isAssistance: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
 }).strict();
 
@@ -10021,6 +10070,7 @@ export const WorkoutExerciseCreateWithoutWorkoutInputSchema: z.ZodType<Prisma.Wo
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -10046,6 +10096,7 @@ export const WorkoutExerciseUncheckedCreateWithoutWorkoutInputSchema: z.ZodType<
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -10356,6 +10407,7 @@ export const WorkoutExerciseCreateWithoutSetsInputSchema: z.ZodType<Prisma.Worko
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -10382,6 +10434,7 @@ export const WorkoutExerciseUncheckedCreateWithoutSetsInputSchema: z.ZodType<Pri
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -10448,6 +10501,7 @@ export const WorkoutExerciseUpdateWithoutSetsInputSchema: z.ZodType<Prisma.Worko
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10474,6 +10528,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutSetsInputSchema: z.ZodType<Pri
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10627,6 +10682,7 @@ export const WorkoutExerciseCreateManyExerciseInputSchema: z.ZodType<Prisma.Work
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -10782,6 +10838,7 @@ export const WorkoutExerciseUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.W
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10808,6 +10865,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutExerciseInputSchema: z.ZodType
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10833,6 +10891,7 @@ export const WorkoutExerciseUncheckedUpdateManyWithoutExerciseInputSchema: z.Zod
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -11258,6 +11317,7 @@ export const WeightSetCreateManyUserInputSchema: z.ZodType<Prisma.WeightSetCreat
   name: z.string(),
   unit: z.lazy(() => WeightUnitSchema),
   weights: z.union([ z.lazy(() => WeightSetCreateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.boolean().optional()
 }).strict();
 
 export const ExerciseCreateManyUserInputSchema: z.ZodType<Prisma.ExerciseCreateManyUserInput> = z.object({
@@ -11433,6 +11493,7 @@ export const WeightSetUpdateWithoutUserInputSchema: z.ZodType<Prisma.WeightSetUp
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
 export const WeightSetUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.WeightSetUncheckedUpdateWithoutUserInput> = z.object({
@@ -11440,6 +11501,7 @@ export const WeightSetUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.We
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
 export const WeightSetUncheckedUpdateManyWithoutUserInputSchema: z.ZodType<Prisma.WeightSetUncheckedUpdateManyWithoutUserInput> = z.object({
@@ -11447,6 +11509,7 @@ export const WeightSetUncheckedUpdateManyWithoutUserInputSchema: z.ZodType<Prism
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   unit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => EnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   weights: z.union([ z.lazy(() => WeightSetUpdateweightsInputSchema),z.number().array() ]).optional(),
+  isAssistance: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
 export const ExerciseUpdateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseUpdateWithoutUserInput> = z.object({
@@ -11498,6 +11561,7 @@ export const WorkoutExerciseCreateManyWorkoutInputSchema: z.ZodType<Prisma.Worko
   repRangeStart: z.number().int(),
   repRangeEnd: z.number().int(),
   note: z.string().optional().nullable(),
+  exerciseNote: z.string().optional().nullable(),
   overloadPercentage: z.number().optional().nullable(),
   lastSetToFailure: z.boolean().optional().nullable(),
   forceRIRMatching: z.boolean().optional().nullable(),
@@ -11522,6 +11586,7 @@ export const WorkoutExerciseUpdateWithoutWorkoutInputSchema: z.ZodType<Prisma.Wo
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -11547,6 +11612,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutWorkoutInputSchema: z.ZodType<
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -11572,6 +11638,7 @@ export const WorkoutExerciseUncheckedUpdateManyWithoutWorkoutInputSchema: z.ZodT
   repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  exerciseNote: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),

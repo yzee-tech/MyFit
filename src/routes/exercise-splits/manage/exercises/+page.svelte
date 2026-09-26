@@ -15,12 +15,75 @@
 	import DndComponent from '$lib/components/mesocycleAndExerciseSplit/DndComponent.svelte';
 	import SwapExercisesDialog from '$lib/components/mesocycleAndExerciseSplit/SwapExercisesDialog.svelte';
 	import { toast } from 'svelte-sonner';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
+	import { trpc } from '$lib/trpc/client';
+	import { TRPCClientError } from '@trpc/client';
+	import { onMount } from 'svelte';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Label } from '$lib/components/ui/label';
+	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
+	import { mesocycleExerciseSplitRunes } from '../../../mesocycles/[mesocycleId]/edit-split/mesocycleExerciseSplitRunes.svelte';
 
 	let swapDialogOpen = $state(false);
 	let reordering = $state(false);
 	let splitDayName = $derived(exerciseSplitRunes.splitDays[exerciseSplitRunes.selectedSplitDayIndex].name);
 	let selectedSplitDayExercises = $derived(exerciseSplitRunes.splitExercises[exerciseSplitRunes.selectedSplitDayIndex]);
+
+	let saving = $state(false);
+
+	// Editing a library can also update the current block made from it
+	let activeBlock: { id: string; name: string } | null = $state(null);
+	let updateActiveBlock = $state(true);
+	onMount(async () => {
+		const id = exerciseSplitRunes.editingExerciseSplitId;
+		if (id) activeBlock = await trpc().exerciseSplits.findActiveBlockForLibrary.query(id);
+	});
+
+	/** Routines as saved: without the editor's note of each routine's earlier name */
+	function routinesToSave() {
+		return exerciseSplitRunes.splitDays.map(({ previousName, ...splitDay }, idx) => ({ ...splitDay, dayIndex: idx }));
+	}
+
+	function exercisesToSave() {
+		return exerciseSplitRunes.splitExercises.map((dayExercises) =>
+			dayExercises.map((exercise, idx) => ({ ...exercise, exerciseIndex: idx }))
+		);
+	}
+
+	async function save() {
+		const splitData = {
+			splitName: exerciseSplitRunes.splitName,
+			splitDays: routinesToSave(),
+			splitExercises: exercisesToSave()
+		};
+		const id = exerciseSplitRunes.editingExerciseSplitId;
+		const updateBlock = id !== null && activeBlock !== null && updateActiveBlock;
+		saving = true;
+		try {
+			const { message } = id
+				? await trpc().exerciseSplits.editById.mutate({
+						id,
+						splitData,
+						updateBlock: updateBlock
+							? {
+									mesocycleId: activeBlock!.id,
+									previousRoutineNames: exerciseSplitRunes.splitDays.map((splitDay) => splitDay.previousName ?? null)
+								}
+							: undefined
+					})
+				: await trpc().exerciseSplits.create.mutate(splitData);
+			toast.success(message);
+			// The block's routines changed: drop any unsaved copy of them held by its editor
+			if (updateBlock) mesocycleExerciseSplitRunes.resetStores();
+			await invalidate('exerciseSplits:all');
+			exerciseSplitRunes.resetStores();
+			await goto('/exercise-splits');
+		} catch (error) {
+			// Nothing is lost: the edits stay here to try again
+			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to save');
+		}
+		saving = false;
+	}
 
 	function submitExercises() {
 		const noExerciseAddedDays = exerciseSplitRunes.splitDays.filter((splitDay, idx) => {
@@ -32,7 +95,7 @@
 			});
 			return;
 		}
-		goto('./overview');
+		save();
 	}
 </script>
 
@@ -126,9 +189,28 @@
 	</Tabs.Content>
 </Tabs.Root>
 
+{#if activeBlock}
+	<div class="mt-2 flex items-start gap-3 rounded-md border p-3">
+		<Checkbox id="update-active-block" class="mt-0.5" bind:checked={updateActiveBlock} />
+		<div class="grid gap-1">
+			<Label for="update-active-block">Also update my current block “{activeBlock.name}”</Label>
+			<p class="text-sm text-muted-foreground">
+				Its routines get these exercises, and new routines are added. Workouts, sets and exercise overrides are kept.
+				Routines you removed here stay in the block.
+			</p>
+		</div>
+	</div>
+{/if}
+
 <div class="mt-2 grid grid-cols-2 gap-1">
 	<Button href="./structure" variant="secondary">Previous</Button>
-	<Button onclick={submitExercises}>Next</Button>
+	<Button disabled={saving} onclick={submitExercises}>
+		{#if saving}
+			<LoaderCircle class="animate-spin" />
+		{:else}
+			Save
+		{/if}
+	</Button>
 </div>
 
 <SwapExercisesDialog

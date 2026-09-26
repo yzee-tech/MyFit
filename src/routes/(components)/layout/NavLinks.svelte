@@ -7,6 +7,7 @@
 
 	const linkItems: ({ text: string; href: string } | null)[] = [
 		{ text: 'Dashboard', href: '/dashboard' },
+		{ text: 'Exercises', href: '/exercises' },
 		{ text: 'Exercise stats', href: '/exercise-stats' },
 		null,
 		{ text: 'Routine libraries', href: '/exercise-splits' },

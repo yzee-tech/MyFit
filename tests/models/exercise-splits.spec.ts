@@ -17,22 +17,26 @@ test('create an exercise split', async ({ page }) => {
 	await page.getByLabel('Routine 1 name').fill('Pull');
 	await page.getByRole('button', { name: 'Next' }).click();
 
+	// A new exercise, made from the picker
 	await page.getByLabel('add-exercise').click();
-	await page.getByPlaceholder('Type here or search...').fill('Custom exercise');
-	await page.locator('button').filter({ hasText: 'Pick one' }).click();
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByRole('button', { name: 'New exercise' }).click();
+	await page.getByLabel('Name').fill('Custom exercise');
+	await page.getByRole('combobox', { name: 'Muscle group' }).click();
 	await page.getByRole('option', { name: 'Custom' }).click();
-	await page.getByLabel('Muscle group').fill('Soleus');
-	await page.getByLabel('Bodyweight fraction').click();
-	await page.getByLabel('Bodyweight fraction').fill('1');
+	await page.getByLabel('Custom muscle group').fill('Soleus');
+	await page.getByLabel('Counts bodyweight').click();
+	await page.getByLabel('Exercise note').fill('Custom note');
+	await page.getByRole('button', { name: 'Create exercise' }).click();
+	await expect(page.getByTestId('picked-exercise-details')).toContainText('Soleus 100% of bodyweight Custom note');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
 	await page.getByRole('option', { name: 'Drop' }).click();
 	await page.getByLabel('Rep range start').fill('15');
 	await page.getByLabel('Rep range end').fill('30');
 	await page.locator('#exercise-set-decrement').fill('5');
-	await page.getByPlaceholder('Exercise cues, machine').fill('Custom note');
+	await page.getByPlaceholder('For this routine').fill('Seat on 4');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible({
 		timeout: 10000
@@ -62,7 +66,6 @@ test('create a clone of a split', async ({ page }) => {
 	await page.getByPlaceholder('Type here').fill('Pull Push Legs (clone)');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/exercise-splits/manage/exercises');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').first().filter({ hasText: 'Routine library created' })).toBeVisible({
 		timeout: 10000
@@ -94,7 +97,6 @@ test('edit an exercise split', async ({ page }) => {
 	await page.getByRole('button', { name: 'Delete', exact: true }).click();
 	await expect(page.getByLabel('Routine 4 name')).toHaveValue('Push B');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({
 		timeout: 10000
@@ -120,7 +122,6 @@ test('editing a library can update the current block, keeping its sets and link'
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.waitForURL('/exercise-splits/manage/structure');
 	await page.getByLabel('Routine 1 name').fill('Hotel – Pull');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByLabel('Also update my current block “MyMeso”')).toBeChecked();
 	await page.getByRole('button', { name: 'Save' }).click();
@@ -152,7 +153,6 @@ test('editing a library can update the current block, keeping its sets and link'
 	await page.getByLabel('exercise-split-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Routine 1 name').fill('Home – Pull');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByLabel('Also update my current block “MyMeso”').click();
 	await page.getByRole('button', { name: 'Save' }).click();

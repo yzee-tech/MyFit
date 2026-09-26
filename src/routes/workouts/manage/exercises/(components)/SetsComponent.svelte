@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
-	import { formatWeight, fromKg } from '$lib/utils/weightUnits';
+	import { formatWeight, fromKg, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
@@ -89,6 +89,15 @@
 			return firstSet.load + setIdx * exercise.changeAmount;
 		}
 		return firstSet.load * (1 + setIdx * (exercise.changeAmount / 100));
+	}
+
+	/** For bodyweight exercises: what a set counts as, e.g. -20 at 100 kg = 80 kg, 80% of bodyweight */
+	function countedLoad(load: number | undefined) {
+		const bodyweightKg = workoutRunes.workoutData?.userBodyweight;
+		if (typeof exercise.bodyweightFraction !== 'number' || typeof load !== 'number' || !bodyweightKg) return null;
+		const bodyweight = fromKg(bodyweightKg, exercise.weightUnit ?? 'KG');
+		const total = roundWeight(exercise.bodyweightFraction * bodyweight + load);
+		return { total, percentage: Math.round((total / bodyweight) * 100) };
 	}
 
 	function getNextLoad(setIdx: number) {
@@ -189,24 +198,26 @@
 <div class="grid grid-cols-4 gap-1">
 	<span class="text-center text-sm font-medium">Reps</span>
 	<span class="text-center text-sm font-medium">
-		Load
 		{#if typeof exercise.bodyweightFraction === 'number'}
+			+/− {unitLabel(exercise.weightUnit ?? 'KG')}
 			<Popover.Root>
 				<Popover.Trigger>
-					<span class="text-xs font-semibold text-muted-foreground underline">(+BW)</span>
+					<span class="text-xs font-semibold text-muted-foreground underline">(BW)</span>
 				</Popover.Trigger>
 				<Popover.Content>
 					<p class="text-sm text-muted-foreground">
-						{exercise.bodyweightFraction * 100}% of your bodyweight is taken into account for this exercise. No need to
-						adjust the load manually.
+						Enter added weight as a positive number (e.g. 10 for a plate on a belt), and help as a negative number (e.g.
+						-20 on an assisted machine). Plain bodyweight is 0.
 						<br /><br />
-						{formatWeight(
+						{Math.round(exercise.bodyweightFraction * 100)}% of your bodyweight ({formatWeight(
 							exercise.bodyweightFraction * workoutRunes.workoutData!.userBodyweight!,
 							exercise.weightUnit ?? 'KG'
-						)} will be automatically added to the load of each set.
+						)}) is counted automatically.
 					</p>
 				</Popover.Content>
 			</Popover.Root>
+		{:else}
+			Load
 		{/if}
 	</span>
 	<span class="text-center text-sm font-medium">RIR</span>
@@ -291,6 +302,16 @@
 				</Button>
 			</div>
 		</form>
+		{@const bodyweightLoad = countedLoad(isSameLoadExercise ? exercise.sets[0].load : set.load)}
+		{#if bodyweightLoad && !set.skipped}
+			<span
+				class="col-span-full -mt-1 text-xs text-muted-foreground"
+				data-testid="{exercise.name}-set-{idx + 1}-counted"
+			>
+				= {bodyweightLoad.total}
+				{unitLabel(exercise.weightUnit ?? 'KG')} · {bodyweightLoad.percentage}% of bodyweight
+			</span>
+		{/if}
 		{#if (idx > 0 && (exercise.setType === 'MyorepMatch' || exercise.setType === 'MyorepMatchDown')) || exercise.setType === 'Drop'}
 			{#each set.miniSets as miniSet, miniIdx}
 				{@const miniSetButtonDisabled = shouldMiniSetBeDisabled(idx, miniIdx)}

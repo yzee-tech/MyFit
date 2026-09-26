@@ -527,8 +527,9 @@ export function snapSetsToAvailableWeights(ex: WorkoutExerciseInProgress, userBo
 	const sameLoadSetType = ['Straight', 'Myorep', 'MyorepMatch'].includes(ex.setType);
 	const pickedLoads = new Map<number, number>();
 	ex.sets = ex.sets.map((set, setIdx) => {
-		// Bodyweight only (no added load) stays as is
-		if (set.load === undefined || set.load <= 0) return set;
+		// Bodyweight only (no added load) stays as is, and so does a load the weights can't be (added
+		// weight with an assisted machine's settings, or help with a weight stack)
+		if (set.load === undefined || set.load === 0 || set.load < 0 !== weights[0] < 0) return set;
 		let newLoad = sameLoadSetType ? pickedLoads.get(set.load) : undefined;
 		if (newLoad === undefined) {
 			newLoad = pickLoad(set, setIdx);

@@ -42,8 +42,13 @@
 				: convertCamelCaseToNormal(exercise.targetMuscleGroup)}
 		</Badge>
 	</div>
+	{#if exercise.exerciseNote}
+		<div class="mt-1 flex items-center bg-secondary px-1 py-0.5 text-sm" data-testid="{exercise.name}-exercise-note">
+			{exercise.exerciseNote}
+		</div>
+	{/if}
 	{#if exercise.note}
-		<div class="mt-1 flex items-center bg-secondary px-1 py-0.5 text-sm">
+		<div class="mt-1 flex items-center bg-secondary/60 px-1 py-0.5 text-sm" data-testid="{exercise.name}-routine-note">
 			{exercise.note}
 		</div>
 	{/if}

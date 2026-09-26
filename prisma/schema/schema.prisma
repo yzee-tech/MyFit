@@ -34,13 +34,15 @@ model User {
 
 /// Weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20
 model WeightSet {
-  id      String     @id @default(cuid()) /// @zod.string.cuid2()
-  name    String
-  unit    WeightUnit
+  id           String     @id @default(cuid()) /// @zod.string.cuid2()
+  name         String
+  unit         WeightUnit
   /// In `unit`, sorted ascending
-  weights Float[]
-  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId  String
+  weights      Float[]
+  /// An assisted machine's settings: each weight is help, so it's logged as a negative load
+  isAssistance Boolean    @default(false)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
 
   @@index([userId])
 }

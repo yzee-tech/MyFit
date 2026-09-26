@@ -48,8 +48,13 @@ Routines and workouts keep a copy of the exercise's details for display; the ser
 
 - **PR 1 – foundation** (no visible change): `Exercise` table and links, conversion of existing data,
   saves and progression via the exercise, a real rename on Exercise stats, V2 import removed.
-- **PR 2 – Exercises page**: list, new exercise (also outside any routine), edit/rename everywhere,
+- **PR 2 – Exercises page**: the only place exercise details change (routine and workout editors
+  pick exercises from your list, with a New exercise button); blank workouts, with exercises added
+  mid-workout suggested from last time.
+  Also: list, new exercise (also outside any routine), edit/rename everywhere,
   add to / remove from routines, delete (archived when it has history), merge on Exercise stats,
   saved exercises in suggestions, "Added (+) / assist (−)" load label with the result, weight sets
   for assisted machines, routine and exercise notes, and Save on the exercises screen of the library
   and block editors (no overview step).
+- **PR 3 – Levels** (planned): a third option next to kg and lb for machines that show levels;
+  progression adds reps to the top of the range, then moves to the next level.
