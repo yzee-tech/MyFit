@@ -349,3 +349,57 @@ test('bodyweight exercises: help as a negative load, with what it counts as; ass
 	await page.locator('[id="Assisted\\ pull-ups-set-1-load"]').fill('-20');
 	await expect(page.getByTestId('Assisted pull-ups-set-1-counted')).toHaveText('= 80 kg · 80% of bodyweight');
 });
+
+test('merging when a routine has both exercises: each routine keeps exactly one, no entry or workout lost', async ({
+	page,
+	userData
+}) => {
+	await page.goto('/exercise-splits');
+	await createMesocycle(page);
+	const userId = userData.userId;
+	const byName = (name: string) => prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name } } });
+	const [curls, rows] = await Promise.all([byName('Dumbbell bicep curls'), byName('Barbell rows')]);
+
+	// Where each is, before: Pull A has both, in the library and in the block
+	const libraryDays = async (exerciseId: string) =>
+		(await prisma.exerciseTemplate.findMany({ where: { exerciseId } })).map((entry) => entry.exerciseSplitDayId);
+	const blockDays = async (exerciseId: string) =>
+		(await prisma.mesocycleExerciseTemplate.findMany({ where: { exerciseId } })).map(
+			(entry) => entry.mesocycleExerciseSplitDayId
+		);
+	const [curlsLibrary, rowsLibrary, curlsBlock, rowsBlock] = await Promise.all([
+		libraryDays(curls.id),
+		libraryDays(rows.id),
+		blockDays(curls.id),
+		blockDays(rows.id)
+	]);
+	expect(curlsLibrary.some((day) => rowsLibrary.includes(day))).toBe(true);
+	expect(curlsBlock.some((day) => rowsBlock.includes(day))).toBe(true);
+	await logPastWorkout(userId, 'Dumbbell bicep curls', 12);
+	await logPastWorkout(userId, 'Barbell rows', 40);
+
+	await page.goto(`/exercises/${curls.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Merge into…' }).click();
+	await page.getByLabel('Exercise to merge into').click();
+	await page.getByRole('option', { name: 'Barbell rows', exact: true }).click();
+	await page.getByRole('button', { name: 'Merge', exact: true }).click();
+	await page.waitForURL(`/exercises/${rows.id}`);
+
+	// Every routine that had either now has Barbell rows exactly once
+	const [libraryAfter, blockAfter] = await Promise.all([libraryDays(rows.id), blockDays(rows.id)]);
+	expect(libraryAfter.toSorted()).toEqual([...new Set([...curlsLibrary, ...rowsLibrary])].toSorted());
+	expect(blockAfter.toSorted()).toEqual([...new Set([...curlsBlock, ...rowsBlock])].toSorted());
+	expect(new Set(libraryAfter).size).toEqual(libraryAfter.length);
+	expect(new Set(blockAfter).size).toEqual(blockAfter.length);
+
+	// Both workouts are Barbell rows now; the duplicate is gone with nothing pointing at it
+	const workouts = await prisma.workoutExercise.findMany({ where: { workout: { userId } } });
+	expect(workouts).toHaveLength(2);
+	workouts.forEach((workout) => {
+		expect(workout.exerciseId).toEqual(rows.id);
+		expect(workout.name).toEqual('Barbell rows');
+	});
+	expect(await prisma.exercise.count({ where: { id: curls.id } })).toEqual(0);
+	expect(await prisma.exerciseTemplate.count({ where: { name: 'Dumbbell bicep curls' } })).toEqual(0);
+});
