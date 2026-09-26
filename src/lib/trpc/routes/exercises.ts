@@ -116,9 +116,11 @@ async function combineWorkoutDuplicates(exerciseIds: string[]): Promise<PrismaPr
 		select: { id: true, workoutId: true, exerciseIndex: true, weightUnit: true, _count: { select: { sets: true } } },
 		orderBy: [{ workoutId: 'asc' }, { exerciseIndex: 'asc' }]
 	});
+	const byWorkout = new Map<string, typeof entries>();
+	for (const entry of entries) byWorkout.set(entry.workoutId, [...(byWorkout.get(entry.workoutId) ?? []), entry]);
 	const queries: PrismaPromise<unknown>[] = [];
-	for (const workoutEntries of Object.values(Object.groupBy(entries, (entry) => entry.workoutId))) {
-		if (!workoutEntries || workoutEntries.length < 2) continue;
+	for (const workoutEntries of byWorkout.values()) {
+		if (workoutEntries.length < 2) continue;
 		const [kept, ...others] = workoutEntries;
 		const combined = others.filter((other) => isLevelUnit(other.weightUnit) === isLevelUnit(kept.weightUnit));
 		let setCount = kept._count.sets;
@@ -132,7 +134,7 @@ async function combineWorkoutDuplicates(exerciseIds: string[]): Promise<PrismaPr
 			setCount += other._count.sets;
 		}
 		// Later exercises move up into the gap, last one removed first so the positions stay right
-		for (const other of combined.toReversed()) {
+		for (const other of [...combined].reverse()) {
 			queries.push(
 				prisma.workoutExercise.delete({ where: { id: other.id } }),
 				prisma.workoutExercise.updateMany({

@@ -527,3 +527,28 @@ test('levels: sets the routine no longer has don’t hold back the next level', 
 		expect(set.reps).toEqual(10);
 	});
 });
+
+test('levels: down sets move up together, keeping their gaps', () => {
+	const downSets = (levels: number[], reps: number[]) =>
+		levelPerformance(levels.map((level, idx) => ({ reps: reps[idx], load: level, RIR: 3 })));
+	const shape = (rows: ReturnType<typeof levelSuggestion>) => rows.sets.map((set) => [set.load, set.reps]);
+
+	// Only the last set is at the top: it waits, the others get a rep more
+	expect(shape(levelSuggestion([downSets([8, 7, 6], [10, 12, 15])], 'Down'))).toEqual([
+		[8, 11],
+		[7, 13],
+		[6, 15]
+	]);
+	// All at the top: each one level up, back at the bottom of the range
+	expect(shape(levelSuggestion([downSets([8, 7, 6], [15, 15, 15])], 'Down'))).toEqual([
+		[9, 10],
+		[8, 10],
+		[7, 10]
+	]);
+	// The first set is on the highest level: none move up, reps keep going up
+	expect(shape(levelSuggestion([downSets([10, 9, 8], [15, 15, 15])], 'Down'))).toEqual([
+		[10, 16],
+		[9, 16],
+		[8, 16]
+	]);
+});

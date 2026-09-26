@@ -657,25 +657,25 @@ function fitSetsToRoutine(ex: WorkoutExerciseInProgress, routineSetCount: number
 }
 
 /**
- * Double progression for a machine's levels: a rep more each time, up to the top of the rep range;
- * then the next level, back at the bottom of the range. Sets meant to share a load move up
- * together, once they've all reached the top. At the highest level, reps keep going up.
+ * Double progression for a machine's levels: a rep more each time, up to the top of the rep range.
+ * Once every set is at the top, every set goes up one level (keeping any gaps, e.g. down sets on
+ * 8, 7, 6 go to 9, 8, 7), back at the bottom of the range. Sets already at the top wait for the
+ * others. When a set has no higher level, none move up and reps keep going up instead.
  */
 function progressLevels(ex: WorkoutExerciseInProgress, levels: number[] | null): WorkoutExerciseInProgress['sets'] {
 	const nextLevel = (level: number) => (levels ? nextWeightUp(levels, level) : level + 1);
-	const sameLoadSetType = ['Straight', 'Myorep', 'MyorepMatch'].includes(ex.setType);
-	const allAtTop = ex.sets.every(
-		(set, setIdx) => set.skipped || set.reps === undefined || set.reps >= repRangeOfSet(ex, setIdx).end
-	);
+	const counts = (set: WorkoutExerciseInProgress['sets'][number]) =>
+		!set.skipped && set.reps !== undefined && set.load !== undefined;
+	const allAtTop = ex.sets.every((set, setIdx) => !counts(set) || set.reps! >= repRangeOfSet(ex, setIdx).end);
+	const nextLevels = ex.sets.map((set) => (counts(set) ? nextLevel(set.load!) : null));
+	const moveUp = allAtTop && ex.sets.every((set, setIdx) => !counts(set) || nextLevels[setIdx] !== null);
 
 	return ex.sets.map((set, setIdx) => {
-		if (set.skipped || set.reps === undefined || set.load === undefined) return set;
+		if (!counts(set)) return set;
 		const { start, end } = repRangeOfSet(ex, setIdx);
-		const atTop = sameLoadSetType ? allAtTop : set.reps >= end;
-		const level = atTop ? nextLevel(set.load) : null;
-		if (level !== null) return { ...set, load: level, reps: start };
-		// Below the top, or at the highest level: a rep more. At the top, waiting for the other sets: the same
-		if (set.reps < end || atTop) return { ...set, reps: set.reps + 1 };
+		if (moveUp) return { ...set, load: nextLevels[setIdx]!, reps: start };
+		// Below the top, or all at the top with nowhere higher to go: a rep more. Otherwise wait
+		if (set.reps! < end || allAtTop) return { ...set, reps: set.reps! + 1 };
 		return set;
 	});
 }
