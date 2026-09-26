@@ -12,12 +12,14 @@ import {
 import { Prisma } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
+import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
+import { linkToExercise, resolveExercises } from '$lib/server/exercises';
 
 const zodMesocycleCreateInput = z.strictObject({
 	mesocycle: MesocycleUncheckedCreateWithoutUserInputSchema,
 	mesocycleCyclicSetChanges: z.array(MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema),
 	mesocycleExerciseTemplates: z.array(
-		z.array(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema)
+		z.array(ignoreExerciseLink(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema))
 	),
 	exerciseSplit: ExerciseSplitSchema.extend({
 		exerciseSplitDays: z.array(ExerciseSplitDayCreateWithoutExerciseSplitInputSchema)
@@ -42,7 +44,7 @@ const zodUpdateExerciseSplitInput = z.strictObject({
 		})
 	),
 	mesocycleExerciseTemplates: z.array(
-		z.array(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema)
+		z.array(ignoreExerciseLink(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema))
 	),
 	mesocycleId: z.string().cuid2()
 });
@@ -122,10 +124,12 @@ export const mesocycles = t.router({
 				id: createId()
 			}));
 
+		// A block is a copy of a library: its exercises already exist and keep their details
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.mesocycleExerciseTemplates.flat(), 'link');
 		const mesocycleExerciseTemplates: Prisma.MesocycleExerciseTemplateUncheckedCreateInput[] =
 			input.mesocycleExerciseTemplates.flatMap((dayExercises, dayNumber) =>
 				dayExercises.map((exercise) => ({
-					...exercise,
+					...linkToExercise(exercise, byName),
 					mesocycleExerciseSplitDayId: mesocycleExerciseSplitDays[dayNumber].id as string
 				}))
 			);
@@ -134,7 +138,8 @@ export const mesocycles = t.router({
 			prisma.mesocycle.create({ data: mesocycle }),
 			prisma.mesocycleCyclicSetChange.createMany({ data: mesocycleCyclicSetChanges }),
 			prisma.mesocycleExerciseSplitDay.createMany({ data: mesocycleExerciseSplitDays }),
-			prisma.mesocycleExerciseTemplate.createMany({ data: mesocycleExerciseTemplates })
+			prisma.mesocycleExerciseTemplate.createMany({ data: mesocycleExerciseTemplates }),
+			...syncQueries
 		];
 
 		await prisma.$transaction(transactionQueries);
@@ -240,10 +245,16 @@ export const mesocycles = t.router({
 				mesocycleId: mesocycle.id
 			}))
 		});
+		// Editing a block's routines is where exercises are set up: details given here apply everywhere
+		const { byName, syncQueries } = await resolveExercises(
+			ctx.userId,
+			input.mesocycleExerciseTemplates.flat(),
+			'define'
+		);
 		const createSplitExercisesQuery = prisma.mesocycleExerciseTemplate.createMany({
 			data: input.mesocycleExerciseTemplates.flatMap((dayExercises, idx) => {
 				return dayExercises.map((exercise) => ({
-					...exercise,
+					...linkToExercise(exercise, byName),
 					mesocycleExerciseSplitDayId: newSplitDaysIds[idx]
 				}));
 			})
@@ -269,7 +280,13 @@ export const mesocycles = t.router({
 			)
 		];
 
-		await prisma.$transaction([deleteQuery, createSplitDaysQuery, createSplitExercisesQuery, ...moveWorkoutsQueries]);
+		await prisma.$transaction([
+			deleteQuery,
+			createSplitDaysQuery,
+			createSplitExercisesQuery,
+			...moveWorkoutsQueries,
+			...syncQueries
+		]);
 		return { message: 'Mesocycle exercise split edited successfully' };
 	}),
 

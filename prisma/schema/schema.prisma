@@ -29,6 +29,7 @@ model User {
   migratedFromV2 Boolean?
   settings       UserSettings?
   weightSets     WeightSet[]
+  exercises      Exercise[]
 }
 
 /// Weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20

@@ -11,6 +11,8 @@ export async function deleteUserData(userId: string) {
 	await prisma.mesocycle.deleteMany({ where: { userId } });
 	await prisma.exerciseSplit.deleteMany({ where: { userId } });
 	await prisma.workout.deleteMany({ where: { userId } });
+	await prisma.exercise.deleteMany({ where: { userId } });
+	await prisma.weightSet.deleteMany({ where: { userId } });
 }
 
 export * from '@playwright/test';

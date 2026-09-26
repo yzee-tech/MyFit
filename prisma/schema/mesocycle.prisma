@@ -65,4 +65,6 @@ model MesocycleExerciseTemplate {
   weightUnit                  WeightUnit?
   /// Weights available for this exercise (a WeightSet id); none means standard steps
   weightSetId                 String?
+  exercise                    Exercise?                 @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exerciseId                  String?
 }

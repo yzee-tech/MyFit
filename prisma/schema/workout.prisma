@@ -48,6 +48,10 @@ model WorkoutExercise {
   weightUnit          WeightUnit           @default(KG)
   /// Weights that were available (a WeightSet id), used for suggestions while in progress
   weightSetId         String?
+  exercise            Exercise?            @relation(fields: [exerciseId], references: [id], onDelete: NoAction)
+  exerciseId          String?
+
+  @@index([exerciseId])
 }
 
 model WorkoutExerciseSet {
