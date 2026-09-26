@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
-	import { formatWeight, fromKg, roundWeight, unitLabel } from '$lib/utils/weightUnits';
+	import { formatWeight, fromKg, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
@@ -31,6 +31,8 @@
 	}
 
 	let isSameLoadExercise = $derived(['Straight', 'Myorep', 'MyorepMatch'].includes(exercise.setType));
+	// A machine's level, not a weight: no bodyweight, and no rep adjusting by weight
+	let isLevels = $derived(isLevelUnit(exercise.weightUnit));
 
 	function shouldSetBeDisabled(set: WorkoutExerciseSet, idx: number): boolean {
 		if (set.completed) return false;
@@ -94,7 +96,8 @@
 	/** For bodyweight exercises: what a set counts as, e.g. -20 at 100 kg = 80 kg, 80% of bodyweight */
 	function countedLoad(load: number | undefined) {
 		const bodyweightKg = workoutRunes.workoutData?.userBodyweight;
-		if (typeof exercise.bodyweightFraction !== 'number' || typeof load !== 'number' || !bodyweightKg) return null;
+		if (isLevels || typeof exercise.bodyweightFraction !== 'number' || typeof load !== 'number' || !bodyweightKg)
+			return null;
 		const bodyweight = fromKg(bodyweightKg, exercise.weightUnit ?? 'KG');
 		const total = roundWeight(exercise.bodyweightFraction * bodyweight + load);
 		return { total, percentage: Math.round((total / bodyweight) * 100) };
@@ -198,7 +201,9 @@
 <div class="grid grid-cols-4 gap-1">
 	<span class="text-center text-sm font-medium">Reps</span>
 	<span class="text-center text-sm font-medium">
-		{#if typeof exercise.bodyweightFraction === 'number'}
+		{#if isLevels}
+			Level
+		{:else if typeof exercise.bodyweightFraction === 'number'}
 			+/− {unitLabel(exercise.weightUnit ?? 'KG')}
 			<Popover.Root>
 				<Popover.Trigger>
@@ -246,10 +251,11 @@
 					<Input
 						id="{exercise.name}-set-{idx + 1}-load"
 						disabled={set.completed || set.skipped}
-						min={exercise.bodyweightFraction ? undefined : 0.25}
+						aria-label={isLevels ? `Set ${idx + 1} level` : undefined}
+						min={isLevels ? 1 : exercise.bodyweightFraction ? undefined : 0.25}
 						placeholder={getNextLoad(idx)}
 						required
-						step={0.25}
+						step={isLevels ? 1 : 0.25}
 						type="number"
 						bind:value={set.load}
 					/>
@@ -272,7 +278,8 @@
 			{/if}
 			<div class="flex items-center">
 				{#if idx === 0 || !isSameLoadExercise}
-					{@const hasLoadChanged = set.load !== originalSetLoads[idx] && originalSetLoads[idx] !== undefined}
+					{@const hasLoadChanged =
+						!isLevels && set.load !== originalSetLoads[idx] && originalSetLoads[idx] !== undefined}
 					{#if hasLoadChanged}
 						<Button
 							class="h-7 w-7 p-1"

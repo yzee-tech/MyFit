@@ -258,7 +258,9 @@ test('merging a misspelling moves its workouts; deleting an exercise with workou
 	// With a workout, deleting keeps it for history: gone from routines and the picker
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
-	await expect(page.getByRole('dialog')).toContainText('Your 1 past workout keeps it');
+	await expect(page.getByRole('dialog', { name: 'Delete Barbell rows?' })).toContainText(
+		'Your 1 past workout keeps it'
+	);
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
 	await page.waitForURL('/exercises');
 	await expect(page.getByRole('main')).toContainText('Only in past workouts Barbell rows');
@@ -402,4 +404,68 @@ test('merging when a routine has both exercises: each routine keeps exactly one,
 	});
 	expect(await prisma.exercise.count({ where: { id: curls.id } })).toEqual(0);
 	expect(await prisma.exerciseTemplate.count({ where: { name: 'Dumbbell bicep curls' } })).toEqual(0);
+});
+
+test('merging when a workout has both exercises: one entry with all their sets, in order', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [{ name: 'Barbel rows', targetMuscleGroup: 'Traps' }, 'Barbell rows', 'Face pulls']);
+	const byName = (name: string) => prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name } } });
+	const [misspelt, rows, facePulls] = await Promise.all([
+		byName('Barbel rows'),
+		byName('Barbell rows'),
+		byName('Face pulls')
+	]);
+
+	// One workout: the misspelling (2 sets), face pulls, then the right name (1 set)
+	const entry = (exercise: typeof rows, exerciseIndex: number, loads: number[]) => ({
+		exerciseIndex,
+		exerciseId: exercise.id,
+		name: exercise.name,
+		targetMuscleGroup: exercise.targetMuscleGroup,
+		setType: 'Straight' as const,
+		repRangeStart: 8,
+		repRangeEnd: 12,
+		sets: {
+			create: loads.map((load, setIndex) => ({ setIndex, reps: 10, load, RIR: 2, skipped: false }))
+		}
+	});
+	const workout = await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 100,
+			startedAt: new Date(),
+			endedAt: new Date(),
+			workoutExercises: {
+				create: [entry(misspelt, 0, [40, 42.5]), entry(facePulls, 1, [15]), entry(rows, 2, [45])]
+			}
+		}
+	});
+
+	await page.goto(`/exercises/${misspelt.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Merge into…' }).click();
+	await expect(page.getByRole('dialog')).toContainText('A workout with both gets one entry with all their sets.');
+	await page.getByLabel('Exercise to merge into').click();
+	await page.getByRole('option', { name: 'Barbell rows', exact: true }).click();
+	await page.getByRole('button', { name: 'Merge', exact: true }).click();
+	await page.waitForURL(`/exercises/${rows.id}`);
+
+	const exercises = await prisma.workoutExercise.findMany({
+		where: { workoutId: workout.id },
+		orderBy: { exerciseIndex: 'asc' },
+		include: { sets: { orderBy: { setIndex: 'asc' } } }
+	});
+	expect(exercises.map((ex) => [ex.name, ex.exerciseIndex])).toEqual([
+		['Barbell rows', 0],
+		['Face pulls', 1]
+	]);
+	expect(exercises[0].sets.map((set) => [set.setIndex, set.load])).toEqual([
+		[0, 40],
+		[1, 42.5],
+		[2, 45]
+	]);
+	expect(await prisma.exercise.count({ where: { id: misspelt.id } })).toEqual(0);
 });

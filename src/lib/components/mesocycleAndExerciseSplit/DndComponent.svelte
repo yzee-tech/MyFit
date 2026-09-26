@@ -43,11 +43,11 @@
 >
 	{#each itemList as exerciseTemplate, idx (exerciseTemplate.name)}
 		<div class="relative" animate:flip={{ duration: 200 }}>
-			{#if 'sets' in exerciseTemplate && contextProps.context === 'mesocycle'}
+			{#if contextProps.context === 'mesocycle'}
 				<ExerciseTemplateCard
 					context="mesocycle"
 					deleteExercise={contextProps.deleteExercise}
-					{exerciseTemplate}
+					exerciseTemplate={exerciseTemplate as MesocycleExerciseTemplateWithoutIdsOrIndex}
 					{idx}
 					readOnly={false}
 					{reordering}

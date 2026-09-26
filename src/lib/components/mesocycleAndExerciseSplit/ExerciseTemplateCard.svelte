@@ -88,8 +88,11 @@
 		{/if}
 	</div>
 	<div class="flex items-center gap-0.5">
-		<span class="mr-auto text-sm text-muted-foreground" class:lowercase={props.context === 'mesocycle'}>
-			{#if props.context === 'mesocycle'}
+		<span
+			class="mr-auto text-sm text-muted-foreground"
+			class:lowercase={typeof props.exerciseTemplate.sets === 'number'}
+		>
+			{#if typeof props.exerciseTemplate.sets === 'number'}
 				{props.exerciseTemplate.sets}
 			{/if}
 			{convertCamelCaseToNormal(props.exerciseTemplate.setType)} sets of

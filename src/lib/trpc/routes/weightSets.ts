@@ -7,7 +7,8 @@ import { MAX_WEIGHTS_PER_SET, normalizeWeights } from '$lib/utils/weightSets';
 const weightSetInput = z.strictObject({
 	id: z.string().cuid2().optional(),
 	name: z.string().trim().min(1).max(60),
-	unit: z.enum(['KG', 'LB']),
+	/** LEVEL: a machine's levels, e.g. 1–20 */
+	unit: z.enum(['KG', 'LB', 'LEVEL']),
 	weights: z.array(z.number().positive().max(10000)).min(1).max(MAX_WEIGHTS_PER_SET),
 	isAssistance: z.boolean().default(false)
 });
@@ -26,7 +27,8 @@ export const weightSets = t.router({
 			name: input.name,
 			unit: input.unit,
 			weights: normalizeWeights(input.weights),
-			isAssistance: input.isAssistance
+			// Levels are never help
+			isAssistance: input.unit === 'LEVEL' ? false : input.isAssistance
 		};
 		if (input.id === undefined) {
 			return prisma.weightSet.create({ data: { ...data, userId: ctx.userId }, select: { id: true } });

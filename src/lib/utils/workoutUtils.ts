@@ -3,7 +3,8 @@ import type { ActiveMesocycleWithProgressionData } from '$lib/trpc/routes/workou
 import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Prisma } from '@prisma/client';
-import { defaultWeightStep, fromKg, roundWeight, snapToStep, toKg } from './weightUnits';
+import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
+import type { WeightUnit } from './prismaEnums';
 import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
 
 export function getSetVolume(set: SetDetails, userBodyweight: number, bodyweightFraction: number | null) {
@@ -15,7 +16,9 @@ export function getSetVolume(set: SetDetails, userBodyweight: number, bodyweight
 	return setVolume + (miniSetsVolume ?? 0);
 }
 
+/** Volume in kg; a machine's levels aren't weights, so they don't count towards it */
 export function getExerciseVolume(workoutExercise: WorkoutExercise, userBodyweight: number) {
+	if (isLevelUnit(workoutExercise.weightUnit)) return 0;
 	return arraySum(
 		workoutExercise.sets.map((set) => getSetVolume(set, userBodyweight, workoutExercise.bodyweightFraction))
 	);
@@ -136,6 +139,17 @@ export type PreviousPerformance = {
 
 /** Past performances of each exercise, keyed by exercise name, oldest first */
 export type ExerciseHistory = Record<string, PreviousPerformance[]>;
+
+/**
+ * The performances that compare with an exercise in `unit`: levels only with levels, and kg or lb
+ * only with kg or lb (a level isn't a weight)
+ */
+export function comparablePerformances<T extends { exercise: { weightUnit?: WeightUnit | null } }>(
+	performances: T[],
+	unit: WeightUnit | null | undefined
+): T[] {
+	return performances.filter((performance) => isLevelUnit(performance.exercise.weightUnit) === isLevelUnit(unit));
+}
 
 export type WorkoutExerciseInProgress = Omit<
 	Prisma.WorkoutExerciseCreateWithoutWorkoutInput,
@@ -549,7 +563,8 @@ export function getNextWeightHint(
 	weights: number[] | null,
 	userBodyweightKg: number | null | undefined
 ): { currentWeight: number; nextWeight: number; moreReps: number } | null {
-	if (!weights) return null;
+	// Levels go up with double progression instead
+	if (!weights || isLevelUnit(ex.weightUnit)) return null;
 	const setIdx = ex.sets.findIndex(
 		(set) => set.reps !== undefined && set.RIR !== undefined && set.load !== undefined && set.load > 0
 	);
@@ -588,11 +603,12 @@ type SetWithLoads = { load?: number; miniSets: { load?: number }[] };
  */
 export function switchExerciseUnit(
 	ex: WorkoutExerciseInProgress,
-	to: 'KG' | 'LB',
+	to: MassUnit,
 	userBodyweightKg: number,
 	weightSets: WeightSetLike[] = []
 ): WorkoutExerciseInProgress {
-	if ((ex.weightUnit ?? 'KG') === to) return ex;
+	// A level stays a level
+	if ((ex.weightUnit ?? 'KG') === to || isLevelUnit(ex.weightUnit)) return ex;
 	const inKg = convertExerciseLoads(ex, 'toKg');
 	const snapped: WorkoutExerciseInProgress = structuredClone({ ...inKg, weightUnit: to, minimumWeightChange: null });
 	// The exercise's weight set, if it's in the new unit; otherwise the new unit's standard steps
@@ -608,7 +624,7 @@ export function switchExerciseUnit(
 }
 
 /** Converts an exercise's loads from kg to the unit it's shown in (or back) */
-export function convertExerciseLoads<T extends { weightUnit?: 'KG' | 'LB' | null; sets: SetWithLoads[] }>(
+export function convertExerciseLoads<T extends { weightUnit?: WeightUnit | null; sets: SetWithLoads[] }>(
 	ex: T,
 	direction: 'toDisplay' | 'toKg'
 ): T {
@@ -640,6 +656,30 @@ function fitSetsToRoutine(ex: WorkoutExerciseInProgress, routineSetCount: number
 	ex.sets = ex.sets.map((set) => (set.reps === undefined ? copyOfLastSet() : set));
 }
 
+/**
+ * Double progression for a machine's levels: a rep more each time, up to the top of the rep range.
+ * Once every set is at the top, every set goes up one level (keeping any gaps, e.g. down sets on
+ * 8, 7, 6 go to 9, 8, 7), back at the bottom of the range. Sets already at the top wait for the
+ * others. When a set has no higher level, none move up and reps keep going up instead.
+ */
+function progressLevels(ex: WorkoutExerciseInProgress, levels: number[] | null): WorkoutExerciseInProgress['sets'] {
+	const nextLevel = (level: number) => (levels ? nextWeightUp(levels, level) : level + 1);
+	const counts = (set: WorkoutExerciseInProgress['sets'][number]) =>
+		!set.skipped && set.reps !== undefined && set.load !== undefined;
+	const allAtTop = ex.sets.every((set, setIdx) => !counts(set) || set.reps! >= repRangeOfSet(ex, setIdx).end);
+	const nextLevels = ex.sets.map((set) => (counts(set) ? nextLevel(set.load!) : null));
+	const moveUp = allAtTop && ex.sets.every((set, setIdx) => !counts(set) || nextLevels[setIdx] !== null);
+
+	return ex.sets.map((set, setIdx) => {
+		if (!counts(set)) return set;
+		const { start, end } = repRangeOfSet(ex, setIdx);
+		if (moveUp) return { ...set, load: nextLevels[setIdx]!, reps: start };
+		// Below the top, or all at the top with nowhere higher to go: a rep more. Otherwise wait
+		if (set.reps! < end || allAtTop) return { ...set, reps: set.reps! + 1 };
+		return set;
+	});
+}
+
 export function progressiveOverloadMagic(
 	mesocycleWithProgressionData: ActiveMesocycleWithProgressionData,
 	cycleNumber: number,
@@ -663,8 +703,9 @@ export function progressiveOverloadMagic(
 	});
 
 	workoutExercises.forEach((ex) => {
-		// Progressive overload from the last times this exercise was done, in any routine
-		const allPreviousPerformances = exerciseHistory[ex.name] ?? [];
+		// Progressive overload from the last times this exercise was done, in any routine, with the
+		// same kind of load (levels or weights)
+		const allPreviousPerformances = comparablePerformances(exerciseHistory[ex.name] ?? [], ex.weightUnit);
 		const lastPerformance = allPreviousPerformances.at(-1);
 		if (!lastPerformance?.exercise) return;
 
@@ -672,6 +713,16 @@ export function progressiveOverloadMagic(
 
 		// Only weights this gym has (from the exercise's weight set), else steps of the exercise's unit
 		const weights = availableWeightsFor(ex, weightSets);
+
+		// Levels aren't weights, so they use double progression instead of the formula
+		if (isLevelUnit(ex.weightUnit)) {
+			// Only the sets the routine has decide whether to go up a level
+			ex.sets = lastPerformance.exercise.sets.slice(0, routineSetCount).map((oldSet) => addExtraSetProperties(oldSet));
+			if (!easySession) ex.sets = progressLevels(ex, weights);
+			fitSetsToRoutine(ex, routineSetCount);
+			return;
+		}
+
 		const unitChanged = (lastPerformance.exercise.weightUnit ?? 'KG') !== (ex.weightUnit ?? 'KG');
 		const snapToRealWeights = () => {
 			if (weights) snapSetsToAvailableWeights(ex, userBodyweight, weights);
@@ -755,6 +806,8 @@ export function progressiveOverloadMagic(
 			// Adjust reps when RIR changed
 			const RIRDifference = set.RIR - oldRIR;
 			if (set.reps === undefined) return;
+			// Levels already add a rep each time, so a harder week doesn't add more
+			if (isLevelUnit(ex.weightUnit) && RIRDifference < 0) return;
 
 			// Easy sessions always take reps off to match the easier effort
 			const forceRIRMatching = easySession || (ex.forceRIRMatching ?? mesocycle.forceRIRMatching);
@@ -768,6 +821,11 @@ export function progressiveOverloadMagic(
 			// If the RIR adjustment we are about to make causes reps to fall outside of lower rep range
 			// (a deload is meant to be easy, so there reps may drop below the range)
 			const adjustedReps = set.reps - RIRDifference;
+			// Levels: an easier week takes reps off, but not below the range, and keeps the week's effort
+			if (isLevelUnit(ex.weightUnit) && mode !== 'deload') {
+				set.reps = Math.max(adjustedReps, Math.min(set.reps, repRangeStart));
+				return;
+			}
 			if (mode !== 'deload' && adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
 				const maxRIR = Math.max(set.reps - repRangeStart, 0);
 				set.RIR = maxRIR;

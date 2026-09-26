@@ -4,12 +4,13 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { trpc } from '$lib/trpc/client';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
+	import type { MassUnit } from '$lib/utils/weightUnits';
 	import { toast } from 'svelte-sonner';
 
 	let { homeWeightUnit }: { homeWeightUnit: WeightUnit } = $props();
 	let selected = $state(homeWeightUnit);
 
-	async function save(unit: WeightUnit) {
+	async function save(unit: MassUnit) {
 		selected = unit;
 		try {
 			await trpc().users.updateUserSettings.mutate({ homeWeightUnit: unit });
