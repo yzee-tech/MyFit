@@ -30,3 +30,26 @@ Deload week: same weights as last time, half the sets, easy effort; not used as 
 3. **kg and lb**: home unit; routine unit incl. "ask each time"; per-exercise toggle; conversions; existing data = kg.
 4. **Weight sets**: manage in Settings; link per exercise; rounding to available weights; big-jump handling with a
    "next weight" note.
+
+## Exercises as records
+
+Each exercise is one record (`Exercise`) that library routines, block routines and logged workouts
+link to. A rename or a correction is made once and applies everywhere, and progression follows the
+exercise rather than its spelling.
+
+| Where                                    | What                                                                                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Exercise** (applies everywhere)        | Name, muscle group, bodyweight share (a correction also recounts past workouts), exercise note                                           |
+| **Routine** (library and block)          | Order, set type, rep ranges, sets (blocks), weights available, weight step, kg/lb override, progression overrides (blocks), routine note |
+| **Logged workout** (a record of the day) | Every set (load may be negative: assistance), bodyweight that day, unit and weight set used, routine settings and both notes at the time |
+
+Routines and workouts keep a copy of the exercise's details for display; the server
+(`$lib/server/exercises.ts`) keeps every copy in step.
+
+- **PR 1 – foundation** (no visible change): `Exercise` table and links, conversion of existing data,
+  saves and progression via the exercise, a real rename on Exercise stats, V2 import removed.
+- **PR 2 – Exercises page**: list, new exercise (also outside any routine), edit/rename everywhere,
+  add to / remove from routines, delete (archived when it has history), merge on Exercise stats,
+  saved exercises in suggestions, "Added (+) / assist (−)" load label with the result, weight sets
+  for assisted machines, routine and exercise notes, and Save on the exercises screen of the library
+  and block editors (no overview step).

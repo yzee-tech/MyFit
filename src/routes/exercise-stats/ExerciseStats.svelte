@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { TRPCClientError } from '@trpc/client';
 	import { invalidateAll } from '$app/navigation';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -39,7 +40,8 @@
 	let renamingExercise = $state(false);
 
 	let searchText = $state('');
-	let searchOpen = $state(true);
+	// Opening it before the page is ready left it blank, so it needed two taps: it starts closed
+	let searchOpen = $state(false);
 	let selectedExercise = $state<string>();
 	let exerciseInstances = $state<WorkoutExercise[]>();
 
@@ -81,7 +83,7 @@
 		selectedExercise = undefined;
 		exercisesByMuscleGroup = undefined;
 		searchText = '';
-		searchOpen = true;
+		searchOpen = false;
 		exerciseInstances = [];
 		renameExerciseOpen = false;
 		loadExercises();
@@ -131,12 +133,17 @@
 	async function renameExercise(e: SubmitEvent) {
 		e.preventDefault();
 		renamingExercise = true;
-		const { count } = await trpc().users.renameExercises.mutate({
-			oldName: selectedExercise!,
-			newName: newExerciseName!
-		});
-		toast.success(`Renamed ${count} exercises`);
-		await invalidateAll();
+		try {
+			// Renames it everywhere: routines, blocks and past workouts
+			const { count } = await trpc().users.renameExercises.mutate({
+				oldName: selectedExercise!,
+				newName: newExerciseName!
+			});
+			toast.success(`Renamed ${count} exercises`);
+			await invalidateAll();
+		} catch (error) {
+			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to rename');
+		}
 		renamingExercise = false;
 	}
 </script>

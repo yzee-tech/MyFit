@@ -8,11 +8,13 @@ import {
 import type { ExerciseSplitDay, Prisma, PrismaPromise } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
+import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
+import { linkToExercise, resolveExercises, type ResolvedExercise } from '$lib/server/exercises';
 
 const zodExerciseSplitInput = z.strictObject({
 	splitName: z.string(),
 	splitDays: z.array(ExerciseSplitDayCreateWithoutExerciseSplitInputSchema),
-	splitExercises: z.array(z.array(ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema))
+	splitExercises: z.array(z.array(ignoreExerciseLink(ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema)))
 });
 
 /** The active block, if it can take this library's edits: made from it, or its link was lost by older edits */
@@ -41,7 +43,8 @@ async function updateBlockFromLibrary(
 	mesocycleId: string,
 	exerciseSplitId: string,
 	routines: { name: string; weightUnit: 'KG' | 'LB' | 'ASK'; previousName: string | null }[],
-	routineExercises: LibraryExercise[][]
+	routineExercises: LibraryExercise[][],
+	exercisesByName: Map<string, ResolvedExercise>
 ): Promise<PrismaPromise<unknown>[]> {
 	const block = await prisma.mesocycle.findFirst({
 		where: { id: mesocycleId, userId, startDate: { not: null }, endDate: null },
@@ -71,7 +74,7 @@ async function updateBlockFromLibrary(
 		const exercises = routineExercises[routineIdx].map(({ id, ...exercise }, exerciseIndex) => {
 			const old = oldExercises.find((ex) => ex.name === exercise.name);
 			return {
-				...exercise,
+				...linkToExercise(exercise, exercisesByName),
 				exerciseIndex,
 				mesocycleExerciseSplitDayId: splitDayId,
 				sets: old?.sets ?? routineSets,
@@ -116,13 +119,24 @@ function mostCommon(values: number[]): number | undefined {
 	return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
 }
 
+/**
+ * The library's exercises. Editing a library is where exercises are set up, so its details (e.g.
+ * a muscle group) become the exercise's everywhere; a new library (a template, an import, a copy
+ * of a block) links to exercises that already exist as they are.
+ */
+function resolveLibraryExercises(input: z.infer<typeof zodExerciseSplitInput>, userId: string, editing: boolean) {
+	return resolveExercises(userId, input.splitExercises.flat(), editing ? 'define' : 'link');
+}
+
 const createOrEditExerciseSplit = async (
 	input: z.infer<typeof zodExerciseSplitInput>,
 	userId: string,
 	editingId?: string,
-	extraQueries: PrismaPromise<unknown>[] = []
+	extraQueries: PrismaPromise<unknown>[] = [],
+	resolved?: Awaited<ReturnType<typeof resolveLibraryExercises>>
 ) => {
 	const exerciseSplitId = editingId ?? createId();
+	const { byName, syncQueries } = resolved ?? (await resolveLibraryExercises(input, userId, editingId !== undefined));
 
 	const exerciseSplitDays: ExerciseSplitDay[] = input.splitDays.map((splitDay) => ({
 		...splitDay,
@@ -134,7 +148,7 @@ const createOrEditExerciseSplit = async (
 	const exerciseTemplates: Prisma.ExerciseTemplateUncheckedCreateInput[] = input.splitExercises.flatMap(
 		(dayExercises, dayNumber) =>
 			dayExercises.map((exercise) => ({
-				...exercise,
+				...linkToExercise(exercise, byName),
 				id: createId(),
 				exerciseSplitDayId: exerciseSplitDays[dayNumber].id
 			}))
@@ -152,6 +166,7 @@ const createOrEditExerciseSplit = async (
 		...saveLibraryQueries,
 		prisma.exerciseSplitDay.createMany({ data: exerciseSplitDays }),
 		prisma.exerciseTemplate.createMany({ data: exerciseTemplates }),
+		...syncQueries,
 		...extraQueries
 	]);
 };
@@ -223,6 +238,7 @@ export const exerciseSplits = t.router({
 			const library = await prisma.exerciseSplit.findFirst({ where: { id: input.id, userId: ctx.userId } });
 			if (!library) throw new TRPCError({ code: 'NOT_FOUND', message: 'Routine library not found' });
 
+			const resolved = await resolveLibraryExercises(input.splitData, ctx.userId, true);
 			let blockQueries: PrismaPromise<unknown>[] = [];
 			if (input.updateBlock) {
 				const routines = input.splitData.splitDays
@@ -239,11 +255,12 @@ export const exerciseSplits = t.router({
 					input.updateBlock.mesocycleId,
 					input.id,
 					routines,
-					routines.map((routine) => routine.exercises)
+					routines.map((routine) => routine.exercises),
+					resolved.byName
 				);
 			}
 
-			await createOrEditExerciseSplit(input.splitData, ctx.userId, input.id, blockQueries);
+			await createOrEditExerciseSplit(input.splitData, ctx.userId, input.id, blockQueries, resolved);
 			return {
 				message: input.updateBlock ? 'Routine library and current block updated' : 'Routine library saved'
 			};

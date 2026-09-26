@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { resolveExerciseUnit } from '$lib/utils/weightUnits';
+import { linkToExercise, resolveExercises } from '$lib/server/exercises';
 import {
 	convertExerciseLoads,
 	getBlockWeek,
@@ -27,6 +28,7 @@ import {
 	type WorkoutOfMesocycle
 } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
+import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 
@@ -102,9 +104,9 @@ async function isInDeloadWeek(userId: string, mesocycleId: string, workoutDate: 
 const EXERCISE_HISTORY_LENGTH = 8;
 
 /** Recent performances of each named exercise across all of the user's workouts, oldest first */
-async function getExerciseHistory(userId: string, exerciseNames: string[]): Promise<ExerciseHistory> {
+async function getExerciseHistory(userId: string, exerciseIds: string[]): Promise<ExerciseHistory> {
 	const pastExercises = await prisma.workoutExercise.findMany({
-		where: { name: { in: exerciseNames }, workout: { userId, isDeload: false } },
+		where: { exerciseId: { in: exerciseIds }, workout: { userId, isDeload: false } },
 		include: {
 			sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
 			workout: { select: { userBodyweight: true } }
@@ -138,7 +140,7 @@ const workoutInputDataSchema = z.object({
 
 const createWorkoutSchema = z.strictObject({
 	workoutData: workoutInputDataSchema,
-	workoutExercises: z.array(WorkoutExerciseCreateWithoutWorkoutInputSchema),
+	workoutExercises: z.array(ignoreExerciseLink(WorkoutExerciseCreateWithoutWorkoutInputSchema)),
 	workoutExercisesSets: z.array(z.array(WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema)),
 	workoutExercisesMiniSets: z.array(z.array(z.array(WorkoutExerciseMiniSetCreateWithoutParentSetInputSchema)))
 });
@@ -383,7 +385,10 @@ export const workouts = t.router({
 
 			const exerciseNames = todaysSplitDay.mesocycleSplitDayExercises.map((exercise) => exercise.name);
 			const [exerciseHistory, userSettings, weightSets] = await Promise.all([
-				getExerciseHistory(ctx.userId, exerciseNames),
+				getExerciseHistory(
+					ctx.userId,
+					todaysSplitDay.mesocycleSplitDayExercises.flatMap((exercise) => exercise.exerciseId ?? [])
+				),
 				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } }),
 				prisma.weightSet.findMany({
 					where: { userId: ctx.userId },
@@ -470,8 +475,10 @@ export const workouts = t.router({
 			};
 		}
 
+		// Details changed in a workout's exercise editor apply to the exercise; a new name becomes a new exercise
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.workoutExercises, 'define');
 		const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.workoutExercises.map((ex) => ({
-			...ex,
+			...linkToExercise(ex, byName),
 			workoutId: workout.id as string,
 			id: createId()
 		}));
@@ -502,7 +509,8 @@ export const workouts = t.router({
 			prisma.workout.create({ data: workout }),
 			prisma.workoutExercise.createMany({ data: workoutExercises }),
 			prisma.workoutExerciseSet.createMany({ data: workoutExercisesSets }),
-			prisma.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets })
+			prisma.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets }),
+			...syncQueries
 		];
 
 		if (!workoutOfMesocycle) {
@@ -591,8 +599,9 @@ export const workouts = t.router({
 				workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt);
 			}
 
+			const { byName, syncQueries } = await resolveExercises(ctx.userId, input.data.workoutExercises, 'define');
 			const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.data.workoutExercises.map((ex) => ({
-				...ex,
+				...linkToExercise(ex, byName),
 				workoutId: workout.id as string,
 				id: createId()
 			}));
@@ -625,7 +634,8 @@ export const workouts = t.router({
 				prisma.workoutExercise.createMany({ data: workoutExercises }),
 				prisma.workoutExerciseSet.createMany({ data: workoutExercisesSets }),
 				prisma.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets }),
-				...(workoutOfMesocycle ? [prisma.workoutOfMesocycle.create({ data: workoutOfMesocycle })] : [])
+				...(workoutOfMesocycle ? [prisma.workoutOfMesocycle.create({ data: workoutOfMesocycle })] : []),
+				...syncQueries
 			];
 
 			await prisma.$transaction(transactionQueries);

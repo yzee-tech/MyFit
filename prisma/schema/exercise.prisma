@@ -1,0 +1,22 @@
+/// One exercise, shared by every routine and workout that uses it. Its name, muscle group and
+/// bodyweight share are the same everywhere; routines and workouts keep a copy of them that the
+/// server keeps in sync (see $lib/server/exercises.ts)
+model Exercise {
+  id                 String      @id @default(cuid()) /// @zod.string.cuid2()
+  name               String
+  targetMuscleGroup  MuscleGroup
+  customMuscleGroup  String?
+  bodyweightFraction Float?
+  /// How to do it, shown wherever it's used
+  note               String?
+  /// Deleted but kept for the workouts that used it
+  archived           Boolean     @default(false)
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+
+  exerciseTemplates          ExerciseTemplate[]
+  mesocycleExerciseTemplates MesocycleExerciseTemplate[]
+  workoutExercises           WorkoutExercise[]
+
+  @@unique([userId, name])
+}

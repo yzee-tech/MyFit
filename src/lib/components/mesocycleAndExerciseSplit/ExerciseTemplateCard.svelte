@@ -52,7 +52,12 @@
 			{:else}
 				<DropdownMenu.Root onOpenChange={(v) => (isContextMenuOpen = v)} open={isContextMenuOpen}>
 					<DropdownMenu.Trigger asChild let:builder>
-						<button use:builder.action {...builder} class="px-0.5 py-0">
+						<button
+							use:builder.action
+							{...builder}
+							aria-label="{props.exerciseTemplate.name} options"
+							class="px-0.5 py-0"
+						>
 							<MenuIcon class="h-4 w-4" />
 						</button>
 					</DropdownMenu.Trigger>
