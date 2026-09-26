@@ -632,7 +632,7 @@ export const workouts = t.router({
 
 		if (!workoutOfMesocycle) {
 			await prisma.$transaction(transactionQueries);
-			return { message: 'Workout created successfully' };
+			return { message: 'Workout created successfully', workoutId: workout.id as string };
 		}
 
 		// Update the routine's exercises in the block according to this workout
@@ -694,7 +694,7 @@ export const workouts = t.router({
 
 		await prisma.$transaction(transactionQueries);
 		const message = 'Workout created successfully';
-		return { message };
+		return { message, workoutId: workout.id as string };
 	}),
 
 	editById: t.procedure

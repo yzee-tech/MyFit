@@ -709,3 +709,130 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^(80|95)$/);
 });
+
+test('levels: a machine that shows levels logs a level, then goes up a level at the top of the rep range', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+
+	// The hotel's machine shows levels 1–10
+	await page.goto('/settings');
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await page.getByLabel('Name').fill('Hotel machine');
+	await page.getByLabel('Machine levels').click();
+	await expect(page.getByTestId('weight-set-levels-hint')).toBeVisible();
+	await page.getByLabel('From').fill('1');
+	await page.getByLabel('To', { exact: true }).fill('10');
+	await page.getByLabel('Every').fill('1');
+	await page.getByRole('button', { name: 'Add range' }).click();
+	await page.getByRole('button', { name: 'Save weight set' }).click();
+	await expect(page.getByTestId('weight-set-Hotel machine')).toContainText('Levels 1–10 by 1');
+
+	// Curls on it (10–20 reps): all three sets at the top, on level 7
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	for (const exercise of ['Pull-ups', 'Barbell rows', 'Face pulls']) {
+		await page.getByTestId(`${exercise}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+	}
+	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Weights available').click();
+	await page.getByRole('option', { name: 'Hotel machine (levels)' }).click();
+	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toBeVisible();
+	await expect(page.getByTestId('Dumbbell bicep curls-unit-toggle')).toHaveCount(0);
+	await expect(page.getByLabel('Set 1 level')).toBeVisible();
+
+	for (const set of [1, 2, 3]) {
+		await page.locator(`[id="Dumbbell\\ bicep\\ curls-set-${set}-reps"]`).fill('20');
+	}
+	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]').fill('7');
+	for (const set of [1, 2, 3]) await page.getByTestId(`Dumbbell bicep curls-set-${set}-action`).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+	await page.waitForURL('/workouts');
+
+	// Logged as level 7, not a weight; the routine keeps the machine, not a unit of its own
+	const logged = await prisma.workoutExercise.findFirstOrThrow({
+		where: { name: 'Dumbbell bicep curls', workout: { userId: userData.userId } },
+		include: { sets: true }
+	});
+	expect(logged.weightUnit).toEqual('LEVEL');
+	expect(logged.sets.map((set) => set.load)).toEqual([7, 7, 7]);
+	const routineCurls = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
+		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	});
+	expect(routineCurls.weightUnit).toBeNull();
+	expect(routineCurls.weightSetId).not.toBeNull();
+
+	// Next time: level 8, back at the bottom of the range
+	await page.getByLabel('create-workout').click();
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]')).toHaveValue('8');
+	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]')).toHaveValue('10');
+
+	// The saved workout shows it as a level
+	await page.goto(`/workouts/${logged.workoutId}`);
+	await page.getByRole('tab', { name: 'Exercises' }).click();
+	await expect(page.getByRole('main')).toContainText('Level');
+});
+
+test('save a blank workout as a routine library', async ({ page, userData }) => {
+	await createExercises(userData.userId, ['Barbell rows', 'Face pulls']);
+
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	// No block, so it's a blank workout
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	const addExercise = async (name: string, sets: number, load: string) => {
+		await page.getByLabel('add-exercise').click();
+		await pickExercise(page, name);
+		await page.getByLabel('Sets').fill(String(sets));
+		await page.getByRole('button', { name: 'Add exercise' }).click();
+		const id = name.replace(' ', '\\ ');
+		for (let set = 1; set <= sets; set++) {
+			await page.locator(`[id="${id}-set-${set}-reps"]`).fill('10');
+			await page.locator(`[id="${id}-set-${set}-RIR"]`).fill('2');
+		}
+		await page.locator(`[id="${id}-set-1-load"]`).fill(load);
+		for (let set = 1; set <= sets; set++) await page.getByTestId(`${name}-set-${set}-action`).click();
+	};
+	await addExercise('Barbell rows', 2, '40');
+	await addExercise('Face pulls', 3, '15');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Save' }).click();
+
+	// Offered straight away
+	await page.getByRole('button', { name: 'Save as routine' }).click();
+	await expect(page.getByLabel('Name')).toBeVisible();
+	await page.getByLabel('Name').fill('Hotel full body');
+	await page.getByRole('button', { name: 'Save routine' }).click();
+	await page.waitForURL(/\/exercise-splits\/\w+$/);
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Hotel full body');
+
+	const library = await prisma.exerciseSplit.findFirstOrThrow({
+		where: { userId: userData.userId },
+		include: { exerciseSplitDays: { include: { exercises: { orderBy: { exerciseIndex: 'asc' } } } } }
+	});
+	expect(library.exerciseSplitDays).toHaveLength(1);
+	expect(library.exerciseSplitDays[0].name).toEqual('Hotel full body');
+	expect(library.exerciseSplitDays[0].exercises.map((ex) => [ex.name, ex.sets])).toEqual([
+		['Barbell rows', 2],
+		['Face pulls', 3]
+	]);
+	expect(library.exerciseSplitDays[0].exercises.every((ex) => ex.exerciseId !== null)).toBe(true);
+
+	// Also on any workout's page
+	const workout = await prisma.workout.findFirstOrThrow({ where: { userId: userData.userId } });
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await expect(page.getByRole('menuitem', { name: 'Save as routine' })).toBeVisible();
+});

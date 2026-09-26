@@ -11,6 +11,10 @@
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	import EditIcon from 'virtual:icons/lucide/pencil';
 	import DeleteIcon from 'virtual:icons/lucide/trash';
+	import SaveIcon from 'virtual:icons/lucide/save';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { onMount } from 'svelte';
 	import type { FullWorkoutWithMesoData } from '../+page.server';
 	import { toast } from 'svelte-sonner';
 	import { trpc } from '$lib/trpc/client';
@@ -22,6 +26,38 @@
 	let { workout }: PropsType = $props();
 	let deleteConfirmDrawerOpen = $state(false);
 	let callingDeleteEndpoint = $state(false);
+
+	// Keep a workout (e.g. a blank one with a trainer) as a routine library
+	let saveAsRoutineOpen = $state(false);
+	let savingAsRoutine = $state(false);
+	let routineName = $state('');
+
+	function openSaveAsRoutine() {
+		routineName = `Workout ${workout.startedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+		saveAsRoutineOpen = true;
+	}
+
+	// Offered right after finishing a blank workout
+	onMount(() => {
+		if ($page.url.searchParams.has('saveAsRoutine')) openSaveAsRoutine();
+	});
+
+	async function saveAsRoutine(e: SubmitEvent) {
+		e.preventDefault();
+		savingAsRoutine = true;
+		try {
+			const { id, message } = await trpc().exerciseSplits.createFromWorkout.mutate({
+				workoutId: workout.id,
+				name: routineName
+			});
+			toast.success(message);
+			saveAsRoutineOpen = false;
+			await goto(`/exercise-splits/${id}`);
+		} catch (error) {
+			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to save as routine');
+		}
+		savingAsRoutine = false;
+	}
 
 	function getMinuteDifference(date1: Date, date2: Date): number {
 		const msInMinute = 60 * 1000;
@@ -68,6 +104,11 @@
 						{#if workout.workoutOfMesocycle === null || workout.workoutOfMesocycle.workoutStatus === null}
 							<DropdownMenu.Item class="gap-2" onclick={editWorkout}>
 								<EditIcon /> Edit
+							</DropdownMenu.Item>
+						{/if}
+						{#if workout.workoutExercises.length > 0}
+							<DropdownMenu.Item class="gap-2" onclick={openSaveAsRoutine}>
+								<SaveIcon /> Save as routine
 							</DropdownMenu.Item>
 						{/if}
 						<DropdownMenu.Item class="gap-2 text-red-500" on:click={() => (deleteConfirmDrawerOpen = true)}>
@@ -139,4 +180,24 @@
 			Yes, delete
 		{/if}
 	</Button>
+</ResponsiveDialog>
+
+<ResponsiveDialog title="Save as routine" bind:open={saveAsRoutineOpen}>
+	{#snippet description()}
+		Makes a new routine library with this workout's exercises, in order, with the sets you did. You can edit it
+		afterwards like any other.
+	{/snippet}
+	<form class="mt-2 flex flex-col gap-3" onsubmit={saveAsRoutine}>
+		<div class="flex flex-col gap-1.5">
+			<Label for="save-as-routine-name">Name</Label>
+			<Input id="save-as-routine-name" maxlength={100} required bind:value={routineName} />
+		</div>
+		<Button class="gap-2" disabled={savingAsRoutine} type="submit">
+			{#if savingAsRoutine}
+				<LoaderCircle class="animate-spin" />
+			{:else}
+				Save routine
+			{/if}
+		</Button>
+	</form>
 </ResponsiveDialog>

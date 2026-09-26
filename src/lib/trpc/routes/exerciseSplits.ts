@@ -217,6 +217,64 @@ export const exerciseSplits = t.router({
 		return { message: 'Routine library created' };
 	}),
 
+	/**
+	 * A new routine library from a workout (e.g. a blank one with a trainer): one routine with its
+	 * exercises in order, each with the sets done and its set type and rep range
+	 */
+	createFromWorkout: t.procedure
+		.input(z.strictObject({ workoutId: z.string().cuid2(), name: z.string().trim().min(1).max(100) }))
+		.mutation(async ({ input, ctx }) => {
+			const workout = await prisma.workout.findFirst({
+				where: { id: input.workoutId, userId: ctx.userId },
+				include: {
+					workoutExercises: {
+						orderBy: { exerciseIndex: 'asc' },
+						include: { _count: { select: { sets: true } } }
+					}
+				}
+			});
+			if (!workout) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workout not found' });
+			if (workout.workoutExercises.length === 0) {
+				throw new TRPCError({ code: 'BAD_REQUEST', message: 'This workout has no exercises' });
+			}
+
+			// The routine's unit: the one most exercises were done in (levels aren't a routine unit)
+			const massUnits = workout.workoutExercises.flatMap((ex) => (ex.weightUnit === 'LEVEL' ? [] : [ex.weightUnit]));
+			const lbCount = massUnits.filter((unit) => unit === 'LB').length;
+			const weightUnit = lbCount > massUnits.length - lbCount ? 'LB' : 'KG';
+
+			const exerciseSplitId = createId();
+			const exerciseSplitDayId = createId();
+			await prisma.$transaction([
+				prisma.exerciseSplit.create({ data: { id: exerciseSplitId, name: input.name, userId: ctx.userId } }),
+				prisma.exerciseSplitDay.create({
+					data: { id: exerciseSplitDayId, name: input.name, dayIndex: 0, isRestDay: false, weightUnit, exerciseSplitId }
+				}),
+				prisma.exerciseTemplate.createMany({
+					data: workout.workoutExercises.map((ex, exerciseIndex) => ({
+						exerciseSplitDayId,
+						exerciseIndex,
+						exerciseId: ex.exerciseId,
+						name: ex.name,
+						targetMuscleGroup: ex.targetMuscleGroup,
+						customMuscleGroup: ex.customMuscleGroup,
+						bodyweightFraction: ex.bodyweightFraction,
+						sets: ex._count.sets || null,
+						setType: ex.setType,
+						repRangeStart: ex.repRangeStart,
+						repRangeEnd: ex.repRangeEnd,
+						topRepRangeStart: ex.topRepRangeStart,
+						topRepRangeEnd: ex.topRepRangeEnd,
+						changeType: ex.changeType,
+						changeAmount: ex.changeAmount,
+						note: ex.note,
+						weightSetId: ex.weightSetId
+					}))
+				})
+			]);
+			return { id: exerciseSplitId, message: 'Routine library created' };
+		}),
+
 	/** The current block that saving this library can update, if any */
 	findActiveBlockForLibrary: t.procedure
 		.input(z.string().cuid2())
