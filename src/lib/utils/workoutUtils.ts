@@ -716,7 +716,8 @@ export function progressiveOverloadMagic(
 
 		// Levels aren't weights, so they use double progression instead of the formula
 		if (isLevelUnit(ex.weightUnit)) {
-			ex.sets = lastPerformance.exercise.sets.map((oldSet) => addExtraSetProperties(oldSet));
+			// Only the sets the routine has decide whether to go up a level
+			ex.sets = lastPerformance.exercise.sets.slice(0, routineSetCount).map((oldSet) => addExtraSetProperties(oldSet));
 			if (!easySession) ex.sets = progressLevels(ex, weights);
 			fitSetsToRoutine(ex, routineSetCount);
 			return;
@@ -820,6 +821,11 @@ export function progressiveOverloadMagic(
 			// If the RIR adjustment we are about to make causes reps to fall outside of lower rep range
 			// (a deload is meant to be easy, so there reps may drop below the range)
 			const adjustedReps = set.reps - RIRDifference;
+			// Levels: an easier week takes reps off, but not below the range, and keeps the week's effort
+			if (isLevelUnit(ex.weightUnit) && mode !== 'deload') {
+				set.reps = Math.max(adjustedReps, Math.min(set.reps, repRangeStart));
+				return;
+			}
 			if (mode !== 'deload' && adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
 				const maxRIR = Math.max(set.reps - repRangeStart, 0);
 				set.RIR = maxRIR;

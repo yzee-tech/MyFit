@@ -408,13 +408,19 @@ const hotelChestPress: WeightSetLike = {
 	weights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 };
 
-/** Barbell rows on the level machine, 10–15 reps, steady effort (RIR 3 every week) */
-function levelSuggestion(history: PreviousPerformance[], setType: 'Straight' | 'Down' = 'Straight') {
+/** Barbell rows on the level machine, 10–15 reps, steady effort (RIR 3 every week) unless a plan is given */
+function levelSuggestion(
+	history: PreviousPerformance[],
+	setType: 'Straight' | 'Down' = 'Straight',
+	plan: { weeklyRIR: number[]; week: number } = { weeklyRIR: [3], week: 1 }
+) {
 	const block = blockWithWeightSet(hotelChestPress.id);
-	block.weeklyRIR = [3];
+	block.weeklyRIR = plan.weeklyRIR;
 	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
 	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL', setType, changeType: null });
-	const output = progressiveOverloadMagic(block, 1, 100, 0, { 'Barbell rows': history }, 'normal', [hotelChestPress]);
+	const output = progressiveOverloadMagic(block, plan.week, 100, 0, { 'Barbell rows': history }, 'normal', [
+		hotelChestPress
+	]);
 	return output.find((exercise) => exercise.name === 'Barbell rows')!;
 }
 const levelSets = (level: number, ...reps: number[]) => sets(level, ...reps);
@@ -483,4 +489,41 @@ test('levels: only compared with level sessions, and never with weights', () => 
 	// Levels don't count towards kg volume
 	expect(getExerciseVolume(levelPerformance(levelSets(7, 12, 12, 12)).exercise, 100)).toEqual(0);
 	expect(getExerciseVolume(performance('Barbell rows', sets(40, 10)).exercise, 100)).toBeGreaterThan(0);
+});
+
+test('levels: an easier week after going up a level stays at the bottom of the range, at that week’s effort', () => {
+	// Last time level 7 × 15 at RIR 2; this week's plan is RIR 3
+	const rows = levelSuggestion(
+		[levelPerformance(levelSets(7, 15, 15, 15).map((set) => ({ ...set, RIR: 2 })))],
+		'Straight',
+		{ weeklyRIR: [2, 3], week: 2 }
+	);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(8);
+		expect(set.reps).toEqual(10);
+		expect(set.RIR).toEqual(3);
+	});
+
+	// Still on the same level, the easier week takes a rep off
+	const same = levelSuggestion(
+		[levelPerformance(levelSets(7, 12, 12, 12).map((set) => ({ ...set, RIR: 2 })))],
+		'Straight',
+		{ weeklyRIR: [2, 3], week: 2 }
+	);
+	expect(same.sets.map((set) => [set.load, set.reps, set.RIR])).toEqual([
+		[7, 12, 3],
+		[7, 12, 3],
+		[7, 12, 3]
+	]);
+});
+
+test('levels: sets the routine no longer has don’t hold back the next level', () => {
+	// Did 4 sets last time, the 4th short of the top; the routine now has 3
+	const history = [levelPerformance([...levelSets(7, 15, 15, 15), { reps: 12, load: 7, RIR: 3 }])];
+	const rows = levelSuggestion(history);
+	expect(rows.sets).toHaveLength(3);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(8);
+		expect(set.reps).toEqual(10);
+	});
 });

@@ -258,7 +258,9 @@ test('merging a misspelling moves its workouts; deleting an exercise with workou
 	// With a workout, deleting keeps it for history: gone from routines and the picker
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
-	await expect(page.getByRole('dialog')).toContainText('Your 1 past workout keeps it');
+	await expect(page.getByRole('dialog', { name: 'Delete Barbell rows?' })).toContainText(
+		'Your 1 past workout keeps it'
+	);
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
 	await page.waitForURL('/exercises');
 	await expect(page.getByRole('main')).toContainText('Only in past workouts Barbell rows');
