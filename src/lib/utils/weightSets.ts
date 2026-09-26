@@ -5,7 +5,14 @@
 import type { WeightUnit } from './prismaEnums';
 import { roundWeight } from './weightUnits';
 
-export type WeightSetLike = { id: string; name: string; unit: WeightUnit; weights: number[] };
+export type WeightSetLike = {
+	id: string;
+	name: string;
+	unit: WeightUnit;
+	weights: number[];
+	/** An assisted machine's settings: each weight is help, logged as a negative load */
+	isAssistance?: boolean;
+};
 
 export const MAX_WEIGHTS_PER_SET = 200;
 
@@ -34,6 +41,8 @@ export function availableWeightsFor(
 	const weightSet = weightSets.find((set) => set.id === exercise.weightSetId);
 	if (!weightSet || weightSet.weights.length === 0) return null;
 	if (weightSet.unit !== (exercise.weightUnit ?? 'KG')) return null;
+	// Help counts against you: 20 kg of help is a load of -20, and less help is the next step up
+	if (weightSet.isAssistance) return weightSet.weights.map((weight) => -weight).sort((a, b) => a - b);
 	return weightSet.weights;
 }
 

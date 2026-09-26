@@ -208,17 +208,8 @@
 			</Card.Footer>
 		</Card.Root>
 	{/if}
-	{#if workoutRunes.editingWorkoutId === null}
-		<div class="mb-1 flex items-center justify-between gap-2 rounded-lg border bg-card p-4">
-			<Label for="use-active-mesocycle">
-				{activeBlock === undefined ? 'No' : 'Use'} active mesocycle
-			</Label>
-			{#if activeBlock === undefined}
-				<Switch id="use-active-mesocycle" name="use-active-mesocycle" disabled />
-			{:else}
-				<Switch id="use-active-mesocycle" name="use-active-mesocycle" bind:checked={useActiveMesocycle} />
-			{/if}
-		</div>
+	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined}
+		<p class="mb-1 px-1 text-sm text-muted-foreground">No active block: you'll pick exercises as you go.</p>
 	{/if}
 	<form
 		class="mb-1 flex w-full flex-col gap-1.5 rounded-lg border bg-card p-4"
@@ -278,7 +269,7 @@
 			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />
 		</div>
 	{/if}
-	{#if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null}
+	{#if activeBlock && workoutRunes.editingWorkoutId === null}
 		<div class="mb-1 flex items-baseline justify-between px-1">
 			<span class="font-semibold">Pick a routine</span>
 			<span class="text-sm text-muted-foreground">
@@ -293,13 +284,16 @@
 		{/if}
 		<div class="mb-1 flex flex-col gap-1" role="radiogroup" aria-label="Routine">
 			{#each activeBlock.routines as routine (routine.splitDayIndex)}
-				{@const selected = routine.splitDayIndex === selectedRoutineIndex}
+				{@const selected = useActiveMesocycle && routine.splitDayIndex === selectedRoutineIndex}
 				<button
 					class={cn('flex flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors', {
 						'border-primary ring-1 ring-primary': selected
 					})}
 					aria-checked={selected}
-					onclick={() => (selectedRoutineIndex = routine.splitDayIndex)}
+					onclick={() => {
+						selectedRoutineIndex = routine.splitDayIndex;
+						useActiveMesocycle = true;
+					}}
 					role="radio"
 					type="button"
 				>
@@ -314,46 +308,61 @@
 					</div>
 				</button>
 			{/each}
+			<button
+				class={cn('flex flex-col gap-1 rounded-lg border border-dashed bg-card p-4 text-left transition-colors', {
+					'border-solid border-primary ring-1 ring-primary': !useActiveMesocycle
+				})}
+				aria-checked={!useActiveMesocycle}
+				onclick={() => {
+					useActiveMesocycle = false;
+					selectedRoutineIndex = null;
+				}}
+				role="radio"
+				type="button"
+			>
+				<span class="font-semibold">Blank workout</span>
+				<span class="text-sm text-muted-foreground">Pick exercises as you go, e.g. with a trainer</span>
+			</button>
 		</div>
-		{#if selectedRoutine?.weightUnit === 'ASK'}
+	{/if}
+	{#if workoutRunes.editingWorkoutId === null && (!useActiveMesocycle || selectedRoutine?.weightUnit === 'ASK')}
+		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+			<span class="text-sm font-medium" id="session-unit-label">This gym uses</span>
+			<ToggleGroup.Root
+				aria-labelledby="session-unit-label"
+				onValueChange={(value) => {
+					if (value === 'KG' || value === 'LB') sessionWeightUnit = value;
+				}}
+				type="single"
+				value={sessionWeightUnit}
+				variant="outline"
+			>
+				<ToggleGroup.Item aria-label="Kilograms" value="KG">kg</ToggleGroup.Item>
+				<ToggleGroup.Item aria-label="Pounds" value="LB">lb</ToggleGroup.Item>
+			</ToggleGroup.Root>
+		</div>
+		{#if sessionWeightSetOptions.length > 0}
 			<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-				<span class="text-sm font-medium" id="session-unit-label">This gym uses</span>
-				<ToggleGroup.Root
-					aria-labelledby="session-unit-label"
-					onValueChange={(value) => {
-						if (value === 'KG' || value === 'LB') sessionWeightUnit = value;
-					}}
-					type="single"
-					value={sessionWeightUnit}
-					variant="outline"
-				>
-					<ToggleGroup.Item aria-label="Kilograms" value="KG">kg</ToggleGroup.Item>
-					<ToggleGroup.Item aria-label="Pounds" value="LB">lb</ToggleGroup.Item>
-				</ToggleGroup.Root>
+				<span class="text-sm font-medium">Weights here</span>
+				{#key sessionWeightUnit}
+					<Select.Root
+						onSelectedChange={(v) => (sessionWeightSetId = v?.value || null)}
+						selected={sessionWeightSet
+							? { value: sessionWeightSet.id, label: sessionWeightSet.name }
+							: { value: '', label: 'Standard steps' }}
+					>
+						<Select.Trigger aria-label="Weights here" class="w-48">
+							<Select.Value placeholder="Standard steps" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item label="Standard steps" value="" />
+							{#each sessionWeightSetOptions as weightSet (weightSet.id)}
+								<Select.Item label={weightSet.name} value={weightSet.id} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				{/key}
 			</div>
-			{#if sessionWeightSetOptions.length > 0}
-				<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
-					<span class="text-sm font-medium">Weights here</span>
-					{#key sessionWeightUnit}
-						<Select.Root
-							onSelectedChange={(v) => (sessionWeightSetId = v?.value || null)}
-							selected={sessionWeightSet
-								? { value: sessionWeightSet.id, label: sessionWeightSet.name }
-								: { value: '', label: 'Standard steps' }}
-						>
-							<Select.Trigger aria-label="Weights here" class="w-48">
-								<Select.Value placeholder="Standard steps" />
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item label="Standard steps" value="" />
-								{#each sessionWeightSetOptions as weightSet (weightSet.id)}
-									<Select.Item label={weightSet.name} value={weightSet.id} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					{/key}
-				</div>
-			{/if}
 		{/if}
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>

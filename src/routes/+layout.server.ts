@@ -15,7 +15,7 @@ export const load = async ({ locals, depends }) => {
 			prisma.userSettings.findUnique({ where: { userId: session.user.id }, select: { homeWeightUnit: true } }),
 			prisma.weightSet.findMany({
 				where: { userId: session.user.id },
-				select: { id: true, name: true, unit: true, weights: true },
+				select: { id: true, name: true, unit: true, weights: true, isAssistance: true },
 				orderBy: { name: 'asc' }
 			})
 		]);

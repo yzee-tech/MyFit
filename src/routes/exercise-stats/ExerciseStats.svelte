@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { untrack } from 'svelte';
 	import { TRPCClientError } from '@trpc/client';
 	import { invalidateAll } from '$app/navigation';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
@@ -86,7 +88,11 @@
 		searchOpen = false;
 		exerciseInstances = [];
 		renameExerciseOpen = false;
-		loadExercises();
+		loadExercises().then(() => {
+			// Opened from an exercise's page
+			const requested = untrack(() => $page.url.searchParams.get('exercise'));
+			if (requested) selectExercise(requested);
+		});
 	});
 
 	async function loadExercises() {

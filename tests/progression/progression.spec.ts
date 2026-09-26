@@ -88,6 +88,7 @@ function performance(
 			...exercise,
 			id: `past-${exerciseName}`,
 			weightUnit,
+			exerciseNote: null,
 			workoutId: 'past-workout',
 			sets: sets.map((set, setIndex) => ({
 				...set,
@@ -372,4 +373,27 @@ test('weight sets: switching units uses the weight set in the new unit', () => {
 	// 40 kg = 88.2 lb: not on 5 lb steps here, but one of the club's weights
 	const inLb = switchExerciseUnit(inProgress, 'LB', 100, [clubDumbbells]);
 	expect([80, 95]).toContain(inLb.sets[0].load);
+});
+
+test('weight sets: an assisted machine counts help as a negative load, and less help is the next step', () => {
+	const assist: WeightSetLike = {
+		id: 'assist',
+		name: 'Assist',
+		unit: 'KG',
+		weights: [5, 10, 15, 20],
+		isAssistance: true
+	};
+	expect(availableWeightsFor({ weightSetId: 'assist', weightUnit: 'KG' }, [assist])).toEqual([-20, -15, -10, -5]);
+
+	// Assisted pull-ups at 20 kg of help, past the top of the 8–12 range: next is 15 kg of help
+	const block = blockWithWeightSet('assist');
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	rows.bodyweightFraction = 1;
+	const history: ExerciseHistory = {
+		'Barbell rows': [performance('Barbell rows', sets(-20, 15, 15, 15), 100)]
+	};
+	history['Barbell rows'][0].exercise.bodyweightFraction = 1;
+	const output = progressiveOverloadMagic(block, 1, 100, 0, history, 'normal', [assist]);
+	const suggestion = output.find((exercise) => exercise.name === 'Barbell rows')!;
+	suggestion.sets.forEach((set) => expect(set.load).toEqual(-15));
 });

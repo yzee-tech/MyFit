@@ -12,7 +12,10 @@
 	import EditIcon from 'virtual:icons/lucide/pencil';
 	import { mesocycleExerciseSplitRunes } from '../mesocycleExerciseSplitRunes.svelte';
 	import { toast } from 'svelte-sonner';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
+	import { trpc } from '$lib/trpc/client';
+	import { TRPCClientError } from '@trpc/client';
+	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import DndComponent from '$lib/components/mesocycleAndExerciseSplit/DndComponent.svelte';
 	import SwapExercisesDialog from '$lib/components/mesocycleAndExerciseSplit/SwapExercisesDialog.svelte';
 	import AddEditExerciseDrawer from '$lib/components/mesocycleAndExerciseSplit/AddEditExerciseDrawer.svelte';
@@ -38,7 +41,32 @@
 			});
 			return;
 		}
-		goto('./overview');
+		save();
+	}
+
+	let saving = $state(false);
+
+	async function save() {
+		saving = true;
+		try {
+			const { message } = await trpc().mesocycles.updateExerciseSplit.mutate({
+				mesocycleExerciseSplitDays: mesocycleExerciseSplitRunes.splitDays.map((splitDay, idx) => ({
+					...splitDay,
+					dayIndex: idx
+				})),
+				mesocycleExerciseTemplates: mesocycleExerciseSplitRunes.splitExercises.map((dayExercises) =>
+					dayExercises.map((exercise, idx) => ({ ...exercise, exerciseIndex: idx }))
+				),
+				mesocycleId: mesocycleExerciseSplitRunes.mesocycle?.id as string
+			});
+			await invalidate(`mesocycles:${mesocycleExerciseSplitRunes.mesocycle?.id}`);
+			toast.success(message);
+			await goto(`/mesocycles/${mesocycleExerciseSplitRunes.mesocycle?.id}`);
+			mesocycleExerciseSplitRunes.resetStores();
+		} catch (error) {
+			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to save');
+		}
+		saving = false;
 	}
 </script>
 
@@ -139,7 +167,13 @@
 
 <div class="mt-2 grid grid-cols-2 gap-1">
 	<Button href="./structure" variant="secondary">Previous</Button>
-	<Button onclick={submitExercises}>Next</Button>
+	<Button disabled={saving} onclick={submitExercises}>
+		{#if saving}
+			<LoaderCircle class="animate-spin" />
+		{:else}
+			Save
+		{/if}
+	</Button>
 </div>
 
 <SwapExercisesDialog

@@ -13,6 +13,8 @@ import {
 	type WorkoutExerciseWithSets
 } from '$lib/utils/workoutUtils';
 import {
+	ChangeTypeSchema,
+	SetTypeSchema,
 	WorkoutExerciseCreateWithoutWorkoutInputSchema,
 	WorkoutExerciseMiniSetCreateWithoutParentSetInputSchema,
 	WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema
@@ -392,7 +394,7 @@ export const workouts = t.router({
 				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } }),
 				prisma.weightSet.findMany({
 					where: { userId: ctx.userId },
-					select: { id: true, name: true, unit: true, weights: true }
+					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
 				})
 			]);
 			const weightSetById = new Map(weightSets.map((weightSet) => [weightSet.id, weightSet]));
@@ -424,6 +426,15 @@ export const workouts = t.router({
 			if (isDeloadWeek(data.weeklyRIR, weekNumber)) mode = 'deload';
 			else if (input.welcomeBack) mode = 'welcomeBack';
 
+			const exerciseNotes = new Map(
+				(
+					await prisma.exercise.findMany({
+						where: { userId: ctx.userId, name: { in: exerciseNames } },
+						select: { name: true, note: true }
+					})
+				).map((exercise) => [exercise.name, exercise.note])
+			);
+
 			// Suggestions are worked out in kg, then shown in each exercise's unit
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
 				data,
@@ -433,7 +444,11 @@ export const workouts = t.router({
 				exerciseHistory,
 				mode,
 				weightSets
-			).map((exercise) => convertExerciseLoads(exercise, 'toDisplay'));
+			).map((exercise) => ({
+				...convertExerciseLoads(exercise, 'toDisplay'),
+				// The exercise's own note, shown with the routine's note
+				exerciseNote: exerciseNotes.get(exercise.name) ?? null
+			}));
 
 			// "Previous" for comparisons: the last time each of today's exercises was done
 			const lastPerformances = exerciseNames
@@ -451,6 +466,106 @@ export const workouts = t.router({
 			}
 
 			return workoutExercisesWithPreviousData;
+		}),
+
+	/**
+	 * Suggested sets for an exercise added during a workout, from the last times it was done
+	 * (in the exercise's unit). Null when it hasn't been done before.
+	 */
+	suggestSets: t.procedure
+		.input(
+			z.strictObject({
+				exerciseName: z.string(),
+				sets: z.number().int().min(1).max(30),
+				setType: SetTypeSchema,
+				repRangeStart: z.number().int(),
+				repRangeEnd: z.number().int(),
+				topRepRangeStart: z.number().int().nullish(),
+				topRepRangeEnd: z.number().int().nullish(),
+				changeType: ChangeTypeSchema.nullish(),
+				changeAmount: z.number().nullish(),
+				weightUnit: z.enum(['KG', 'LB']),
+				weightSetId: z.string().nullish(),
+				userBodyweight: z.number().positive()
+			})
+		)
+		.query(async ({ ctx, input }) => {
+			const exercise = await prisma.exercise.findUnique({
+				where: { userId_name: { userId: ctx.userId, name: input.exerciseName } }
+			});
+			if (!exercise) return null;
+			const [history, block, weightSets] = await Promise.all([
+				getExerciseHistory(ctx.userId, [exercise.id]),
+				prisma.mesocycle.findFirst({ where: { userId: ctx.userId, startDate: { not: null }, endDate: null } }),
+				prisma.weightSet.findMany({
+					where: { userId: ctx.userId },
+					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
+				})
+			]);
+			if (!history[exercise.name]?.length) return null;
+
+			// The current block's effort and overload settings, else steady defaults
+			const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
+			const mesocycle: ActiveMesocycleWithProgressionData = {
+				id: 'suggestion',
+				name: '',
+				userId: ctx.userId,
+				exerciseSplitId: null,
+				weeklyRIR: block?.weeklyRIR ?? [2],
+				startDate: block?.startDate ?? new Date(),
+				endDate: null,
+				startOverloadPercentage: block?.startOverloadPercentage ?? 2.5,
+				lastSetToFailure: block?.lastSetToFailure ?? false,
+				forceRIRMatching: block?.forceRIRMatching ?? false,
+				mesocycleExerciseSplitDays: [
+					{
+						id: 'suggestion',
+						name: '',
+						dayIndex: 0,
+						isRestDay: false,
+						weightUnit: input.weightUnit,
+						mesocycleId: 'suggestion',
+						mesocycleSplitDayExercises: [
+							{
+								id: 'suggestion',
+								mesocycleExerciseSplitDayId: 'suggestion',
+								exerciseIndex: 0,
+								exerciseId: exercise.id,
+								name: exercise.name,
+								targetMuscleGroup: exercise.targetMuscleGroup,
+								customMuscleGroup: exercise.customMuscleGroup,
+								bodyweightFraction: exercise.bodyweightFraction,
+								note: null,
+								sets: input.sets,
+								setType: input.setType,
+								repRangeStart: input.repRangeStart,
+								repRangeEnd: input.repRangeEnd,
+								topRepRangeStart: input.topRepRangeStart ?? null,
+								topRepRangeEnd: input.topRepRangeEnd ?? null,
+								changeType: input.changeType ?? null,
+								changeAmount: input.changeAmount ?? null,
+								overloadPercentage: null,
+								lastSetToFailure: null,
+								forceRIRMatching: null,
+								minimumWeightChange: null,
+								weightUnit: input.weightUnit,
+								weightSetId: input.weightSetId ?? null
+							}
+						]
+					}
+				]
+			};
+			const mode: ProgressionMode = block && isDeloadWeek(block.weeklyRIR, weekNumber) ? 'deload' : 'normal';
+			const [suggestion] = progressiveOverloadMagic(
+				mesocycle,
+				weekNumber,
+				input.userBodyweight,
+				0,
+				history,
+				mode,
+				weightSets
+			);
+			return convertExerciseLoads(suggestion, 'toDisplay').sets;
 		}),
 
 	create: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
@@ -475,8 +590,8 @@ export const workouts = t.router({
 			};
 		}
 
-		// Details changed in a workout's exercise editor apply to the exercise; a new name becomes a new exercise
-		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.workoutExercises, 'define');
+		// Exercises as they are: their details change only on the Exercises page
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.workoutExercises, { restore: false });
 		const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.workoutExercises.map((ex) => ({
 			...linkToExercise(ex, byName),
 			workoutId: workout.id as string,
@@ -550,7 +665,8 @@ export const workouts = t.router({
 				}),
 				prisma.mesocycleExerciseTemplate.createMany({
 					data: workoutExercises.map((ex, exerciseIdx) => {
-						const { workoutId, weightUnit, ...exercise } = ex;
+						// The exercise note lives on the exercise itself, not the routine
+						const { workoutId, weightUnit, exerciseNote, ...exercise } = ex;
 						// Remember an exercise's own unit (e.g. lb machines at a kg gym), but not for routines
 						// used at many gyms, where the unit is picked again each workout
 						const rememberedUnit =
@@ -599,7 +715,9 @@ export const workouts = t.router({
 				workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt);
 			}
 
-			const { byName, syncQueries } = await resolveExercises(ctx.userId, input.data.workoutExercises, 'define');
+			const { byName, syncQueries } = await resolveExercises(ctx.userId, input.data.workoutExercises, {
+				restore: false
+			});
 			const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.data.workoutExercises.map((ex) => ({
 				...linkToExercise(ex, byName),
 				workoutId: workout.id as string,

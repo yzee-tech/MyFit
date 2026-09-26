@@ -120,12 +120,11 @@ function mostCommon(values: number[]): number | undefined {
 }
 
 /**
- * The library's exercises. Editing a library is where exercises are set up, so its details (e.g.
- * a muscle group) become the exercise's everywhere; a new library (a template, an import, a copy
- * of a block) links to exercises that already exist as they are.
+ * The library's exercises, as they are: their details change only on the Exercises page. A
+ * template or an import creates the exercises it needs.
  */
-function resolveLibraryExercises(input: z.infer<typeof zodExerciseSplitInput>, userId: string, editing: boolean) {
-	return resolveExercises(userId, input.splitExercises.flat(), editing ? 'define' : 'link');
+function resolveLibraryExercises(input: z.infer<typeof zodExerciseSplitInput>, userId: string) {
+	return resolveExercises(userId, input.splitExercises.flat(), { restore: true });
 }
 
 const createOrEditExerciseSplit = async (
@@ -136,7 +135,7 @@ const createOrEditExerciseSplit = async (
 	resolved?: Awaited<ReturnType<typeof resolveLibraryExercises>>
 ) => {
 	const exerciseSplitId = editingId ?? createId();
-	const { byName, syncQueries } = resolved ?? (await resolveLibraryExercises(input, userId, editingId !== undefined));
+	const { byName, syncQueries } = resolved ?? (await resolveLibraryExercises(input, userId));
 
 	const exerciseSplitDays: ExerciseSplitDay[] = input.splitDays.map((splitDay) => ({
 		...splitDay,
@@ -238,7 +237,7 @@ export const exerciseSplits = t.router({
 			const library = await prisma.exerciseSplit.findFirst({ where: { id: input.id, userId: ctx.userId } });
 			if (!library) throw new TRPCError({ code: 'NOT_FOUND', message: 'Routine library not found' });
 
-			const resolved = await resolveLibraryExercises(input.splitData, ctx.userId, true);
+			const resolved = await resolveLibraryExercises(input.splitData, ctx.userId);
 			let blockQueries: PrismaPromise<unknown>[] = [];
 			if (input.updateBlock) {
 				const routines = input.splitData.splitDays

@@ -31,14 +31,6 @@ function detailsOf(item: ExerciseDetails) {
 	};
 }
 
-function sameDetails(a: ReturnType<typeof detailsOf>, b: ReturnType<typeof detailsOf>) {
-	return (
-		a.targetMuscleGroup === b.targetMuscleGroup &&
-		a.customMuscleGroup === b.customMuscleGroup &&
-		a.bodyweightFraction === b.bodyweightFraction
-	);
-}
-
 /** Queries that give an exercise new details and copy them to every routine and workout using it */
 export function updateExerciseEverywhere(
 	exerciseId: string,
@@ -53,22 +45,20 @@ export function updateExerciseEverywhere(
 }
 
 /**
- * Finds the user's exercise for each name, creating the ones that don't exist yet.
- * - `define`: an editor of routines or workouts, where details given here become the exercise's
- *   details, everywhere it's used
- * - `link`: existing exercises keep their details (e.g. a new block or library made from a copy)
+ * Finds the user's exercise for each name, creating any that don't exist yet (a template or an
+ * import brings its own exercises). Existing exercises keep their details: those change only on
+ * the Exercises page. `restore`: putting a deleted exercise back into a routine brings it back.
  *
- * Returns the exercises by name, and the queries to run with the save that keep every copy in
- * step. Exercises are created straight away; an unused one is harmless.
+ * Returns the exercises by name, and queries to run with the save.
  */
 export async function resolveExercises(
 	userId: string,
 	items: ExerciseDetails[],
-	mode: 'define' | 'link'
+	{ restore }: { restore: boolean }
 ): Promise<{ byName: Map<string, ResolvedExercise>; syncQueries: PrismaPromise<unknown>[] }> {
-	const itemsByName = new Map<string, ExerciseDetails[]>();
-	items.forEach((item) => itemsByName.set(item.name, [...(itemsByName.get(item.name) ?? []), item]));
-	const names = [...itemsByName.keys()];
+	const firstByName = new Map<string, ExerciseDetails>();
+	items.forEach((item) => firstByName.set(item.name, firstByName.get(item.name) ?? item));
+	const names = [...firstByName.keys()];
 	if (names.length === 0) return { byName: new Map(), syncQueries: [] };
 
 	const select = {
@@ -83,7 +73,7 @@ export async function resolveExercises(
 	const missing = names.filter((name) => !exercises.some((exercise) => exercise.name === name));
 	if (missing.length > 0) {
 		await prisma.exercise.createMany({
-			data: missing.map((name) => ({ userId, name, ...detailsOf(itemsByName.get(name)![0]) })),
+			data: missing.map((name) => ({ userId, name, ...detailsOf(firstByName.get(name)!) })),
 			skipDuplicates: true
 		});
 		exercises = await prisma.exercise.findMany({ where: { userId, name: { in: names } }, select });
@@ -91,24 +81,11 @@ export async function resolveExercises(
 
 	const syncQueries: PrismaPromise<unknown>[] = [];
 	const byName = new Map<string, ResolvedExercise>();
-	for (const exercise of exercises) {
-		const { archived, ...resolved } = exercise;
-		// Used again, so no longer deleted
-		if (archived) syncQueries.push(prisma.exercise.update({ where: { id: exercise.id }, data: { archived: false } }));
-
-		if (mode === 'define') {
-			// Of several copies in one save, the one that differs is the one that was edited
-			const current = detailsOf(exercise);
-			const edited = itemsByName
-				.get(exercise.name)!
-				.map(detailsOf)
-				.find((details) => !sameDetails(details, current));
-			if (edited) {
-				syncQueries.push(...updateExerciseEverywhere(exercise.id, edited));
-				Object.assign(resolved, edited);
-			}
+	for (const { archived, ...exercise } of exercises) {
+		if (archived && restore) {
+			syncQueries.push(prisma.exercise.update({ where: { id: exercise.id }, data: { archived: false } }));
 		}
-		byName.set(exercise.name, resolved);
+		byName.set(exercise.name, exercise);
 	}
 	return { byName, syncQueries };
 }

@@ -4,6 +4,7 @@ import type { WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
+import { trpc } from '$lib/trpc/client';
 import {
 	type WorkoutExerciseInProgress,
 	convertExerciseLoads,
@@ -70,7 +71,39 @@ function createWorkoutRunes() {
 			weightSetId
 		});
 		saveStoresToLocalStorage();
+		suggestSetsFromLastTime(exercise.name);
 		return true;
+	}
+
+	/** Fills an exercise added during the workout with suggestions from the last times it was done */
+	async function suggestSetsFromLastTime(exerciseName: string) {
+		const exercise = workoutExercises?.find((ex) => ex.name === exerciseName);
+		const userBodyweight = workoutData?.userBodyweight;
+		if (!exercise || typeof userBodyweight !== 'number' || exercise.sets.length === 0) return;
+		try {
+			const suggested = await trpc().workouts.suggestSets.query({
+				exerciseName,
+				sets: exercise.sets.length,
+				setType: exercise.setType,
+				repRangeStart: exercise.repRangeStart,
+				repRangeEnd: exercise.repRangeEnd,
+				topRepRangeStart: exercise.topRepRangeStart,
+				topRepRangeEnd: exercise.topRepRangeEnd,
+				changeType: exercise.changeType,
+				changeAmount: exercise.changeAmount,
+				weightUnit: exercise.weightUnit ?? 'KG',
+				weightSetId: exercise.weightSetId,
+				userBodyweight
+			});
+			// Only if it's still there and nothing has been entered yet
+			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
+			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
+			if (!suggested || !current || !untouched) return;
+			current.sets = suggested;
+			saveStoresToLocalStorage();
+		} catch (error) {
+			console.error('Failed to suggest sets:', error);
+		}
 	}
 
 	function editExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {

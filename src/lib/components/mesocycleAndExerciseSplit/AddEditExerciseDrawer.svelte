@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { commonExercisePerMuscleGroup } from '$lib/common/commonExercises';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Command from '$lib/components/ui/command';
@@ -11,6 +10,12 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { trpc } from '$lib/trpc/client';
+	import type { RouterOutputs } from '$lib/trpc/router';
+	import { TRPCClientError } from '@trpc/client';
+	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
+	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
+	import { Badge } from '$lib/components/ui/badge';
+	import ChevronsUpDown from 'virtual:icons/lucide/chevrons-up-down';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { ChangeType, MuscleGroup, SetType } from '$lib/utils/prismaEnums';
 	import type { Mesocycle } from '@prisma/client';
@@ -26,7 +31,6 @@
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import XIcon from 'virtual:icons/lucide/x';
 	import type {
-		ExerciseTemplateWithoutIdsOrIndex,
 		MesocycleExerciseTemplateWithoutIdsOrIndex,
 		SplitExerciseTemplateWithoutIdsOrIndex
 	} from './commonTypes';
@@ -63,38 +67,34 @@
 			? { value: weightSet.id, label: weightSetLabel(weightSet) }
 			: { value: '', label: 'Standard steps' };
 	}
-	let allGroupedExercises = $state(commonExercisePerMuscleGroup);
+	// Your exercises: routines and workouts pick from them; their details change on the Exercises page
+	type PickerExercise = RouterOutputs['exercises']['forPicker'][number];
+	let pickerExercises: PickerExercise[] = $state([]);
+	let pickerOpen = $state(false);
+	let pickerSearch = $state('');
+	let newExerciseOpen = $state(false);
 
-	onMount(async () => {
-		const userExercises = (await trpc().workouts.getUserExercises.query('minimal')).map((ex) => ({
-			...ex,
-			isUserExercise: true
-		}));
-		const groupedUserExercises = Object.entries(
-			Object.groupBy(userExercises, (exercise) => exercise.customMuscleGroup ?? exercise.targetMuscleGroup)
-		).map(([muscleGroup, exercises]) => ({
-			muscleGroup: muscleGroup as MuscleGroup,
-			exercises: exercises ?? []
-		}));
-		const userExerciseNames = new Set(userExercises.map((exercise) => exercise.name));
+	async function loadPickerExercises() {
+		pickerExercises = await trpc().exercises.forPicker.query();
+	}
+	onMount(loadPickerExercises);
 
-		allGroupedExercises = groupedUserExercises.reduce(
-			(acc, userGroup) => {
-				const existingGroupIndex = acc.findIndex((group) => group.muscleGroup === userGroup.muscleGroup);
-
-				if (existingGroupIndex !== -1) {
-					// Your own exercises first; hide built-in ones with the same name
-					const builtInExercises = acc[existingGroupIndex].exercises.filter((ex) => !userExerciseNames.has(ex.name));
-					acc[existingGroupIndex].exercises = [...userGroup.exercises, ...builtInExercises];
-				} else {
-					acc.push(userGroup);
-				}
-
-				return acc;
-			},
-			[...allGroupedExercises]
-		);
-	});
+	const muscleGroupOf = (exercise: { targetMuscleGroup: MuscleGroup; customMuscleGroup?: string | null }) =>
+		exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup);
+	let pickedExercise = $derived(pickerExercises.find((exercise) => exercise.name === currentExercise.name));
+	let pickerGroups = $derived(
+		Object.entries(
+			Object.groupBy(
+				pickerExercises
+					.filter(
+						(exercise) => selectedMuscleGroups.length === 0 || selectedMuscleGroups.includes(exercise.targetMuscleGroup)
+					)
+					.filter((exercise) => exercise.name.toLowerCase().includes(pickerSearch.trim().toLowerCase())),
+				muscleGroupOf
+			)
+		).sort(([a], [b]) => a.localeCompare(b))
+	);
+	let pickerMuscleGroups = $derived([...new Set(pickerExercises.map((exercise) => exercise.targetMuscleGroup))]);
 
 	const extraMesocycleProps: Partial<MesocycleExerciseTemplateWithoutIdsOrIndex> = {
 		sets: undefined,
@@ -114,27 +114,9 @@
 	let open = $state(false);
 	let overridesSheetOpen = $state(false);
 	let mode = $derived(props.editingExercise === undefined ? 'Add' : 'Edit');
-	let searching = $state(false);
 	let currentExercise: Partial<FullExerciseTemplate> = $state(structuredClone(defaultExercise));
 	let selectedMuscleGroups = $state<MuscleGroup[]>([]);
 	let filterOpen = $state(false);
-
-	let filteredExercises = $derived(
-		allGroupedExercises
-			.filter(
-				(exercisesForMuscleGroup) =>
-					selectedMuscleGroups.length === 0 || selectedMuscleGroups.includes(exercisesForMuscleGroup.muscleGroup)
-			)
-			.map((exercisesForMuscleGroup) => ({
-				muscleGroup: exercisesForMuscleGroup.muscleGroup,
-				exercises: exercisesForMuscleGroup.exercises.filter((ex) =>
-					(currentExercise.name ?? '').trim() === ''
-						? true
-						: ex.name.toLowerCase().includes(currentExercise.name?.toLowerCase() ?? '')
-				)
-			}))
-			.filter((group) => group.exercises.length > 0)
-	);
 
 	$effect(() => {
 		if (props.editingExercise) {
@@ -143,12 +125,33 @@
 		}
 	});
 
-	function selectExercise(exercise: ExerciseTemplateWithoutIdsOrIndex) {
-		currentExercise = structuredClone({
-			...exercise,
-			...(props.context !== 'exerciseSplit' && structuredClone(extraMesocycleProps))
-		});
-		searching = false;
+	function selectExercise(exercise: PickerExercise) {
+		const routineSettings = mode === 'Add' ? exercise.routineSettings : {};
+		currentExercise = {
+			...currentExercise,
+			...routineSettings,
+			name: exercise.name,
+			targetMuscleGroup: exercise.targetMuscleGroup,
+			customMuscleGroup: exercise.customMuscleGroup,
+			bodyweightFraction: exercise.bodyweightFraction,
+			// In a workout, the exercise's own note shows with the routine's
+			...(props.context === 'workout' && { exerciseNote: exercise.note })
+		};
+		pickerOpen = false;
+		pickerSearch = '';
+	}
+
+	async function createExercise(details: ExerciseFormDetails) {
+		try {
+			const created = await trpc().exercises.create.mutate(details);
+			await loadPickerExercises();
+			const picked = pickerExercises.find((exercise) => exercise.id === created.id);
+			if (picked) selectExercise(picked);
+			newExerciseOpen = false;
+			toast.success('Exercise created');
+		} catch (error) {
+			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to create exercise');
+		}
 	}
 
 	function resetDrawerState() {
@@ -162,6 +165,10 @@
 		if ('isUserExercise' in currentExercise) {
 			delete currentExercise.isUserExercise;
 		}
+		if (!currentExercise.name) {
+			toast.error('Pick an exercise');
+			return;
+		}
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
 		if ('sets' in finishedExercise) {
 			if (mode === 'Add') result = props.addExercise(finishedExercise);
@@ -172,7 +179,7 @@
 		}
 
 		if (!result) {
-			toast.error('Exercise names should be unique');
+			toast.error('This exercise is already in the list');
 			return;
 		}
 		resetDrawerState();
@@ -205,121 +212,114 @@
 		</Sheet.Header>
 		<form class="mt-8 grid h-fit grid-cols-2 gap-x-2 gap-y-4" onsubmit={submitForm}>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">
-				<span class="text-sm font-medium">Exercise name</span>
-				<Command.Root class="flex-1 bg-background" shouldFilter={false}>
-					<div class="flex w-full items-center justify-between">
-						<Command.Input
-							class="w-full pr-10"
-							onfocus={() => (searching = true)}
-							placeholder="Type here or search..."
-							required
-							bind:value={currentExercise.name}
-						/>
-						<Popover.Root bind:open={filterOpen}>
-							<Popover.Trigger>
-								<Button
-									variant={selectedMuscleGroups.length > 0 ? 'default' : 'outline'}
-									size="icon"
-									type="button"
-									class="ml-2 flex h-10 w-10 items-center justify-center p-0"
-								>
-									<FilterIcon class="h-5 w-5" />
-								</Button>
-							</Popover.Trigger>
-							<Popover.Content class="w-80 p-4" side="top" align="start">
-								<div class="flex flex-col gap-4">
-									<h4 class="font-medium leading-none">Filter by muscle group</h4>
-									<div class="grid grid-cols-2 gap-2">
-										{#each allGroupedExercises.filter((g) => g.exercises.length > 0) as group}
+				<span class="text-sm font-medium">Exercise</span>
+				<Button
+					class="justify-between"
+					aria-expanded={pickerOpen}
+					aria-label="Pick an exercise"
+					onclick={() => {
+						pickerOpen = !pickerOpen;
+						// Freshly made exercises (e.g. in another tab) show up too
+						if (pickerOpen) loadPickerExercises();
+					}}
+					type="button"
+					variant="outline"
+				>
+					<span class="truncate">{currentExercise.name || 'Pick an exercise'}</span>
+					<ChevronsUpDown class="h-4 w-4 opacity-50" />
+				</Button>
+				{#if pickerOpen}
+					<Command.Root class="rounded-md border" shouldFilter={false}>
+						<div class="flex items-center gap-1 pr-1">
+							<Command.Input class="w-full" placeholder="Search your exercises" bind:value={pickerSearch} />
+							<Popover.Root bind:open={filterOpen}>
+								<Popover.Trigger>
+									<Button
+										class="flex h-8 w-8 items-center justify-center p-0"
+										aria-label="Filter by muscle group"
+										size="icon"
+										type="button"
+										variant={selectedMuscleGroups.length > 0 ? 'default' : 'ghost'}
+									>
+										<FilterIcon class="h-4 w-4" />
+									</Button>
+								</Popover.Trigger>
+								<Popover.Content class="w-80 p-4" align="start" side="top">
+									<div class="flex flex-col gap-4">
+										<h4 class="font-medium leading-none">Filter by muscle group</h4>
+										<div class="grid grid-cols-2 gap-2">
+											{#each pickerMuscleGroups as muscleGroup}
+												<Button
+													class="justify-start"
+													onclick={() => toggleMuscleGroup(muscleGroup)}
+													variant={selectedMuscleGroups.includes(muscleGroup) ? 'default' : 'outline'}
+												>
+													{convertCamelCaseToNormal(muscleGroup)}
+												</Button>
+											{/each}
+										</div>
+										<div class="flex justify-between">
 											<Button
-												variant={selectedMuscleGroups.includes(group.muscleGroup) ? 'default' : 'outline'}
-												class="justify-start"
-												onclick={() => toggleMuscleGroup(group.muscleGroup)}
+												class="gap-2"
+												onclick={() => {
+													selectedMuscleGroups = [];
+													filterOpen = false;
+												}}
+												variant="destructive"
 											>
-												{convertCamelCaseToNormal(group.muscleGroup)}
+												<XIcon /> Clear
 											</Button>
-										{/each}
+											<Button class="gap-2" onclick={() => (filterOpen = false)}>Done <CheckIcon /></Button>
+										</div>
 									</div>
-									<div class="flex justify-between">
-										<Button
-											variant="destructive"
-											class="gap-2"
-											onclick={() => {
-												selectedMuscleGroups = [];
-												filterOpen = false;
-											}}
-										>
-											<XIcon />
-											Clear
-										</Button>
-										<Button class="gap-2" onclick={() => (filterOpen = false)}>
-											Done
-											<CheckIcon />
-										</Button>
-									</div>
+								</Popover.Content>
+							</Popover.Root>
+						</div>
+						<Command.List class="max-h-48 w-full">
+							{#each pickerGroups as [group, exercises] (group)}
+								<Command.Group heading={group}>
+									{#each exercises ?? [] as exercise (exercise.id)}
+										<Command.Item onSelect={() => selectExercise(exercise)}>{exercise.name}</Command.Item>
+									{/each}
+								</Command.Group>
+							{:else}
+								<div class="p-3 text-center text-sm text-muted-foreground">
+									{pickerExercises.length === 0 ? 'No exercises yet' : 'No exercises match'}
 								</div>
-							</Popover.Content>
-						</Popover.Root>
-					</div>
-					{#if searching}
-						<Command.List class="max-h-32 w-full bg-muted">
-							{#each filteredExercises as exercisesForMuscleGroup}
-								{#if exercisesForMuscleGroup.exercises.length > 0}
-									<Command.Group heading={exercisesForMuscleGroup.muscleGroup}>
-										{#each exercisesForMuscleGroup.exercises as exercise}
-											<Command.Item onSelect={() => selectExercise(exercise)}>
-												{exercise.name}
-												{#if 'isUserExercise' in exercise && exercise.isUserExercise}
-													<span class="text-xs italic text-muted-foreground">&nbsp;(user)</span>
-												{/if}
-											</Command.Item>
-										{/each}
-									</Command.Group>
-								{/if}
 							{/each}
 						</Command.List>
-					{/if}
-				</Command.Root>
+					</Command.Root>
+					<Button class="gap-2" onclick={() => (newExerciseOpen = true)} type="button" variant="secondary">
+						<AddIcon /> New exercise
+					</Button>
+				{/if}
+				{#if currentExercise.name && currentExercise.targetMuscleGroup}
+					<div class="flex flex-col gap-1 rounded-md bg-muted/50 p-2" data-testid="picked-exercise-details">
+						<div class="flex flex-wrap gap-1">
+							<Badge variant="secondary">
+								{muscleGroupOf({
+									targetMuscleGroup: currentExercise.targetMuscleGroup,
+									customMuscleGroup: currentExercise.customMuscleGroup
+								})}
+							</Badge>
+							{#if typeof currentExercise.bodyweightFraction === 'number'}
+								<Badge variant="outline">{Math.round(currentExercise.bodyweightFraction * 100)}% of bodyweight</Badge>
+							{/if}
+						</div>
+						{#if pickedExercise?.note}
+							<span class="text-sm">{pickedExercise.note}</span>
+						{/if}
+						<span class="text-xs text-muted-foreground">
+							Name, muscle group, bodyweight and exercise note are changed on the
+							{#if pickedExercise}
+								<a class="underline" href="/exercises/{pickedExercise.id}" target="_blank">Exercises page</a>.
+							{:else}
+								Exercises page.
+							{/if}
+						</span>
+					</div>
+				{/if}
 			</div>
-			<div
-				class="flex w-full flex-col gap-1.5 {currentExercise.targetMuscleGroup === 'Custom'
-					? 'col-span-1'
-					: 'col-span-2'}"
-			>
-				<Select.Root
-					name="exercise-target-muscle-group"
-					onSelectedChange={(v) => {
-						currentExercise.targetMuscleGroup = v?.value;
-						if (v?.value !== 'Custom') currentExercise.customMuscleGroup = null;
-					}}
-					required
-					selected={{
-						value: currentExercise.targetMuscleGroup,
-						label: convertCamelCaseToNormal(currentExercise.targetMuscleGroup)
-					}}
-				>
-					<Select.Label class="p-0 text-sm font-medium leading-none">Target muscle group</Select.Label>
-					<Select.Trigger>
-						<Select.Value placeholder="Pick one" />
-					</Select.Trigger>
-					<Select.Content class="h-48 overflow-y-auto">
-						{#each Object.values(MuscleGroup) as muscleGroup}
-							<Select.Item label={convertCamelCaseToNormal(muscleGroup)} value={muscleGroup} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			</div>
-			{#if currentExercise.targetMuscleGroup === 'Custom'}
-				<div class="flex w-full flex-col gap-1.5">
-					<Label for="exercise-custom-muscle-group">Muscle group</Label>
-					<Input
-						id="exercise-custom-muscle-group"
-						placeholder="Type here"
-						required
-						bind:value={currentExercise.customMuscleGroup}
-					/>
-				</div>
-			{/if}
 			{#if props.context !== 'exerciseSplit' && 'sets' in currentExercise}
 				<div class="flex w-full flex-col gap-1.5">
 					<Label for="exercise-sets">Sets</Label>
@@ -340,37 +340,6 @@
 					</Button>
 				</div>
 			{/if}
-			<div class="flex w-full flex-col gap-1.5">
-				<Label
-					for={currentExercise.bodyweightFraction !== null
-						? 'exercise-bodyweight-fraction'
-						: 'exercise-involves-bodyweight'}>Bodyweight fraction</Label
-				>
-				<div class="flex gap-0.5">
-					{#if currentExercise.bodyweightFraction !== null}
-						<Input
-							id="exercise-bodyweight-fraction"
-							min={0.01}
-							placeholder="Fraction"
-							required
-							step={0.01}
-							type="number"
-							bind:value={currentExercise.bodyweightFraction}
-						/>
-					{/if}
-					<div class="flex grow items-center rounded-md border px-2 py-1.5">
-						<Switch
-							id="exercise-involves-bodyweight"
-							name="exercise-involves-bodyweight"
-							checked={currentExercise.bodyweightFraction !== null}
-							includeInput
-							onCheckedChange={(c) => {
-								currentExercise.bodyweightFraction = c ? undefined : null;
-							}}
-						/>
-					</div>
-				</div>
-			</div>
 			<div class="flex w-full flex-col gap-1.5">
 				{#key currentExercise}
 					<Select.Root
@@ -519,11 +488,11 @@
 				{/if}
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">
-				<Label for="exercise-note">Note</Label>
+				<Label for="exercise-note">Routine note</Label>
 				<Textarea
 					id="exercise-note"
 					class="resize-none"
-					placeholder="Exercise cues, machine heights, etc."
+					placeholder="For this routine, e.g. seat on 4, cable at the top"
 					bind:value={currentExercise.note as string}
 				/>
 			</div>
@@ -531,6 +500,19 @@
 		</form>
 	</Sheet.Content>
 </Sheet.Root>
+
+<ResponsiveDialog title="New exercise" bind:open={newExerciseOpen}>
+	{#snippet description()}
+		It's added to your exercises, and picked here.
+	{/snippet}
+	{#if newExerciseOpen}
+		<ExerciseForm
+			existingNames={pickerExercises.map((exercise) => exercise.name)}
+			onSubmit={createExercise}
+			submitLabel="Create exercise"
+		/>
+	{/if}
+</ResponsiveDialog>
 
 {#if props.context !== 'exerciseSplit' && 'sets' in currentExercise}
 	<Sheet.Root closeOnOutsideClick={false} bind:open={overridesSheetOpen}>

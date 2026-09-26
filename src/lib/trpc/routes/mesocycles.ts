@@ -125,7 +125,9 @@ export const mesocycles = t.router({
 			}));
 
 		// A block is a copy of a library: its exercises already exist and keep their details
-		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.mesocycleExerciseTemplates.flat(), 'link');
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.mesocycleExerciseTemplates.flat(), {
+			restore: true
+		});
 		const mesocycleExerciseTemplates: Prisma.MesocycleExerciseTemplateUncheckedCreateInput[] =
 			input.mesocycleExerciseTemplates.flatMap((dayExercises, dayNumber) =>
 				dayExercises.map((exercise) => ({
@@ -245,12 +247,10 @@ export const mesocycles = t.router({
 				mesocycleId: mesocycle.id
 			}))
 		});
-		// Editing a block's routines is where exercises are set up: details given here apply everywhere
-		const { byName, syncQueries } = await resolveExercises(
-			ctx.userId,
-			input.mesocycleExerciseTemplates.flat(),
-			'define'
-		);
+		// Exercises as they are: their details change only on the Exercises page
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.mesocycleExerciseTemplates.flat(), {
+			restore: true
+		});
 		const createSplitExercisesQuery = prisma.mesocycleExerciseTemplate.createMany({
 			data: input.mesocycleExerciseTemplates.flatMap((dayExercises, idx) => {
 				return dayExercises.map((exercise) => ({

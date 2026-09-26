@@ -37,7 +37,10 @@ model WorkoutExercise {
   changeAmount        Float?
   repRangeStart       Int
   repRangeEnd         Int
+  /// The routine's note for this exercise that day
   note                String?
+  /// The exercise's own note that day
+  exerciseNote        String?
   overloadPercentage  Float?
   lastSetToFailure    Boolean?
   forceRIRMatching    Boolean?
