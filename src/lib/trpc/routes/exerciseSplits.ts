@@ -34,7 +34,8 @@ type LibraryExercise = z.infer<typeof ExerciseTemplateCreateWithoutExerciseSplit
 
 /**
  * Copies a library's routines into a block: a routine found in the block (by its name before the
- * edit, else its name) gets the library's exercises, keeping each exercise's sets and overrides;
+ * edit, else its name) gets the library's exercises, keeping each exercise's sets (unless changed
+ * in the library) and overrides;
  * a new routine is added at the end. Positions don't change, so workouts stay with their
  * routine. Routines only in the block stay as they are.
  */
@@ -44,7 +45,9 @@ async function updateBlockFromLibrary(
 	exerciseSplitId: string,
 	routines: { name: string; weightUnit: 'KG' | 'LB' | 'ASK'; previousName: string | null }[],
 	routineExercises: LibraryExercise[][],
-	exercisesByName: Map<string, ResolvedExercise>
+	exercisesByName: Map<string, ResolvedExercise>,
+	/** Per routine: set counts changed in this library edit, by exercise name */
+	changedSets: Map<string, number>[]
 ): Promise<PrismaPromise<unknown>[]> {
 	const block = await prisma.mesocycle.findFirst({
 		where: { id: mesocycleId, userId, startDate: { not: null }, endDate: null },
@@ -77,7 +80,8 @@ async function updateBlockFromLibrary(
 				...linkToExercise(exercise, exercisesByName),
 				exerciseIndex,
 				mesocycleExerciseSplitDayId: splitDayId,
-				sets: old?.sets ?? routineSets,
+				// A set count changed in the library wins; otherwise the block keeps its own
+				sets: changedSets[routineIdx]?.get(exercise.name) ?? old?.sets ?? exercise.sets ?? routineSets,
 				overloadPercentage: old?.overloadPercentage ?? null,
 				lastSetToFailure: old?.lastSetToFailure ?? null,
 				forceRIRMatching: old?.forceRIRMatching ?? null,
@@ -249,13 +253,31 @@ export const exerciseSplits = t.router({
 						exercises: input.splitData.splitExercises[idx] ?? []
 					}))
 					.filter((routine) => !routine.isRestDay);
+				// Set counts as the library had them, to tell which ones this edit changed
+				const oldRoutines = await prisma.exerciseSplitDay.findMany({
+					where: { exerciseSplitId: input.id },
+					select: { name: true, exercises: { select: { name: true, sets: true } } }
+				});
+				const changedSets = routines.map((routine) => {
+					const oldRoutine =
+						oldRoutines.find((old) => old.name === routine.previousName) ??
+						oldRoutines.find((old) => old.name === routine.name);
+					const changed = new Map<string, number>();
+					for (const exercise of routine.exercises) {
+						if (typeof exercise.sets !== 'number') continue;
+						const oldSets = oldRoutine?.exercises.find((old) => old.name === exercise.name)?.sets;
+						if (oldSets !== exercise.sets) changed.set(exercise.name, exercise.sets);
+					}
+					return changed;
+				});
 				blockQueries = await updateBlockFromLibrary(
 					ctx.userId,
 					input.updateBlock.mesocycleId,
 					input.id,
 					routines,
 					routines.map((routine) => routine.exercises),
-					resolved.byName
+					resolved.byName,
+					changedSets
 				);
 			}
 

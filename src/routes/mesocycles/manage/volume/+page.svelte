@@ -14,6 +14,14 @@
 	let { data } = $props();
 	let exerciseSplit: FullExerciseSplit | 'loading' = $state('loading');
 	let setsPerExercise = $state(3);
+	// Exercises whose library gives no set count; the others start with the library's
+	let exercisesWithoutSets = $derived(
+		mesocycleRunes.countExercisesWithoutSets(
+			data.editing
+				? mesocycleRunes.mesocycleExerciseTemplates.map((_, idx) => idx)
+				: mesocycleRunes.getIncludedRoutineIndexes()
+		)
+	);
 
 	onMount(async () => {
 		if (data.editing) return;
@@ -33,7 +41,7 @@
 			toast.error('Include at least one routine');
 			return;
 		}
-		mesocycleRunes.setSetsOfAllExercises(setsPerExercise);
+		mesocycleRunes.fillMissingSets(setsPerExercise);
 		goto('./overview');
 	}
 </script>
@@ -60,12 +68,20 @@
 				{/each}
 			</ul>
 		{/if}
-		<Label for="sets-per-exercise">Sets per exercise</Label>
-		<Input id="sets-per-exercise" type="number" min={1} max={20} required bind:value={setsPerExercise} />
-		<p class="text-sm text-muted-foreground">
-			Every exercise in the block starts with this many sets. You can change the sets of any exercise later by editing
-			the block's routines, or during a workout.
-		</p>
+		{#if exercisesWithoutSets > 0}
+			<Label for="sets-per-exercise">Sets per exercise</Label>
+			<Input id="sets-per-exercise" type="number" min={1} max={20} required bind:value={setsPerExercise} />
+			<p class="text-sm text-muted-foreground">
+				For the {exercisesWithoutSets === 1 ? 'exercise' : `${exercisesWithoutSets} exercises`} without a set count in the
+				routine library. The others start with the library's. You can change any exercise's sets later by editing the block's
+				routines, or during a workout.
+			</p>
+		{:else}
+			<p class="text-sm text-muted-foreground" data-testid="sets-from-library">
+				Each exercise starts with the sets from its routine library. You can change them later by editing the block's
+				routines, or during a workout.
+			</p>
+		{/if}
 		<div class="mt-auto grid grid-cols-2 gap-1">
 			<Button href="./progression" variant="secondary">Previous</Button>
 			<Button type="submit">Next</Button>

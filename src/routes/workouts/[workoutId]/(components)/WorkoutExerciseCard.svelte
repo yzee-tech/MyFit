@@ -4,7 +4,7 @@
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import type { Prisma } from '@prisma/client';
 	import MiniSetIcon from 'virtual:icons/lucide/arrow-down-right';
-	import { fromKg, roundWeight, unitLabel } from '$lib/utils/weightUnits';
+	import { fromKg, isLevelUnit, loadLabel, roundWeight } from '$lib/utils/weightUnits';
 
 	type PropsType = {
 		exercise: Prisma.WorkoutExerciseGetPayload<{
@@ -33,7 +33,7 @@
 			{convertCamelCaseToNormal(exercise.setType)} sets of
 			{exercise.repRangeStart} to {exercise.repRangeEnd} reps
 		</span>
-		{#if exercise.bodyweightFraction}
+		{#if exercise.bodyweightFraction && !isLevelUnit(exercise.weightUnit)}
 			<Badge variant="outline">BW</Badge>
 		{/if}
 		<Badge class="whitespace-nowrap" variant="secondary">
@@ -57,7 +57,7 @@
 			<Table.Row class="h-2 border-none bg-secondary">
 				<Table.Head class="h-7 w-5"></Table.Head>
 				<Table.Head class="h-7 text-center text-foreground">Reps</Table.Head>
-				<Table.Head class="h-7 text-center text-foreground">Load ({unitLabel(exercise.weightUnit)})</Table.Head>
+				<Table.Head class="h-7 text-center text-foreground">{loadLabel(exercise.weightUnit)}</Table.Head>
 				<Table.Head class="h-7 text-center text-foreground">RIR</Table.Head>
 			</Table.Row>
 		</Table.Header>

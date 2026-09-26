@@ -223,6 +223,7 @@ export const exercises = t.router({
 				libraryId: entry.exerciseSplitDay.exerciseSplit.id,
 				libraryName: entry.exerciseSplitDay.exerciseSplit.name,
 				routineName: entry.exerciseSplitDay.name,
+				sets: entry.sets ?? undefined,
 				setType: entry.setType,
 				repRangeStart: entry.repRangeStart,
 				repRangeEnd: entry.repRangeEnd
@@ -335,7 +336,7 @@ export const exercises = t.router({
 			const [libraryRoutines, blockRoutines] = await Promise.all([
 				prisma.exerciseSplitDay.findMany({
 					where: { id: { in: input.libraryRoutineIds }, exerciseSplit: { userId: ctx.userId } },
-					include: { exercises: { select: { exerciseId: true, exerciseIndex: true } } }
+					include: { exercises: { select: { exerciseId: true, exerciseIndex: true, sets: true } } }
 				}),
 				prisma.mesocycleExerciseSplitDay.findMany({
 					where: {
@@ -356,8 +357,11 @@ export const exercises = t.router({
 			for (const routine of libraryRoutines) {
 				if (routine.exercises.some((ex) => ex.exerciseId === exercise.id)) continue;
 				const exerciseIndex = Math.max(-1, ...routine.exercises.map((ex) => ex.exerciseIndex)) + 1;
+				const sets = mostCommon(routine.exercises.flatMap((ex) => (ex.sets === null ? [] : [ex.sets]))) ?? null;
 				queries.push(
-					prisma.exerciseTemplate.create({ data: { ...details, exerciseIndex, exerciseSplitDayId: routine.id } })
+					prisma.exerciseTemplate.create({
+						data: { ...details, exerciseIndex, sets, exerciseSplitDayId: routine.id }
+					})
 				);
 			}
 			for (const routine of blockRoutines) {

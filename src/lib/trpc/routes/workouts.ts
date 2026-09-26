@@ -1,8 +1,9 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
-import { resolveExerciseUnit } from '$lib/utils/weightUnits';
+import { isLevelUnit, resolveExerciseUnit } from '$lib/utils/weightUnits';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
 import {
+	comparablePerformances,
 	convertExerciseLoads,
 	getBlockWeek,
 	isDeloadWeek,
@@ -450,9 +451,10 @@ export const workouts = t.router({
 				exerciseNote: exerciseNotes.get(exercise.name) ?? null
 			}));
 
-			// "Previous" for comparisons: the last time each of today's exercises was done
+			// "Previous" for comparisons: the last time each of today's exercises was done, with the same
+			// kind of load (levels or weights)
 			const lastPerformances = exerciseNames
-				.map((name) => exerciseHistory[name]?.at(-1))
+				.map((name) => comparablePerformances(exerciseHistory[name] ?? [], unitByExerciseName.get(name)).at(-1))
 				.filter((performance) => performance !== undefined);
 			if (lastPerformances.length > 0) {
 				workoutExercisesWithPreviousData.previousWorkoutData = {
@@ -484,7 +486,7 @@ export const workouts = t.router({
 				topRepRangeEnd: z.number().int().nullish(),
 				changeType: ChangeTypeSchema.nullish(),
 				changeAmount: z.number().nullish(),
-				weightUnit: z.enum(['KG', 'LB']),
+				weightUnit: z.enum(['KG', 'LB', 'LEVEL']),
 				weightSetId: z.string().nullish(),
 				userBodyweight: z.number().positive()
 			})
@@ -502,7 +504,7 @@ export const workouts = t.router({
 					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
 				})
 			]);
-			if (!history[exercise.name]?.length) return null;
+			if (comparablePerformances(history[exercise.name] ?? [], input.weightUnit).length === 0) return null;
 
 			// The current block's effort and overload settings, else steady defaults
 			const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
@@ -523,7 +525,7 @@ export const workouts = t.router({
 						name: '',
 						dayIndex: 0,
 						isRestDay: false,
-						weightUnit: input.weightUnit,
+						weightUnit: isLevelUnit(input.weightUnit) ? 'KG' : input.weightUnit,
 						mesocycleId: 'suggestion',
 						mesocycleSplitDayExercises: [
 							{
@@ -668,9 +670,14 @@ export const workouts = t.router({
 						// The exercise note lives on the exercise itself, not the routine
 						const { workoutId, weightUnit, exerciseNote, ...exercise } = ex;
 						// Remember an exercise's own unit (e.g. lb machines at a kg gym), but not for routines
-						// used at many gyms, where the unit is picked again each workout
+						// used at many gyms, where the unit is picked again each workout. Levels come from the
+						// exercise's weight set, so they aren't remembered as a unit.
 						const rememberedUnit =
-							todaysSplitDay.weightUnit !== 'ASK' && weightUnit !== todaysSplitDay.weightUnit ? weightUnit : null;
+							todaysSplitDay.weightUnit !== 'ASK' &&
+							!isLevelUnit(weightUnit) &&
+							weightUnit !== todaysSplitDay.weightUnit
+								? weightUnit
+								: null;
 						const weightSetId =
 							todaysSplitDay.weightUnit === 'ASK' ? (routineWeightSetIds.get(ex.name) ?? null) : ex.weightSetId;
 						return {

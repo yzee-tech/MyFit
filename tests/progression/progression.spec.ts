@@ -11,12 +11,14 @@ import {
 	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate,
 	switchExerciseUnit,
 	getNextWeightHint,
+	getExerciseVolume,
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
 import {
 	convertWeight,
 	defaultWeightStep,
+	formatWeight,
 	fromKg,
 	resolveExerciseUnit,
 	roundWeight,
@@ -76,7 +78,7 @@ function performance(
 	exerciseName: string,
 	sets: TestSet[],
 	userBodyweight = 100,
-	weightUnit: 'KG' | 'LB' = 'KG'
+	weightUnit: 'KG' | 'LB' | 'LEVEL' = 'KG'
 ): PreviousPerformance {
 	const template = testMesocycle.mesocycleExerciseSplitDays
 		.flatMap((splitDay) => splitDay.mesocycleSplitDayExercises)
@@ -396,4 +398,89 @@ test('weight sets: an assisted machine counts help as a negative load, and less 
 	const output = progressiveOverloadMagic(block, 1, 100, 0, history, 'normal', [assist]);
 	const suggestion = output.find((exercise) => exercise.name === 'Barbell rows')!;
 	suggestion.sets.forEach((set) => expect(set.load).toEqual(-15));
+});
+
+// Levels: a hotel chest press that shows levels 1–10 instead of weights
+const hotelChestPress: WeightSetLike = {
+	id: 'hotel-levels',
+	name: 'Hotel – Chest press',
+	unit: 'LEVEL',
+	weights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+};
+
+/** Barbell rows on the level machine, 10–15 reps, steady effort (RIR 3 every week) */
+function levelSuggestion(history: PreviousPerformance[], setType: 'Straight' | 'Down' = 'Straight') {
+	const block = blockWithWeightSet(hotelChestPress.id);
+	block.weeklyRIR = [3];
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL', setType, changeType: null });
+	const output = progressiveOverloadMagic(block, 1, 100, 0, { 'Barbell rows': history }, 'normal', [hotelChestPress]);
+	return output.find((exercise) => exercise.name === 'Barbell rows')!;
+}
+const levelSets = (level: number, ...reps: number[]) => sets(level, ...reps);
+const levelPerformance = (lastTime: TestSet[]) => performance('Barbell rows', lastTime, 100, 'LEVEL');
+
+test('levels: which unit, how they show, and they never convert', () => {
+	expect(resolveExerciseUnit(null, 'KG', 'KG', 'LEVEL')).toEqual('LEVEL');
+	expect(resolveExerciseUnit('LB', 'KG', 'KG', 'LEVEL')).toEqual('LEVEL');
+	expect(resolveExerciseUnit(null, 'ASK', 'LB', 'LEVEL')).toEqual('LEVEL');
+	expect(formatWeight(7, 'LEVEL')).toEqual('Level 7');
+	expect(convertWeight(7, 'LEVEL', 'LB')).toEqual(7);
+	expect(defaultWeightStep('LEVEL')).toEqual(1);
+	expect(availableWeightsFor({ weightSetId: 'hotel-levels', weightUnit: 'LEVEL' }, [hotelChestPress])).toEqual(
+		hotelChestPress.weights
+	);
+});
+
+test('levels: a rep more each time, up to the top of the rep range', () => {
+	const rows = levelSuggestion([levelPerformance(levelSets(7, 12, 13, 12))]);
+	expect(rows.weightUnit).toEqual('LEVEL');
+	rows.sets.forEach((set) => expect(set.load).toEqual(7));
+	expect(rows.sets.map((set) => set.reps)).toEqual([13, 14, 13]);
+	// No next-weight note: levels don't use the weight formula
+	expect(getNextWeightHint(rows, hotelChestPress.weights, 100)).toBeNull();
+});
+
+test('levels: once every set reaches the top, the next level at the bottom of the range', () => {
+	const rows = levelSuggestion([levelPerformance(levelSets(7, 15, 15, 15))]);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(8);
+		expect(set.reps).toEqual(10);
+	});
+
+	// Sets sharing a level wait until they're all at the top
+	const waiting = levelSuggestion([levelPerformance(levelSets(7, 15, 15, 14))]);
+	waiting.sets.forEach((set) => expect(set.load).toEqual(7));
+	expect(waiting.sets.map((set) => set.reps)).toEqual([15, 15, 15]);
+});
+
+test('levels: at the highest level, reps keep going up', () => {
+	const rows = levelSuggestion([levelPerformance(levelSets(10, 15, 15, 15))]);
+	rows.sets.forEach((set) => {
+		expect(set.load).toEqual(10);
+		expect(set.reps).toEqual(16);
+	});
+});
+
+test('levels: only compared with level sessions, and never with weights', () => {
+	// Done on a weight stack last time, on levels before that: the level session is the one used
+	const rows = levelSuggestion([
+		levelPerformance(levelSets(5, 11, 11, 11)),
+		performance('Barbell rows', sets(40, 10, 10, 10))
+	]);
+	rows.sets.forEach((set) => expect(set.load).toEqual(5));
+	expect(rows.sets.map((set) => set.reps)).toEqual([12, 12, 12]);
+
+	// Only weights before: nothing to go on, so the sets start blank
+	const blank = levelSuggestion([performance('Barbell rows', sets(40, 10, 10, 10))]);
+	blank.sets.forEach((set) => expect(set.load).toBeUndefined());
+
+	// And a weights exercise ignores level sessions
+	const history: ExerciseHistory = { 'Barbell rows': [levelPerformance(levelSets(7, 12, 12, 12))] };
+	const weights = progressiveOverloadMagic(blockWithWeightSet(null), 1, 100, 0, history);
+	weights.find((exercise) => exercise.name === 'Barbell rows')!.sets.forEach((set) => expect(set.load).toBeUndefined());
+
+	// Levels don't count towards kg volume
+	expect(getExerciseVolume(levelPerformance(levelSets(7, 12, 12, 12)).exercise, 100)).toEqual(0);
+	expect(getExerciseVolume(performance('Barbell rows', sets(40, 10)).exercise, 100)).toBeGreaterThan(0);
 });

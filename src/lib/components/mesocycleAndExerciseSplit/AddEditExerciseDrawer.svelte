@@ -22,7 +22,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import type { WeightSetLike } from '$lib/utils/weightSets';
-	import { unitLabel } from '$lib/utils/weightUnits';
+	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { toast } from 'svelte-sonner';
 	import CheckIcon from 'virtual:icons/lucide/check';
 	import ChevronLeft from 'virtual:icons/lucide/chevron-left';
@@ -58,9 +58,17 @@
 
 	let { ...props }: PropsType = $props();
 
+	/** In a block or workout (not a routine library), where an exercise has overrides */
+	function isBlockExercise(
+		exercise: Partial<FullExerciseTemplate>
+	): exercise is Partial<MesocycleExerciseTemplateWithoutIdsOrIndex & { isUserExercise?: boolean }> {
+		return props.context !== 'exerciseSplit';
+	}
+
 	// The weights a gym has; none means standard steps (2.5 kg / 5 lb)
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
-	const weightSetLabel = (weightSet: WeightSetLike) => `${weightSet.name} (${unitLabel(weightSet.unit)})`;
+	const weightSetLabel = (weightSet: WeightSetLike) =>
+		`${weightSet.name} (${isLevelUnit(weightSet.unit) ? 'levels' : unitLabel(weightSet.unit)})`;
 	function weightSetOption(weightSetId: string | null | undefined) {
 		const weightSet = weightSets.find((set) => set.id === weightSetId);
 		return weightSet
@@ -170,7 +178,7 @@
 			return;
 		}
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
-		if ('sets' in finishedExercise) {
+		if (isBlockExercise(finishedExercise)) {
 			if (mode === 'Add') result = props.addExercise(finishedExercise);
 			else result = props.editExercise(finishedExercise);
 		} else if (props.context === 'exerciseSplit') {
@@ -320,7 +328,21 @@
 					</div>
 				{/if}
 			</div>
-			{#if props.context !== 'exerciseSplit' && 'sets' in currentExercise}
+			{#if props.context === 'exerciseSplit'}
+				<div class="col-span-2 flex w-full flex-col gap-1.5">
+					<Label for="exercise-sets">Sets</Label>
+					<Input
+						id="exercise-sets"
+						max={20}
+						min={1}
+						placeholder="Chosen when starting a block"
+						type="number"
+						bind:value={currentExercise.sets}
+					/>
+					<span class="text-xs text-muted-foreground">A new block starts this exercise with this many sets.</span>
+				</div>
+			{/if}
+			{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}
 				<div class="flex w-full flex-col gap-1.5">
 					<Label for="exercise-sets">Sets</Label>
 					<Input
@@ -514,7 +536,7 @@
 	{/if}
 </ResponsiveDialog>
 
-{#if props.context !== 'exerciseSplit' && 'sets' in currentExercise}
+{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}
 	<Sheet.Root closeOnOutsideClick={false} bind:open={overridesSheetOpen}>
 		<Sheet.Content class="w-10/12 overflow-y-auto px-4">
 			<Sheet.Header>
@@ -532,7 +554,7 @@
 							id="exercise-override-minimum-weight-change"
 							checked={currentExercise.minimumWeightChange !== null}
 							onCheckedChange={(c) => {
-								if (c !== 'indeterminate' && 'sets' in currentExercise)
+								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
 									currentExercise.minimumWeightChange = c ? undefined : null;
 							}}
 						/>
@@ -554,7 +576,7 @@
 							id="exercise-override-overload-percentage"
 							checked={currentExercise.overloadPercentage !== null}
 							onCheckedChange={(c) => {
-								if (c !== 'indeterminate' && 'sets' in currentExercise)
+								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
 									currentExercise.overloadPercentage = c ? undefined : null;
 							}}
 						/>
@@ -576,7 +598,7 @@
 							id="exercise-override-force-RIR-matching"
 							checked={currentExercise.forceRIRMatching !== null}
 							onCheckedChange={(c) => {
-								if (c !== 'indeterminate' && 'sets' in currentExercise)
+								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
 									currentExercise.forceRIRMatching = c ? props.mesocycle?.forceRIRMatching : null;
 							}}
 						/>
@@ -589,7 +611,7 @@
 								checked={currentExercise.forceRIRMatching ?? props.mesocycle?.forceRIRMatching}
 								disabled={currentExercise.forceRIRMatching === null}
 								onCheckedChange={(c) => {
-									if ('sets' in currentExercise) currentExercise.forceRIRMatching = c;
+									if (isBlockExercise(currentExercise)) currentExercise.forceRIRMatching = c;
 								}}
 							/>
 						</div>
@@ -602,7 +624,7 @@
 							id="exercise-override-last-set-to-failure"
 							checked={currentExercise.lastSetToFailure !== null}
 							onCheckedChange={(c) => {
-								if (c !== 'indeterminate' && 'sets' in currentExercise)
+								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
 									currentExercise.lastSetToFailure = c ? props.mesocycle?.lastSetToFailure : null;
 							}}
 						/>
@@ -615,7 +637,7 @@
 								checked={currentExercise.lastSetToFailure ?? props.mesocycle?.lastSetToFailure}
 								disabled={currentExercise.lastSetToFailure === null}
 								onCheckedChange={(c) => {
-									if ('sets' in currentExercise) currentExercise.lastSetToFailure = c;
+									if (isBlockExercise(currentExercise)) currentExercise.lastSetToFailure = c;
 								}}
 							/>
 						</div>
