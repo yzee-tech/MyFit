@@ -2,7 +2,7 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { arrayAverage } from '$lib/utils';
-	import { fromKg } from '$lib/utils/weightUnits';
+	import { fromKg, isLevelUnit } from '$lib/utils/weightUnits';
 	import {
 		cleanupInProgressMiniSets,
 		convertExerciseLoads,
@@ -22,6 +22,8 @@
 	// Last time's loads, in the unit this exercise is shown in now (it can be switched mid-workout)
 	let prevExercise = $derived.by(() => {
 		const previous = workoutRunes.previousWorkoutData?.exercises.find((ex) => ex.name === exercise.name);
+		// Levels only compare with levels
+		if (previous && isLevelUnit(previous.weightUnit) !== isLevelUnit(exercise.weightUnit)) return undefined;
 		if (!previous || previous.weightUnit === exercise.weightUnit) return previous;
 		const inKg = convertExerciseLoads(previous, 'toKg');
 		return convertExerciseLoads({ ...inKg, weightUnit: exercise.weightUnit ?? 'KG' }, 'toDisplay');
@@ -39,6 +41,8 @@
 		if (!prevSet) return;
 		if (!currentSet) return;
 		if (currentSet.skipped || prevSet.skipped) return;
+		// The overload formula is for weights, not a machine's levels
+		if (isLevelUnit(exercise.weightUnit)) return;
 
 		if (!isSetCompleted(currentSet)) return;
 		let { reps, load, RIR, miniSets } = currentSet;
@@ -73,7 +77,7 @@
 	}
 
 	function getTheoreticalVolumeChangeOfMiniSet(prev: Omit<CompletedSet, 'completed'>, current: InProgressSet) {
-		if (!isSetCompleted(current)) return;
+		if (!isSetCompleted(current) || isLevelUnit(exercise.weightUnit)) return;
 
 		const actualOverload = solveBergerFormula({
 			variableToSolve: 'OverloadPercentage',
@@ -95,8 +99,8 @@
 	<div class="custom-grid grid grid-cols-4 place-items-center gap-y-2">
 		<span class="text-sm font-medium">Reps</span>
 		<span class="text-sm font-medium">
-			Load
-			{#if exercise.bodyweightFraction !== null}
+			{isLevelUnit(exercise.weightUnit) ? 'Level' : 'Load'}
+			{#if exercise.bodyweightFraction !== null && !isLevelUnit(exercise.weightUnit)}
 				<Popover.Root>
 					<Popover.Trigger class="text-xs font-semibold text-muted-foreground underline">(BW)</Popover.Trigger>
 					<Popover.Content class="w-48 text-center text-base">

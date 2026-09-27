@@ -34,7 +34,12 @@
 		Filler
 	);
 
-	type PropsType = { exercises: SplitExerciseTemplateWithoutIdsOrIndex[] };
+	type PropsType = {
+		exercises: Pick<
+			SplitExerciseTemplateWithoutIdsOrIndex,
+			'bodyweightFraction' | 'repRangeStart' | 'repRangeEnd' | 'setType'
+		>[];
+	};
 
 	let { exercises }: PropsType = $props();
 	const chartTypes = ['Bodyweight & weighted', 'Rep ranges', 'Set types'];

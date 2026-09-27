@@ -106,8 +106,13 @@
 
 		try {
 			let message;
+			// A new blank workout (e.g. with a trainer) can be kept as a routine
+			let blankWorkoutId: string | null = null;
 			if (workoutRunes.editingWorkoutId === null) {
-				({ message } = await trpc().workouts.create.mutate(createData));
+				const created = await trpc().workouts.create.mutate(createData);
+				message = created.message;
+				if (!createData.workoutData.workoutOfMesocycle && createData.workoutExercises.length > 0)
+					blankWorkoutId = created.workoutId;
 			} else {
 				message = (
 					await trpc().workouts.editById.mutate({
@@ -117,7 +122,15 @@
 					})
 				).message;
 			}
-			toast.success(message);
+			if (blankWorkoutId) {
+				const workoutId = blankWorkoutId;
+				toast.success(message, {
+					duration: 10000,
+					action: { label: 'Save as routine', onClick: () => goto(`/workouts/${workoutId}?saveAsRoutine`) }
+				});
+			} else {
+				toast.success(message);
+			}
 			await invalidate('workouts:all');
 			workoutRunes.resetStores();
 			// Reset meso editing store as it won't change if workout affects meso split days and same mesocycle gets edited

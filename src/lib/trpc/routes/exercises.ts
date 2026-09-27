@@ -9,6 +9,7 @@ import { commonExercisePerMuscleGroup } from '$lib/common/commonExercises';
 import { MuscleGroupSchema } from '$lib/zodSchemas';
 import type { ChangeType, PrismaPromise, SetType } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
+import { isLevelUnit } from '$lib/utils/weightUnits';
 import { z } from 'zod';
 
 const exerciseDetailsInput = z
@@ -102,6 +103,48 @@ function builtInRoutineSettings(name: string): RoutineSettings | undefined {
 		topRepRangeStart: builtIn.topRepRangeStart ?? null,
 		topRepRangeEnd: builtIn.topRepRangeEnd ?? null
 	};
+}
+
+/**
+ * A workout that has both exercises of a merge would list the merged one twice: its entries become
+ * one, with all the sets in the order they were done (the first entry's, then the next one's).
+ * Levels and weights aren't combined, as their loads mean different things.
+ */
+async function combineWorkoutDuplicates(exerciseIds: string[]): Promise<PrismaPromise<unknown>[]> {
+	const entries = await prisma.workoutExercise.findMany({
+		where: { exerciseId: { in: exerciseIds } },
+		select: { id: true, workoutId: true, exerciseIndex: true, weightUnit: true, _count: { select: { sets: true } } },
+		orderBy: [{ workoutId: 'asc' }, { exerciseIndex: 'asc' }]
+	});
+	const byWorkout = new Map<string, typeof entries>();
+	for (const entry of entries) byWorkout.set(entry.workoutId, [...(byWorkout.get(entry.workoutId) ?? []), entry]);
+	const queries: PrismaPromise<unknown>[] = [];
+	for (const workoutEntries of byWorkout.values()) {
+		if (workoutEntries.length < 2) continue;
+		const [kept, ...others] = workoutEntries;
+		const combined = others.filter((other) => isLevelUnit(other.weightUnit) === isLevelUnit(kept.weightUnit));
+		let setCount = kept._count.sets;
+		for (const other of combined) {
+			queries.push(
+				prisma.workoutExerciseSet.updateMany({
+					where: { workoutExerciseId: other.id },
+					data: { workoutExerciseId: kept.id, setIndex: { increment: setCount } }
+				})
+			);
+			setCount += other._count.sets;
+		}
+		// Later exercises move up into the gap, last one removed first so the positions stay right
+		for (const other of [...combined].reverse()) {
+			queries.push(
+				prisma.workoutExercise.delete({ where: { id: other.id } }),
+				prisma.workoutExercise.updateMany({
+					where: { workoutId: other.workoutId, exerciseIndex: { gt: other.exerciseIndex } },
+					data: { exerciseIndex: { decrement: 1 } }
+				})
+			);
+		}
+	}
+	return queries;
 }
 
 function getActiveBlock(userId: string) {
@@ -223,6 +266,7 @@ export const exercises = t.router({
 				libraryId: entry.exerciseSplitDay.exerciseSplit.id,
 				libraryName: entry.exerciseSplitDay.exerciseSplit.name,
 				routineName: entry.exerciseSplitDay.name,
+				sets: entry.sets ?? undefined,
 				setType: entry.setType,
 				repRangeStart: entry.repRangeStart,
 				repRangeEnd: entry.repRangeEnd
@@ -335,7 +379,7 @@ export const exercises = t.router({
 			const [libraryRoutines, blockRoutines] = await Promise.all([
 				prisma.exerciseSplitDay.findMany({
 					where: { id: { in: input.libraryRoutineIds }, exerciseSplit: { userId: ctx.userId } },
-					include: { exercises: { select: { exerciseId: true, exerciseIndex: true } } }
+					include: { exercises: { select: { exerciseId: true, exerciseIndex: true, sets: true } } }
 				}),
 				prisma.mesocycleExerciseSplitDay.findMany({
 					where: {
@@ -356,8 +400,11 @@ export const exercises = t.router({
 			for (const routine of libraryRoutines) {
 				if (routine.exercises.some((ex) => ex.exerciseId === exercise.id)) continue;
 				const exerciseIndex = Math.max(-1, ...routine.exercises.map((ex) => ex.exerciseIndex)) + 1;
+				const sets = mostCommon(routine.exercises.flatMap((ex) => (ex.sets === null ? [] : [ex.sets]))) ?? null;
 				queries.push(
-					prisma.exerciseTemplate.create({ data: { ...details, exerciseIndex, exerciseSplitDayId: routine.id } })
+					prisma.exerciseTemplate.create({
+						data: { ...details, exerciseIndex, sets, exerciseSplitDayId: routine.id }
+					})
 				);
 			}
 			for (const routine of blockRoutines) {
@@ -462,7 +509,10 @@ export const exercises = t.router({
 				fromBlock.filter((entry) => !blockDaysWithInto.has(entry.mesocycleExerciseSplitDayId))
 			];
 
+			const combineQueries = await combineWorkoutDuplicates([from.id, into.id]);
+
 			await prisma.$transaction([
+				...combineQueries,
 				prisma.exerciseTemplate.deleteMany({ where: { id: { in: libraryDuplicates.map((entry) => entry.id) } } }),
 				prisma.exerciseTemplate.updateMany({
 					where: { id: { in: libraryMoves.map((entry) => entry.id) } },

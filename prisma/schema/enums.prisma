@@ -46,9 +46,11 @@ enum QuotesDisplayMode {
   BETWEEN_SETS
 }
 
+/// LEVEL: a machine that shows levels (1, 2, 3…) instead of weights; loads are the level number
 enum WeightUnit {
   KG
   LB
+  LEVEL
 }
 
 /// A routine's unit; ASK means choose it when starting a workout (for routines used at many gyms)

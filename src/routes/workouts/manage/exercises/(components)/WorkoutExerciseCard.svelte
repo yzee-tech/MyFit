@@ -6,7 +6,7 @@
 	import { page } from '$app/stores';
 	import { getNextWeightHint, switchExerciseUnit, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, type WeightSetLike } from '$lib/utils/weightSets';
-	import { unitLabel } from '$lib/utils/weightUnits';
+	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -65,7 +65,14 @@
 <div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto truncate">{exercise.name}</span>
-		{#if !readOnly && !reordering}
+		{#if isLevelUnit(exercise.weightUnit)}
+			<span
+				class="mr-1 rounded bg-secondary px-1.5 text-xs font-medium text-muted-foreground"
+				data-testid="{exercise.name}-levels"
+			>
+				levels
+			</span>
+		{:else if !readOnly && !reordering}
 			<button
 				class="mr-1 rounded border px-1.5 text-xs font-medium text-muted-foreground"
 				aria-label="{exercise.name} unit: {unitLabel(exercise.weightUnit ?? 'KG')}, switch"
@@ -93,9 +100,11 @@
 							<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.setEditingExercise(exercise)}>
 								<EditIcon /> Edit
 							</DropdownMenu.Item>
-							<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseWarmupDialog(exercise)}>
-								<ChartIcon /> Warm up
-							</DropdownMenu.Item>
+							{#if !isLevelUnit(exercise.weightUnit)}
+								<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseWarmupDialog(exercise)}>
+									<ChartIcon /> Warm up
+								</DropdownMenu.Item>
+							{/if}
 							<DropdownMenu.Item class="gap-2" onclick={skipSetsLeft}>
 								<SkipIcon /> Skip sets left
 							</DropdownMenu.Item>
@@ -123,7 +132,7 @@
 			{convertCamelCaseToNormal(exercise.setType)} sets of
 			{exercise.repRangeStart} to {exercise.repRangeEnd} reps
 		</span>
-		{#if exercise.bodyweightFraction !== null}
+		{#if exercise.bodyweightFraction !== null && !isLevelUnit(exercise.weightUnit)}
 			<Badge variant="outline">BW</Badge>
 		{/if}
 		<Badge class="whitespace-nowrap" variant="secondary">

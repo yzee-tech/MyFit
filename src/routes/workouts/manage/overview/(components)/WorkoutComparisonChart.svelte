@@ -8,6 +8,7 @@
 		type SetDetails,
 		type WorkoutExerciseInProgress
 	} from '$lib/utils/workoutUtils';
+	import { isLevelUnit } from '$lib/utils/weightUnits';
 	import { BarController, BarElement, CategoryScale, Chart, Legend, LinearScale, Tooltip } from 'chart.js';
 	import type { PreviousWorkoutData } from '../../workoutRunes.svelte';
 	import type { Selected } from 'bits-ui';
@@ -42,6 +43,8 @@
 				convertExerciseLoads(exercise, 'toKg')
 			);
 			const currentWorkoutVolume = currentExercisesInKg.reduce((exerciseVolume, exercise) => {
+				// A machine's levels aren't weights, so they don't count towards volume
+				if (isLevelUnit(exercise.weightUnit)) return exerciseVolume;
 				return (
 					exerciseVolume +
 					exercise.sets.reduce((setVolume, set) => {

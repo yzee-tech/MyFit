@@ -9,12 +9,18 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { expandRange, formatWeightList, normalizeWeights, type WeightSetLike } from '$lib/utils/weightSets';
-	import { unitLabel } from '$lib/utils/weightUnits';
+	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { toast } from 'svelte-sonner';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import XIcon from 'virtual:icons/lucide/x';
 
 	let { weightSets, homeWeightUnit }: { weightSets: WeightSetLike[]; homeWeightUnit: WeightUnit } = $props();
+
+	/** e.g. "5–10 by 1, 14 kg", "Assistance: 5–50 by 5 kg" or "Levels 1–20 by 1" */
+	function describeWeightSet(weightSet: WeightSetLike) {
+		if (isLevelUnit(weightSet.unit)) return `Levels ${formatWeightList(weightSet.weights)}`;
+		return `${weightSet.isAssistance ? 'Assistance: ' : ''}${formatWeightList(weightSet.weights)} ${unitLabel(weightSet.unit)}`;
+	}
 
 	type Draft = { id?: string; name: string; unit: WeightUnit; weights: number[]; isAssistance: boolean };
 	let draft: Draft | null = $state(null);
@@ -63,7 +69,7 @@
 		e.preventDefault();
 		if (!draft) return;
 		if (draft.weights.length === 0) {
-			toast.error('Add at least one weight');
+			toast.error(isLevelUnit(draft.unit) ? 'Add at least one level' : 'Add at least one weight');
 			return;
 		}
 		saving = true;
@@ -97,7 +103,8 @@
 		<Card.Title>Weight sets</Card.Title>
 		<Card.Description>
 			The weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20. Link one to an exercise in a routine,
-			and suggestions only use those weights. Without one, weights go up by 2.5 kg or 5 lb.
+			and suggestions only use those weights. Without one, weights go up by 2.5 kg or 5 lb. For a machine that shows
+			levels instead of weights, make a set of levels, e.g. 1–20.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="grid gap-2">
@@ -105,10 +112,7 @@
 			<div class="flex items-center gap-2 rounded-md border p-3" data-testid="weight-set-{weightSet.name}">
 				<div class="mr-auto flex min-w-0 flex-col">
 					<span class="font-medium">{weightSet.name}</span>
-					<span class="text-sm text-muted-foreground">
-						{weightSet.isAssistance ? 'Assistance: ' : ''}{formatWeightList(weightSet.weights)}
-						{unitLabel(weightSet.unit)}
-					</span>
+					<span class="text-sm text-muted-foreground">{describeWeightSet(weightSet)}</span>
 				</div>
 				<Button onclick={() => startEditing(weightSet)} size="sm" variant="outline">Edit</Button>
 				<Button
@@ -143,7 +147,7 @@
 					<ToggleGroup.Root
 						aria-labelledby="weight-set-unit-label"
 						onValueChange={(value) => {
-							if (draft && (value === 'KG' || value === 'LB')) draft.unit = value;
+							if (draft && (value === 'KG' || value === 'LB' || value === 'LEVEL')) draft.unit = value;
 						}}
 						type="single"
 						value={draft.unit}
@@ -151,9 +155,16 @@
 					>
 						<ToggleGroup.Item aria-label="Weight set in kilograms" value="KG">kg</ToggleGroup.Item>
 						<ToggleGroup.Item aria-label="Weight set in pounds" value="LB">lb</ToggleGroup.Item>
+						<ToggleGroup.Item aria-label="Machine levels" value="LEVEL">Levels</ToggleGroup.Item>
 					</ToggleGroup.Root>
 				</div>
-				<div class="flex items-start justify-between gap-4">
+				{#if isLevelUnit(draft.unit)}
+					<span class="text-xs text-muted-foreground" data-testid="weight-set-levels-hint">
+						The machine's levels, e.g. from 1 to 20 every 1. Exercises linked to it log a level instead of a weight, and
+						go up a level once every set reaches the top of the rep range.
+					</span>
+				{/if}
+				<div class="flex items-start justify-between gap-4" class:hidden={isLevelUnit(draft.unit)}>
 					<div class="grid gap-0.5">
 						<Label for="weight-set-assistance">Assisted machine</Label>
 						<span class="text-xs text-muted-foreground">
@@ -184,7 +195,7 @@
 					</div>
 				</div>
 				<div class="grid gap-1.5">
-					<Label for="weight-set-single">Add one weight</Label>
+					<Label for="weight-set-single">{isLevelUnit(draft.unit) ? 'Add one level' : 'Add one weight'}</Label>
 					<div class="flex gap-2">
 						<Input
 							id="weight-set-single"
@@ -206,7 +217,9 @@
 				</div>
 
 				<div class="grid gap-1.5">
-					<span class="text-sm font-medium">Weights ({unitLabel(draft.unit)})</span>
+					<span class="text-sm font-medium">
+						{isLevelUnit(draft.unit) ? 'Levels' : `Weights (${unitLabel(draft.unit)})`}
+					</span>
 					<div class="flex flex-wrap gap-1" data-testid="weight-set-draft-weights">
 						{#each draft.weights as weight (weight)}
 							<Button

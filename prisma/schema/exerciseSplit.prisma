@@ -25,6 +25,8 @@ model ExerciseTemplate {
   targetMuscleGroup  MuscleGroup
   customMuscleGroup  String?
   bodyweightFraction Float?
+  /// Sets a new block starts this exercise with; none means the block asks
+  sets               Int?
   setType            SetType
   repRangeStart      Int
   repRangeEnd        Int

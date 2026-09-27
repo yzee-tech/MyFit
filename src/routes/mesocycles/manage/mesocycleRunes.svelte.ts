@@ -78,7 +78,8 @@ export function createMesocycleRunes() {
 				const { id, exerciseSplitDayId, ...rest } = exercise;
 				const mesocycleExerciseTemplate: Prisma.MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInput = {
 					...rest,
-					sets: 0
+					// The library's set count; 0 until the block setup fills it in
+					sets: rest.sets ?? 0
 				};
 				return mesocycleExerciseTemplate;
 			})
@@ -135,8 +136,21 @@ export function createMesocycleRunes() {
 			: exercise.targetMuscleGroup === setChange.muscleGroup;
 	}
 
-	function setSetsOfAllExercises(sets: number) {
-		mesocycleExerciseTemplates.forEach((dayExercises) => dayExercises.forEach((exercise) => (exercise.sets = sets)));
+	/** Exercises with no set count yet (not given one in their library) */
+	function countExercisesWithoutSets(routineIndexes: number[]) {
+		return routineIndexes.reduce(
+			(count, idx) => count + (mesocycleExerciseTemplates[idx] ?? []).filter((exercise) => !exercise.sets).length,
+			0
+		);
+	}
+
+	/** Gives exercises with no set count this many; the others keep theirs */
+	function fillMissingSets(sets: number) {
+		mesocycleExerciseTemplates.forEach((dayExercises) =>
+			dayExercises.forEach((exercise) => {
+				if (!exercise.sets) exercise.sets = sets;
+			})
+		);
 		// Automatic set increases are no longer used; keep the stored rules inert
 		mesocycleCyclicSetChanges.forEach((setChange) => {
 			setChange.setIncreaseAmount = 0;
@@ -243,7 +257,8 @@ export function createMesocycleRunes() {
 		},
 		isExerciseAndSetChangeMuscleSame,
 		addMuscleGroupToCyclicSetChanges,
-		setSetsOfAllExercises,
+		countExercisesWithoutSets,
+		fillMissingSets,
 		loadMesocycle,
 		resetStores,
 		saveStoresToLocalStorage

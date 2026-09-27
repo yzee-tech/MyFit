@@ -359,7 +359,7 @@
 	<ResponsiveDialog title="Merge into…" bind:open={mergeOpen}>
 		{#snippet description()}
 			For a duplicate, e.g. a misspelling: its workouts and routines move to the exercise you pick, and
-			<span class="font-semibold">{exercise.name}</span> is removed.
+			<span class="font-semibold">{exercise.name}</span> is removed. A workout with both gets one entry with all their sets.
 		{/snippet}
 		{@const others = allExercises.filter((other) => other.id !== exercise.id)}
 		<Select.Root

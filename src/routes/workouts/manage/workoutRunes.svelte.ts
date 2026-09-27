@@ -2,6 +2,7 @@ import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import type { WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
+import { isLevelUnit } from '$lib/utils/weightUnits';
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
 import { trpc } from '$lib/trpc/client';
@@ -109,12 +110,20 @@ function createWorkoutRunes() {
 	function editExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
 		if (!editingExercise || editingExerciseIndex === undefined || workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name, editingExerciseIndex)) return false;
+		const current = workoutExercises[editingExerciseIndex];
+		// Switching between a machine's levels and weights: the loads so far mean something else
+		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
+		const weightSetUnit = weightSets.find((weightSet) => weightSet.id === exercise.weightSetId)?.unit;
+		const kindChanged = isLevelUnit(weightSetUnit) !== isLevelUnit(current.weightUnit);
+		const weightUnit = kindChanged
+			? (weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG')
+			: current.weightUnit;
+		const sets = kindChanged
+			? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
+			: current.sets;
 		workoutExercises[editingExerciseIndex] = {
-			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
-				exercise,
-				workoutExercises[editingExerciseIndex].sets
-			),
-			weightUnit: workoutExercises[editingExerciseIndex].weightUnit
+			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise, sets),
+			weightUnit
 		};
 		saveStoresToLocalStorage();
 		return true;
@@ -154,6 +163,8 @@ function createWorkoutRunes() {
 	) {
 		const exerciseToEdit = workoutExercises?.find((ex) => ex.name === exerciseHistorySheetName);
 		if (!exerciseToEdit) return;
+		// Levels and weights don't mix: copy only reps and RIR
+		const sameKindOfLoad = isLevelUnit(exerciseFromHistory.weightUnit) === isLevelUnit(exerciseToEdit.weightUnit);
 		// History is stored in kg; copy it in the unit this exercise is shown in
 		exerciseFromHistory = convertExerciseLoads(
 			{ ...exerciseFromHistory, weightUnit: exerciseToEdit.weightUnit ?? 'KG' },
@@ -165,6 +176,7 @@ function createWorkoutRunes() {
 			const { workoutExerciseId, ...historySet } = exerciseFromHistory.sets[i];
 			exerciseToEdit.sets[i] = {
 				...historySet,
+				load: sameKindOfLoad ? historySet.load : exerciseToEdit.sets[i].load,
 				completed: false,
 				miniSets: historySet.miniSets.map((miniSet) => {
 					const { id, workoutExerciseSetId, ...restOfTheMiniSet } = miniSet;
