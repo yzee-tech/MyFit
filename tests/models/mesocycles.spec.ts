@@ -5,7 +5,8 @@ import {
 	createMesocycle,
 	createTemplateExerciseSplit,
 	pickExercise,
-	pickRoutine
+	pickRoutine,
+	saveWorkout
 } from './commonFunctions';
 
 const prisma = new PrismaClient();
@@ -35,7 +36,9 @@ test('create a mesocycle', async ({ page }) => {
 
 	// Leave one routine out of the block
 	await page.getByLabel('Include Legs B').click();
-	await page.getByLabel('Sets per exercise').fill('4');
+	// Sets come from the routines (the template has none, so the usual 3)
+	await expect(page.getByTestId('sets-from-library')).toBeVisible();
+	await expect(page.getByLabel('Sets per exercise')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 
@@ -58,7 +61,7 @@ test('create a mesocycle', async ({ page }) => {
 	);
 
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await expect(page.getByRole('main')).toContainText('Pull-ups 4 Straight sets of 5 to 15 reps');
+	await expect(page.getByRole('main')).toContainText('Pull-ups 3 Straight sets of 5 to 15 reps');
 	await expect(page.getByRole('main')).toContainText('Pull APush ALegs APull BPush B');
 	await expect(page.getByRole('main')).not.toContainText('Legs B');
 });
@@ -180,11 +183,16 @@ test("edit mesocycle's exercise split", async ({ page }) => {
 	await page.getByLabel('Sets').click();
 	await page.getByLabel('Sets').fill('4');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	// The routine library the block came from follows, unless unticked
+	await expect(page.getByLabel('Also update the routine library “Pull Push Legs”')).toBeChecked();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(
-		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
-	).toBeVisible({ timeout: 10000 });
+	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle and routine library updated' })).toBeVisible({
+		timeout: 10000
+	});
 	await page.getByRole('tab', { name: 'Routines' }).click();
+	await expect(page.getByRole('main')).toContainText('Face pulls 4 Straight sets of 15 to 30 reps Rear delts');
+	await page.goto('/exercise-splits');
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Face pulls 4 Straight sets of 15 to 30 reps Rear delts');
 });
 
@@ -208,8 +216,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByTestId('Calf raises-set-2-action').click();
 	await page.getByTestId('Calf raises-set-3-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await page.waitForURL('/workouts');
+	await saveWorkout(page, { changes: ['Removed: Barbell good mornings'], answer: 'Just this workout' });
 
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
@@ -228,9 +235,9 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(
-		page.getByRole('status').filter({ hasText: 'Mesocycle exercise split edited successfully' })
-	).toBeVisible({ timeout: 10000 });
+	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle and routine library updated' })).toBeVisible({
+		timeout: 10000
+	});
 
 	// Legs A moved up a position and still shows its workout; the new routine can be picked
 	await page.goto('/workouts/manage/start');
@@ -266,7 +273,7 @@ test('extract exercise split from mesocycle', async ({ page, userData }) => {
 	await page.getByRole('link', { name: 'Routine libraries' }).click();
 	await page.getByRole('link', { name: 'MyMeso exercise split 6 routines' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Pull A 4 exercises Lat pulldowns Straight sets of 5 to 15 reps Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
+		'Pull A 4 exercises Lat pulldowns 3 Straight sets of 5 to 15 reps Lats Barbell rows 3 Straight sets of 10 to 15 reps Traps Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Face pulls 3 Straight sets of 15 to 30 reps Rear delts'
 	);
 });
 

@@ -120,7 +120,13 @@
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end">
 						<DropdownMenu.Group>
-							<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.setEditingExercise(exercise)}>
+							<DropdownMenu.Item
+								class="gap-2"
+								onclick={() => {
+									isContextMenuOpen = false;
+									workoutRunes.setEditingExercise(exercise);
+								}}
+							>
 								<EditIcon /> Edit
 							</DropdownMenu.Item>
 							{#if !isLevelUnit(exercise.weightUnit)}
@@ -196,7 +202,7 @@
 		{#if comparing}
 			<CompareComponent {exercise} />
 		{:else}
-			<SetsComponent bind:originalSetLoads bind:exercise />
+			<SetsComponent repsOnly={isRepsOnly} bind:originalSetLoads bind:exercise />
 		{/if}
 	{/if}
 </div>

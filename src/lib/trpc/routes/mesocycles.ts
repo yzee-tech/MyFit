@@ -9,11 +9,11 @@ import {
 	MesocycleUncheckedCreateWithoutUserInputSchema,
 	MesocycleUpdateInputSchema
 } from '$lib/zodSchemas';
-import { Prisma } from '@prisma/client';
+import { Prisma, type PrismaPromise } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
-import { linkToExercise, resolveExercises } from '$lib/server/exercises';
+import { linkToExercise, resolveExercises, type ResolvedExercise } from '$lib/server/exercises';
 
 const zodMesocycleCreateInput = z.strictObject({
 	mesocycle: MesocycleUncheckedCreateWithoutUserInputSchema,
@@ -46,8 +46,84 @@ const zodUpdateExerciseSplitInput = z.strictObject({
 	mesocycleExerciseTemplates: z.array(
 		z.array(ignoreExerciseLink(MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema))
 	),
-	mesocycleId: z.string().cuid2()
+	mesocycleId: z.string().cuid2(),
+	/** Also make the routine library the block came from match (routines matched by name) */
+	updateLibrary: z.boolean().optional()
 });
+
+/**
+ * Makes a block's library match the block's routines after an edit: a routine found in the library
+ * (by its name before the edit, else its name) gets the block's exercises and name; a new one is added
+ * at the end. Library routines the block doesn't have (e.g. left out of it) stay as they are.
+ */
+async function updateLibraryFromBlock(
+	userId: string,
+	exerciseSplitId: string,
+	block: { mesocycleExerciseSplitDays: { dayIndex: number; name: string }[] },
+	input: z.infer<typeof zodUpdateExerciseSplitInput>,
+	exercisesByName: Map<string, ResolvedExercise>
+): Promise<PrismaPromise<unknown>[]> {
+	const library = await prisma.exerciseSplit.findFirst({
+		where: { id: exerciseSplitId, userId },
+		include: { exerciseSplitDays: { select: { id: true, name: true, dayIndex: true } } }
+	});
+	if (!library) return [];
+	const queries: PrismaPromise<unknown>[] = [];
+	const matched = new Set<string>();
+	let nextDayIndex = Math.max(-1, ...library.exerciseSplitDays.map((day) => day.dayIndex)) + 1;
+
+	input.mesocycleExerciseSplitDays.forEach((splitDay, idx) => {
+		if (splitDay.isRestDay) return;
+		const previousName =
+			splitDay.previousDayIndex === null || splitDay.previousDayIndex === undefined
+				? null
+				: (block.mesocycleExerciseSplitDays.find((day) => day.dayIndex === splitDay.previousDayIndex)?.name ?? null);
+		const findUnmatched = (name: string | null) =>
+			library.exerciseSplitDays.find((day) => day.name === name && !matched.has(day.id));
+		const target = findUnmatched(previousName) ?? findUnmatched(splitDay.name);
+		const dayId = target?.id ?? createId();
+		if (target) {
+			matched.add(target.id);
+			queries.push(
+				prisma.exerciseSplitDay.update({
+					where: { id: target.id },
+					data: { name: splitDay.name, weightUnit: splitDay.weightUnit ?? 'KG' }
+				}),
+				prisma.exerciseTemplate.deleteMany({ where: { exerciseSplitDayId: target.id } })
+			);
+		} else {
+			queries.push(
+				prisma.exerciseSplitDay.create({
+					data: {
+						id: dayId,
+						name: splitDay.name,
+						dayIndex: nextDayIndex++,
+						isRestDay: false,
+						weightUnit: splitDay.weightUnit ?? 'KG',
+						exerciseSplitId
+					}
+				})
+			);
+		}
+		queries.push(
+			prisma.exerciseTemplate.createMany({
+				data: (input.mesocycleExerciseTemplates[idx] ?? []).map((exercise, exerciseIndex) => {
+					// Progression overrides and a unit of its own belong to the block
+					const {
+						overloadPercentage,
+						lastSetToFailure,
+						forceRIRMatching,
+						minimumWeightChange,
+						weightUnit,
+						...libraryExercise
+					} = linkToExercise(exercise, exercisesByName);
+					return { ...libraryExercise, exerciseIndex, exerciseSplitDayId: dayId };
+				})
+			})
+		);
+	});
+	return queries;
+}
 
 const getActiveMesocycle = async (userId: string) => {
 	return await prisma.mesocycle.findFirst({
@@ -211,6 +287,7 @@ export const mesocycles = t.router({
 			where: { id: input.mesocycleId, userId: ctx.userId },
 			select: {
 				id: true,
+				exerciseSplitId: true,
 				mesocycleExerciseSplitDays: { select: { dayIndex: true, name: true } },
 				workoutsOfMesocycle: { select: { splitDayIndex: true } }
 			}
@@ -280,14 +357,24 @@ export const mesocycles = t.router({
 			)
 		];
 
+		const libraryQueries =
+			input.updateLibrary && mesocycle.exerciseSplitId
+				? await updateLibraryFromBlock(ctx.userId, mesocycle.exerciseSplitId, mesocycle, input, byName)
+				: [];
+
 		await prisma.$transaction([
 			deleteQuery,
 			createSplitDaysQuery,
 			createSplitExercisesQuery,
 			...moveWorkoutsQueries,
-			...syncQueries
+			...syncQueries,
+			...libraryQueries
 		]);
-		return { message: 'Mesocycle exercise split edited successfully' };
+		return {
+			message: libraryQueries.length
+				? 'Mesocycle and routine library updated'
+				: 'Mesocycle exercise split edited successfully'
+		};
 	}),
 
 	getWorkouts: t.procedure.input(z.enum(['activeMesocycle', 'allSplitDays'])).query(async ({ ctx, input }) => {

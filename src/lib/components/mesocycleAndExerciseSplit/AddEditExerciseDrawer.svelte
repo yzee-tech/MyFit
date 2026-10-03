@@ -23,6 +23,7 @@
 	import { page } from '$app/stores';
 	import type { WeightSetLike } from '$lib/utils/weightSets';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
 	import { toast } from 'svelte-sonner';
 	import CheckIcon from 'virtual:icons/lucide/check';
 	import ChevronLeft from 'virtual:icons/lucide/chevron-left';
@@ -116,6 +117,7 @@
 		name: '',
 		setType: 'Straight',
 		bodyweightFraction: null,
+		...(props.context === 'exerciseSplit' && { sets: DEFAULT_SETS }),
 		...(props.context !== 'exerciseSplit' && structuredClone(extraMesocycleProps))
 	};
 
@@ -128,7 +130,10 @@
 
 	$effect(() => {
 		if (props.editingExercise) {
-			currentExercise = structuredClone($state.snapshot(props.editingExercise));
+			const editing = structuredClone($state.snapshot(props.editingExercise));
+			// Routines saved before every exercise had a set count: the usual 3
+			if (props.context === 'exerciseSplit') editing.sets = routineSetCount(editing.sets);
+			currentExercise = editing;
 			open = true;
 		}
 	});
@@ -331,15 +336,7 @@
 			{#if props.context === 'exerciseSplit'}
 				<div class="col-span-2 flex w-full flex-col gap-1.5">
 					<Label for="exercise-sets">Sets</Label>
-					<Input
-						id="exercise-sets"
-						max={20}
-						min={1}
-						placeholder="Chosen when starting a block"
-						type="number"
-						bind:value={currentExercise.sets}
-					/>
-					<span class="text-xs text-muted-foreground">A new block starts this exercise with this many sets.</span>
+					<Input id="exercise-sets" max={20} min={1} required type="number" bind:value={currentExercise.sets} />
 				</div>
 			{/if}
 			{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}

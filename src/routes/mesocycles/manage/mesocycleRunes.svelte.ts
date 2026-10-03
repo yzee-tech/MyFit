@@ -1,4 +1,5 @@
 import { MuscleGroup } from '$lib/utils/prismaEnums';
+import { routineSetCount } from '$lib/utils/routineSets';
 import { suggestWeeklyRIR, weeklyRIRFromWeeksPerRIR } from '$lib/utils/workoutUtils';
 import type { Prisma, Mesocycle } from '@prisma/client';
 import type { FullExerciseSplit } from '../../exercise-splits/manage/exerciseSplitRunes.svelte';
@@ -78,8 +79,8 @@ export function createMesocycleRunes() {
 				const { id, exerciseSplitDayId, ...rest } = exercise;
 				const mesocycleExerciseTemplate: Prisma.MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInput = {
 					...rest,
-					// The library's set count; 0 until the block setup fills it in
-					sets: rest.sets ?? 0
+					// The routine decides the sets (the usual 3 where a library has none)
+					sets: routineSetCount(rest.sets)
 				};
 				return mesocycleExerciseTemplate;
 			})
@@ -136,20 +137,10 @@ export function createMesocycleRunes() {
 			: exercise.targetMuscleGroup === setChange.muscleGroup;
 	}
 
-	/** Exercises with no set count yet (not given one in their library) */
-	function countExercisesWithoutSets(routineIndexes: number[]) {
-		return routineIndexes.reduce(
-			(count, idx) => count + (mesocycleExerciseTemplates[idx] ?? []).filter((exercise) => !exercise.sets).length,
-			0
-		);
-	}
-
-	/** Gives exercises with no set count this many; the others keep theirs */
-	function fillMissingSets(sets: number) {
+	/** Before saving: every exercise has its routine's set count */
+	function finalizeSets() {
 		mesocycleExerciseTemplates.forEach((dayExercises) =>
-			dayExercises.forEach((exercise) => {
-				if (!exercise.sets) exercise.sets = sets;
-			})
+			dayExercises.forEach((exercise) => (exercise.sets = routineSetCount(exercise.sets)))
 		);
 		// Automatic set increases are no longer used; keep the stored rules inert
 		mesocycleCyclicSetChanges.forEach((setChange) => {
@@ -257,8 +248,7 @@ export function createMesocycleRunes() {
 		},
 		isExerciseAndSetChangeMuscleSame,
 		addMuscleGroupToCyclicSetChanges,
-		countExercisesWithoutSets,
-		fillMissingSets,
+		finalizeSets,
 		loadMesocycle,
 		resetStores,
 		saveStoresToLocalStorage

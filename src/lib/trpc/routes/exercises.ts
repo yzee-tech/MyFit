@@ -10,6 +10,7 @@ import { MuscleGroupSchema } from '$lib/zodSchemas';
 import type { ChangeType, PrismaPromise, SetType } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
+import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
 import { z } from 'zod';
 
 export const exerciseDetailsInput = z
@@ -274,7 +275,7 @@ export const exercises = t.router({
 				libraryId: entry.exerciseSplitDay.exerciseSplit.id,
 				libraryName: entry.exerciseSplitDay.exerciseSplit.name,
 				routineName: entry.exerciseSplitDay.name,
-				sets: entry.sets ?? undefined,
+				sets: routineSetCount(entry.sets),
 				setType: entry.setType,
 				repRangeStart: entry.repRangeStart,
 				repRangeEnd: entry.repRangeEnd
@@ -409,7 +410,7 @@ export const exercises = t.router({
 			for (const routine of libraryRoutines) {
 				if (routine.exercises.some((ex) => ex.exerciseId === exercise.id)) continue;
 				const exerciseIndex = Math.max(-1, ...routine.exercises.map((ex) => ex.exerciseIndex)) + 1;
-				const sets = mostCommon(routine.exercises.flatMap((ex) => (ex.sets === null ? [] : [ex.sets]))) ?? null;
+				const sets = mostCommon(routine.exercises.map((ex) => routineSetCount(ex.sets))) ?? DEFAULT_SETS;
 				queries.push(
 					prisma.exerciseTemplate.create({
 						data: { ...details, exerciseIndex, sets, exerciseSplitDayId: routine.id }
@@ -420,7 +421,7 @@ export const exercises = t.router({
 				const existing = routine.mesocycleSplitDayExercises;
 				if (existing.some((ex) => ex.exerciseId === exercise.id)) continue;
 				const exerciseIndex = Math.max(-1, ...existing.map((ex) => ex.exerciseIndex)) + 1;
-				const sets = mostCommon(existing.map((ex) => ex.sets)) ?? 3;
+				const sets = mostCommon(existing.map((ex) => ex.sets)) ?? DEFAULT_SETS;
 				queries.push(
 					prisma.mesocycleExerciseTemplate.create({
 						data: { ...details, exerciseIndex, sets, mesocycleExerciseSplitDayId: routine.id }

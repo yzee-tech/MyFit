@@ -15,43 +15,109 @@
 	import CheckIcon from 'virtual:icons/lucide/check';
 	import ArrowDownIcon from 'virtual:icons/lucide/chevron-down';
 	import RemoveIcon from 'virtual:icons/lucide/minus';
-	import EditIcon from 'virtual:icons/lucide/pencil';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import TargetIcon from 'virtual:icons/lucide/target';
 	import UndoIcon from 'virtual:icons/lucide/undo';
+	import XIcon from 'virtual:icons/lucide/x';
 	import { workoutRunes } from '../../workoutRunes.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
-	type PropsType = { exercise: WorkoutExerciseInProgress; originalSetLoads: (number | undefined)[] };
+	type PropsType = {
+		exercise: WorkoutExerciseInProgress;
+		originalSetLoads: (number | undefined)[];
+		/** Reps only: no load to enter (it's 0) */
+		repsOnly?: boolean;
+	};
 	type WorkoutExerciseSet = WorkoutExerciseInProgress['sets'][number];
-	let { exercise = $bindable(), originalSetLoads = $bindable() }: PropsType = $props();
+	let { exercise = $bindable(), originalSetLoads = $bindable(), repsOnly = false }: PropsType = $props();
+
+	// Sets someone tried to tick with a box still empty. The notes and outlines are worked out from these
+	// sets as they are now, so they follow a set when others are added or removed, and go once it's filled
+	type Missing = 'reps' | 'load' | 'RIR';
+	const triedToTick = new SvelteSet<WorkoutExerciseSet>();
 
 	// Loads here are in the exercise's unit; bodyweight is stored in kg
 	function inExerciseUnit(kg: number | null | undefined) {
 		return typeof kg === 'number' ? fromKg(kg, exercise.weightUnit ?? 'KG') : undefined;
 	}
 
-	let isSameLoadExercise = $derived(['Straight', 'Myorep', 'MyorepMatch'].includes(exercise.setType));
+	// Myo-rep sets share set 1's load; every other set type has a load per set
+	let isSameLoadExercise = $derived(['Myorep', 'MyorepMatch'].includes(exercise.setType));
 	// A machine's level, not a weight: no bodyweight, and no rep adjusting by weight
 	let isLevels = $derived(isLevelUnit(exercise.weightUnit));
 
-	function shouldSetBeDisabled(set: WorkoutExerciseSet, idx: number): boolean {
-		if (set.completed) return false;
-		if (idx === 0) return false;
-		const previousSet = exercise.sets[idx - 1];
-		if (previousSet.miniSets.length === 0) return !previousSet.completed;
-		return !previousSet.miniSets[previousSet.miniSets.length - 1].completed;
+	let missingBySet = $derived(
+		exercise.sets.map((set, idx) =>
+			triedToTick.has(set) && !set.completed && !set.skipped ? missingFields(set, idx) : []
+		)
+	);
+	let missingNotes = $derived(
+		missingBySet.flatMap((fields, idx) => (fields.length > 0 ? [`Set ${idx + 1}: enter ${fields.join(' and ')}`] : []))
+	);
+	const isMissing = (idx: number, field: Missing) => missingBySet[idx]?.includes(field) ?? false;
+
+	/** The boxes a set still needs before it can be ticked */
+	function missingFields(set: WorkoutExerciseSet, idx: number): Missing[] {
+		const fields: Missing[] = [];
+		if (typeof set.reps !== 'number') fields.push('reps');
+		const loadSet = isSameLoadExercise ? exercise.sets[0] : set;
+		if (!repsOnly && typeof loadSet?.load !== 'number' && (idx === 0 || !isSameLoadExercise)) fields.push('load');
+		if (typeof set.RIR !== 'number') fields.push('RIR');
+		return fields;
 	}
 
-	function completeSet(e: SubmitEvent, set: WorkoutExerciseSet, idx: number) {
-		e.preventDefault();
+	/** Ticks or unticks a set, in any order */
+	function toggleSet(set: WorkoutExerciseSet, idx: number) {
 		if (set.skipped) {
 			set.skipped = false;
+			workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 			return;
 		}
+		if (!set.completed) {
+			if (repsOnly) set.load = 0;
+			if (isSameLoadExercise && idx > 0) set.load = exercise.sets[0].load;
+			if (missingFields(set, idx).length > 0) {
+				triedToTick.add(set);
+				return;
+			}
+			triedToTick.delete(set);
+			// Set 1's weight is a starting point for sets without one yet
+			if (idx === 0) fillEmptyLoads();
+		}
 		set.completed = !set.completed;
-		if (['Straight', 'Myorep', 'MyorepMatch'].includes(exercise.setType) && idx === 0)
-			exercise.sets.forEach((_set) => (_set.load = set.load));
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+	}
 
+	/** Copies set 1's load into later sets: all of them for myo-rep sets, otherwise only empty boxes */
+	function fillEmptyLoads() {
+		const firstLoad = exercise.sets[0]?.load;
+		if (typeof firstLoad !== 'number') return;
+		exercise.sets.forEach((set, idx) => {
+			if (idx === 0 || set.completed) return;
+			if (isSameLoadExercise || typeof set.load !== 'number') set.load = firstLoad;
+		});
+	}
+
+	/** A new set at the end, a copy of the last one's numbers, not ticked */
+	function addSet() {
+		const last = exercise.sets.at(-1);
+		exercise.sets.push({
+			reps: last?.reps,
+			load: last?.load,
+			RIR: last?.RIR,
+			completed: false,
+			skipped: false,
+			miniSets: []
+		});
+		originalSetLoads.push(undefined);
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+	}
+
+	function removeSet(idx: number) {
+		if (exercise.sets.length <= 1) return;
+		triedToTick.delete(exercise.sets[idx]);
+		exercise.sets.splice(idx, 1);
+		originalSetLoads.splice(idx, 1);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -75,8 +141,13 @@
 
 	function completeMiniSet(e: SubmitEvent, set: WorkoutExerciseSet, miniSetIndex: number) {
 		e.preventDefault();
-		if (exercise.setType === 'MyorepMatchDown') set.miniSets[miniSetIndex].load = set.load;
-		set.miniSets[miniSetIndex].completed = !set.miniSets[miniSetIndex].completed;
+		const miniSet = set.miniSets[miniSetIndex];
+		if (exercise.setType === 'MyorepMatchDown') miniSet.load = set.load;
+		if (exercise.setType === 'MyorepMatch') miniSet.load = exercise.sets[0].load;
+		// Its numbers first, like a set
+		if (!miniSet.completed && [miniSet.reps, miniSet.load, miniSet.RIR].some((value) => typeof value !== 'number'))
+			return;
+		miniSet.completed = !miniSet.completed;
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -198,10 +269,12 @@
 	}
 </script>
 
-<div class="grid grid-cols-4 gap-1">
+<div class="grid grid-cols-[1fr_1fr_1fr_auto] gap-1">
 	<span class="text-center text-sm font-medium">Reps</span>
 	<span class="text-center text-sm font-medium">
-		{#if isLevels}
+		{#if repsOnly}
+			<span class="sr-only">No load</span>
+		{:else if isLevels}
 			Level
 		{:else if typeof exercise.bodyweightFraction === 'number'}
 			+/− {unitLabel(exercise.weightUnit ?? 'KG')}
@@ -228,7 +301,14 @@
 	<span class="text-center text-sm font-medium">RIR</span>
 	<span></span>
 	{#each exercise.sets as set, idx}
-		<form class="contents" onsubmit={(e) => completeSet(e, set, idx)}>
+		<form
+			class="contents"
+			novalidate
+			onsubmit={(e) => {
+				e.preventDefault();
+				toggleSet(set, idx);
+			}}
+		>
 			{#if exercise.setType === 'TopBackoff' && idx === 1}
 				<div class="col-span-full flex items-center gap-2 text-muted-foreground">
 					<Separator class="w-px grow" />
@@ -241,20 +321,27 @@
 			{#if !set.skipped}
 				<Input
 					id="{exercise.name}-set-{idx + 1}-reps"
-					disabled={set.completed || set.skipped}
+					class={isMissing(idx, 'reps') ? 'border-destructive' : ''}
+					aria-invalid={isMissing(idx, 'reps')}
+					disabled={set.completed}
 					min={1}
-					required
 					type="number"
 					bind:value={set.reps}
 				/>
-				{#if idx === 0 || !isSameLoadExercise}
+				{#if repsOnly}
+					<span
+						class="grid place-items-center text-sm text-muted-foreground"
+						data-testid="{exercise.name}-set-{idx + 1}-no-load">–</span
+					>
+				{:else if idx === 0 || !isSameLoadExercise}
 					<Input
 						id="{exercise.name}-set-{idx + 1}-load"
-						disabled={set.completed || set.skipped}
+						class={isMissing(idx, 'load') ? 'border-destructive' : ''}
+						aria-invalid={isMissing(idx, 'load')}
+						disabled={set.completed}
 						aria-label={isLevels ? `Set ${idx + 1} level` : undefined}
 						min={isLevels ? 1 : exercise.bodyweightFraction ? undefined : 0.25}
 						placeholder={getNextLoad(idx)}
-						required
 						step={isLevels ? 1 : 0.25}
 						type="number"
 						bind:value={set.load}
@@ -264,8 +351,9 @@
 				{/if}
 				<Input
 					id="{exercise.name}-set-{idx + 1}-RIR"
-					disabled={set.completed || set.skipped}
-					required
+					class={isMissing(idx, 'RIR') ? 'border-destructive' : ''}
+					aria-invalid={isMissing(idx, 'RIR')}
+					disabled={set.completed}
 					type="number"
 					bind:value={set.RIR}
 				/>
@@ -276,13 +364,14 @@
 					<Separator class="w-px grow" />
 				</div>
 			{/if}
-			<div class="flex items-center">
-				{#if idx === 0 || !isSameLoadExercise}
+			<div class="flex items-center justify-end gap-0.5">
+				{#if !repsOnly && (idx === 0 || !isSameLoadExercise)}
 					{@const hasLoadChanged =
 						!isLevels && set.load !== originalSetLoads[idx] && originalSetLoads[idx] !== undefined}
-					{#if hasLoadChanged}
+					{#if hasLoadChanged && !set.completed}
 						<Button
 							class="h-7 w-7 p-1"
+							aria-label="Adjust reps to the new load"
 							data-testid="{exercise.name}-set-{idx + 1}-adjust-reps"
 							onclick={() => adjustLoads(idx)}
 							variant="outline"
@@ -292,19 +381,29 @@
 					{/if}
 				{/if}
 				<Button
-					class="ml-auto"
+					class="h-7 w-7 p-1 text-muted-foreground"
+					aria-label="Remove set {idx + 1} of {exercise.name}"
+					data-testid="{exercise.name}-set-{idx + 1}-remove"
+					disabled={exercise.sets.length <= 1}
+					onclick={() => removeSet(idx)}
+					variant="ghost"
+				>
+					<XIcon />
+				</Button>
+				<Button
+					class="h-9 w-9 border-2 p-1"
+					aria-checked={set.completed}
+					aria-label="Set {idx + 1} of {exercise.name} done"
 					data-testid="{exercise.name}-set-{idx + 1}-action"
-					disabled={shouldSetBeDisabled(set, idx)}
+					role="checkbox"
 					size="icon"
 					type="submit"
-					variant={set.completed ? 'outline' : 'default'}
+					variant={set.completed ? 'default' : 'outline'}
 				>
 					{#if set.skipped}
 						<UndoIcon />
-					{:else if !set.completed}
+					{:else if set.completed}
 						<CheckIcon />
-					{:else}
-						<EditIcon />
 					{/if}
 				</Button>
 			</div>
@@ -332,7 +431,7 @@
 						<CheckIcon />
 					</Button>
 				{:else}
-					<form class="contents" onsubmit={(e) => completeMiniSet(e, set, miniIdx)}>
+					<form class="contents" novalidate onsubmit={(e) => completeMiniSet(e, set, miniIdx)}>
 						<Input
 							id="{exercise.name}-set-{idx + 1}-mini-set-{miniIdx + 1}-reps"
 							disabled={miniSet.completed}
@@ -364,17 +463,18 @@
 							bind:value={miniSet.RIR}
 						/>
 						<Button
-							class="place-self-end"
+							class="h-9 w-9 place-self-end border-2 p-1"
+							aria-checked={miniSet.completed}
+							aria-label="Set {idx + 1} mini-set {miniIdx + 1} of {exercise.name} done"
 							data-testid="{exercise.name}-set-{idx + 1}-mini-set-{miniIdx + 1}-action"
 							disabled={miniSetButtonDisabled}
+							role="checkbox"
 							size="icon"
 							type="submit"
-							variant={miniSet.completed ? 'outline' : 'default'}
+							variant={miniSet.completed ? 'default' : 'outline'}
 						>
-							{#if !miniSet.completed}
+							{#if miniSet.completed}
 								<CheckIcon />
-							{:else}
-								<EditIcon />
 							{/if}
 						</Button>
 					</form>
@@ -410,4 +510,21 @@
 			<span></span>
 		{/if}
 	{/each}
+	{#if missingNotes.length > 0}
+		<div class="col-span-full text-sm text-destructive" data-testid="{exercise.name}-missing" role="alert">
+			{#each missingNotes as note}
+				<p>{note}</p>
+			{/each}
+		</div>
+	{/if}
+	<Button
+		class="col-span-full mt-1 h-8 gap-1"
+		aria-label="Add a set to {exercise.name}"
+		data-testid="{exercise.name}-add-set"
+		onclick={addSet}
+		size="sm"
+		variant="ghost"
+	>
+		<AddIcon class="h-4 w-4" /> Add set
+	</Button>
 </div>

@@ -10,6 +10,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { linkToExercise, resolveExercises, type ResolvedExercise } from '$lib/server/exercises';
+import { routineSetCount } from '$lib/utils/routineSets';
 
 const zodExerciseSplitInput = z.strictObject({
 	splitName: z.string(),
@@ -56,8 +57,6 @@ async function updateBlockFromLibrary(
 	if (!block) throw new TRPCError({ code: 'NOT_FOUND', message: 'Current block not found' });
 
 	const blockRoutines = block.mesocycleExerciseSplitDays;
-	const allSets = blockRoutines.flatMap((routine) => routine.mesocycleSplitDayExercises.map((ex) => ex.sets));
-	const usualSets = mostCommon(allSets) ?? 3;
 
 	const queries: PrismaPromise<unknown>[] = [
 		prisma.mesocycle.update({ where: { id: block.id }, data: { exerciseSplitId } })
@@ -72,7 +71,6 @@ async function updateBlockFromLibrary(
 		if (target) matched.add(target.id);
 
 		const oldExercises = target?.mesocycleSplitDayExercises ?? [];
-		const routineSets = mostCommon(oldExercises.map((ex) => ex.sets)) ?? usualSets;
 		const splitDayId = target?.id ?? createId();
 		const exercises = routineExercises[routineIdx].map(({ id, ...exercise }, exerciseIndex) => {
 			const old = oldExercises.find((ex) => ex.name === exercise.name);
@@ -81,7 +79,7 @@ async function updateBlockFromLibrary(
 				exerciseIndex,
 				mesocycleExerciseSplitDayId: splitDayId,
 				// A set count changed in the library wins; otherwise the block keeps its own
-				sets: changedSets[routineIdx]?.get(exercise.name) ?? old?.sets ?? exercise.sets ?? routineSets,
+				sets: changedSets[routineIdx]?.get(exercise.name) ?? old?.sets ?? routineSetCount(exercise.sets),
 				overloadPercentage: old?.overloadPercentage ?? null,
 				lastSetToFailure: old?.lastSetToFailure ?? null,
 				forceRIRMatching: old?.forceRIRMatching ?? null,
@@ -115,12 +113,6 @@ async function updateBlockFromLibrary(
 		queries.push(prisma.mesocycleExerciseTemplate.createMany({ data: exercises }));
 	});
 	return queries;
-}
-
-function mostCommon(values: number[]): number | undefined {
-	const counts = new Map<number, number>();
-	values.forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
-	return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0];
 }
 
 /**

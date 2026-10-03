@@ -70,7 +70,15 @@
 	const weightSets: WeightSetLike[] = $page.data.weightSets ?? [];
 	let sessionWeightSetOptions = $derived(weightSets.filter((weightSet) => weightSet.unit === sessionWeightUnit));
 	let sessionWeightSet = $derived(sessionWeightSetOptions.find((weightSet) => weightSet.id === sessionWeightSetId));
-	let overwriteWorkoutDialogOpen = $state(false);
+	let switchRoutineDialogOpen = $state(false);
+	// A workout already started: this page then sets it up again rather than starting another
+	let inProgress = $derived(
+		workoutRunes.editingWorkoutId === null &&
+			workoutRunes.workoutData !== null &&
+			workoutRunes.workoutExercises !== null
+	);
+	let inProgressRoutineIndex = $derived(workoutRunes.workoutData?.workoutOfMesocycle?.splitDayIndex ?? null);
+	let inProgressName = $derived(workoutRunes.workoutData?.workoutOfMesocycle?.splitDayName ?? 'the blank workout');
 	let finishingBlock = $state(false);
 	let takeItEasy = $state(true);
 
@@ -78,6 +86,10 @@
 	let selectedRoutine = $derived(
 		activeBlock?.routines.find((routine) => routine.splitDayIndex === selectedRoutineIndex)
 	);
+	let sameAsInProgress = $derived(
+		(useActiveMesocycle && activeBlock ? selectedRoutineIndex : null) === inProgressRoutineIndex
+	);
+	let switchToName = $derived(useActiveMesocycle && selectedRoutine ? selectedRoutine.name : 'a blank workout');
 	let deloadWeek = $derived(
 		activeBlock ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, activeBlock.weekNumber) : false
 	);
@@ -91,6 +103,11 @@
 
 			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
 			if (workoutData.activeBlock !== undefined) useActiveMesocycle = true;
+			// Back from a workout in progress: it stays picked
+			if (inProgress) {
+				useActiveMesocycle = inProgressRoutineIndex !== null && workoutData.activeBlock !== undefined;
+				selectedRoutineIndex = inProgressRoutineIndex;
+			}
 		});
 	});
 
@@ -121,11 +138,17 @@
 			return;
 		}
 
-		if (workoutRunes.workoutExercises !== null && !fromDialog) {
-			overwriteWorkoutDialogOpen = true;
-			return;
+		// A workout in progress carries on; only picking a different routine starts over (after asking)
+		if (inProgress && !fromDialog) {
+			if (!sameAsInProgress) {
+				switchRoutineDialogOpen = true;
+				return;
+			}
+			mode = 'keepCurrent';
+			if (workoutRunes.workoutData && userBodyweightKg !== null)
+				workoutRunes.workoutData.userBodyweight = userBodyweightKg;
 		}
-		overwriteWorkoutDialogOpen = false;
+		switchRoutineDialogOpen = false;
 
 		const newWorkoutData = buildWorkoutData();
 		if (newWorkoutData === null) return;
@@ -207,6 +230,11 @@
 				</Button>
 			</Card.Footer>
 		</Card.Root>
+	{/if}
+	{#if inProgress}
+		<p class="mb-1 rounded-lg border border-primary bg-card p-3 text-sm" data-testid="setup-in-progress">
+			Your workout ({inProgressName}) is still going. Change your bodyweight here if needed, then continue.
+		</p>
 	{/if}
 	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined}
 		<p class="mb-1 px-1 text-sm text-muted-foreground">No active block: you'll pick exercises as you go.</p>
@@ -370,20 +398,20 @@
 			<LoaderCircle class="animate-spin" />
 		{:else if useActiveMesocycle && selectedRoutine === undefined && workoutRunes.editingWorkoutId === null}
 			Pick a routine
+		{:else if inProgress && sameAsInProgress}
+			Continue workout
 		{:else}
 			Next
 		{/if}
 	</Button>
 {/if}
 
-<ResponsiveDialog title="Warning" bind:open={overwriteWorkoutDialogOpen}>
+<ResponsiveDialog title="Switch to {switchToName}?" bind:open={switchRoutineDialogOpen}>
 	{#snippet description()}
-		A workout is already in progress with <span class="font-semibold"
-			>{workoutRunes.workoutExercises?.length} exercises</span
-		>, do you want to overwrite it?
+		The sets you've entered for {inProgressName} will be cleared.
 	{/snippet}
 	<div class="grid grid-cols-2 gap-1.5">
-		<Button onclick={() => startWorkout(true, 'keepCurrent')}>Keep current</Button>
-		<Button onclick={() => startWorkout(true, 'overwrite')} variant="destructive">Overwrite</Button>
+		<Button onclick={() => (switchRoutineDialogOpen = false)} variant="secondary">Keep {inProgressName}</Button>
+		<Button onclick={() => startWorkout(true, 'overwrite')} variant="destructive">Switch</Button>
 	</div>
 </ResponsiveDialog>

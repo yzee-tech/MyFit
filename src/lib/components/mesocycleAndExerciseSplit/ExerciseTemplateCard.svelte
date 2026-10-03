@@ -7,6 +7,7 @@
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	import EditIcon from 'virtual:icons/lucide/pencil';
 	import DeleteIcon from 'virtual:icons/lucide/trash';
+	import { routineSetCount } from '$lib/utils/routineSets';
 	import type {
 		MesocycleExerciseTemplateWithoutIdsOrIndex,
 		SplitExerciseTemplateWithoutIdsOrIndex
@@ -66,6 +67,7 @@
 							<DropdownMenu.Item
 								class="gap-2"
 								onclick={() => {
+									isContextMenuOpen = false;
 									if (props.context === 'exerciseSplit') props.setEditingExercise(props.exerciseTemplate);
 									else props.setEditingExercise(props.exerciseTemplate);
 								}}
@@ -88,13 +90,8 @@
 		{/if}
 	</div>
 	<div class="flex items-center gap-0.5">
-		<span
-			class="mr-auto text-sm text-muted-foreground"
-			class:lowercase={typeof props.exerciseTemplate.sets === 'number'}
-		>
-			{#if typeof props.exerciseTemplate.sets === 'number'}
-				{props.exerciseTemplate.sets}
-			{/if}
+		<span class="mr-auto text-sm lowercase text-muted-foreground">
+			{routineSetCount(props.exerciseTemplate.sets)}
 			{convertCamelCaseToNormal(props.exerciseTemplate.setType)} sets of
 			{props.exerciseTemplate.repRangeStart} to {props.exerciseTemplate.repRangeEnd} reps
 		</span>

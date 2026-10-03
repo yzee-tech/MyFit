@@ -53,7 +53,7 @@ test('create exercise split from PPL template', async ({ page }) => {
 	await expect(page.getByRole('tab', { name: 'Info' })).toHaveCount(0);
 	await expect(page.getByRole('main')).not.toContainText('Rest');
 	await expect(page.getByRole('main')).toContainText(
-		'Pull APush ALegs APull BPush BLegs B Pull A 4 exercises Pull-ups Straight sets of 5 to 15 reps BW Lats Barbell rows Straight sets of 10 to 15 reps Traps Dumbbell bicep curls Straight sets of 10 to 20 reps Biceps Face pulls Straight sets of 15 to 30 reps Rear delts'
+		'Pull APush ALegs APull BPush BLegs B Pull A 4 exercises Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Barbell rows 3 Straight sets of 10 to 15 reps Traps Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Face pulls 3 Straight sets of 15 to 30 reps Rear delts'
 	);
 });
 
@@ -193,7 +193,7 @@ test('library set counts: a new block starts with them; ones changed later carry
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({ timeout: 10000 });
 
-	// The new block asks only for the others (3 by default), and rows start with 4
+	// The new block takes each routine's count: 4 for rows, the usual 3 for the rest
 	await page.goto('/mesocycles');
 	await page.getByLabel('create-new-mesocycle').click();
 	await page.getByLabel('Mesocycle name').fill('MyMeso');
@@ -202,7 +202,8 @@ test('library set counts: a new block starts with them; ones changed later carry
 	await page.getByRole('option', { name: 'Pull Push Legs' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/mesocycles\/manage\/volume/);
-	await expect(page.getByRole('main')).toContainText('without a set count in the routine library');
+	// No "sets per exercise" step any more: each exercise has its routine's count (the usual 3 if none)
+	await expect(page.getByTestId('sets-from-library')).toBeVisible();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByLabel('Start immediately').click();
 	await page.getByRole('button', { name: 'Save' }).click();

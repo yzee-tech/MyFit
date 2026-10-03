@@ -16,7 +16,7 @@
 	import { workoutRunes } from '../workoutRunes.svelte.js';
 	import DndComponent from './(components)/DndComponent.svelte';
 	import ExerciseHistorySheet from './(components)/ExerciseHistorySheet.svelte';
-	import SetTimerComponent from './(components)/SetTimerComponent.svelte';
+	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import WarmUpDialog from './(components)/WarmUpDialog.svelte';
 	import QuotesDialog from './(components)/QuotesDialog.svelte';
 
@@ -78,10 +78,40 @@
 			toast.error('Add at least one exercise');
 			return;
 		}
+		// Sets not done yet: skip them, or keep going
 		if (completedSets < totalSets) {
-			toast.error('Complete all sets to proceed');
+			skipDialogOpen = true;
 			return;
 		}
+		goto('./overview');
+	}
+
+	let discardDialogOpen = $state(false);
+	function discardWorkout() {
+		const message = workoutRunes.editingWorkoutId === null ? 'Workout discarded' : 'Changes discarded';
+		workoutRunes.resetStores();
+		discardDialogOpen = false;
+		toast.success(message);
+		goto('/workouts');
+	}
+
+	let skipDialogOpen = $state(false);
+	let setsLeft = $derived(totalSets !== null && completedSets !== null ? totalSets - completedSets : 0);
+
+	/** Marks every set not done as skipped (dropping unfinished mini-sets), then moves on */
+	function skipSetsLeftAndContinue() {
+		workoutRunes.workoutExercises?.forEach((exercise) => {
+			exercise.sets.forEach((set) => {
+				if (!set.completed && !set.skipped) {
+					set.skipped = true;
+					set.miniSets = [];
+					return;
+				}
+				set.miniSets = set.miniSets.filter((miniSet) => miniSet.completed);
+			});
+		});
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+		skipDialogOpen = false;
 		goto('./overview');
 	}
 </script>
@@ -113,7 +143,7 @@
 				</p>
 			{/if}
 		</div>
-		<div class="grid grid-cols-4 gap-1">
+		<div class="grid grid-cols-3 gap-1">
 			<Button
 				aria-label="reorder-toggle"
 				disabled={comparing}
@@ -140,7 +170,6 @@
 					<EditIcon />
 				{/if}
 			</Button>
-			<SetTimerComponent />
 			<AddEditExerciseDrawer
 				addExercise={workoutRunes.addExercise}
 				context="workout"
@@ -169,10 +198,30 @@
 	</div>
 {/if}
 
-<div class="mt-2 grid grid-cols-2 gap-1">
+<Button class="mt-1 h-8 text-muted-foreground" onclick={() => (discardDialogOpen = true)} size="sm" variant="ghost">
+	{workoutRunes.editingWorkoutId === null ? 'Discard workout' : 'Discard changes'}
+</Button>
+<div class="mt-1 grid grid-cols-2 gap-1">
 	<Button href="./start" variant="secondary">Previous</Button>
 	<Button onclick={submitWorkoutExercises}>Next</Button>
 </div>
+
+<ResponsiveDialog title="Discard this workout?" bind:open={discardDialogOpen}>
+	{#snippet description()}
+		Everything entered so far is cleared. This can't be undone.
+	{/snippet}
+	<Button onclick={discardWorkout} variant="destructive">Yes, discard</Button>
+</ResponsiveDialog>
+
+<ResponsiveDialog title="{setsLeft} {setsLeft === 1 ? 'set' : 'sets'} not done" bind:open={skipDialogOpen}>
+	{#snippet description()}
+		Skip {setsLeft === 1 ? 'it' : 'them'} and continue? Skipped sets are saved as skipped.
+	{/snippet}
+	<div class="grid grid-cols-2 gap-1.5">
+		<Button onclick={() => (skipDialogOpen = false)} variant="secondary">Keep going</Button>
+		<Button onclick={skipSetsLeftAndContinue}>Skip and continue</Button>
+	</div>
+</ResponsiveDialog>
 
 <ExerciseHistorySheet />
 <WarmUpDialog />

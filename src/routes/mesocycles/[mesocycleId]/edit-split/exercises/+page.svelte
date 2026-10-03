@@ -3,6 +3,8 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Label } from '$lib/components/ui/label';
 	import CopyIcon from 'virtual:icons/lucide/copy';
 	import PasteIcon from 'virtual:icons/lucide/clipboard-paste';
 	import CutIcon from 'virtual:icons/lucide/scissors';
@@ -45,6 +47,9 @@
 	}
 
 	let saving = $state(false);
+	// The routine library this block came from: kept the same as the block, unless unticked
+	let libraryName = $derived(mesocycleExerciseSplitRunes.mesocycle?.exerciseSplit?.name ?? null);
+	let updateLibrary = $state(true);
 
 	async function save() {
 		saving = true;
@@ -57,7 +62,8 @@
 				mesocycleExerciseTemplates: mesocycleExerciseSplitRunes.splitExercises.map((dayExercises) =>
 					dayExercises.map((exercise, idx) => ({ ...exercise, exerciseIndex: idx }))
 				),
-				mesocycleId: mesocycleExerciseSplitRunes.mesocycle?.id as string
+				mesocycleId: mesocycleExerciseSplitRunes.mesocycle?.id as string,
+				updateLibrary: libraryName !== null && updateLibrary
 			});
 			await invalidate(`mesocycles:${mesocycleExerciseSplitRunes.mesocycle?.id}`);
 			toast.success(message);
@@ -165,6 +171,12 @@
 	</Tabs.Content>
 </Tabs.Root>
 
+{#if libraryName}
+	<div class="mt-2 flex items-center gap-2">
+		<Checkbox id="update-library" bind:checked={updateLibrary} />
+		<Label for="update-library">Also update the routine library “{libraryName}”</Label>
+	</div>
+{/if}
 <div class="mt-2 grid grid-cols-2 gap-1">
 	<Button href="./structure" variant="secondary">Previous</Button>
 	<Button disabled={saving} onclick={submitExercises}>

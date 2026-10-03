@@ -1,4 +1,5 @@
 <script lang="ts">
+	import WorkoutInProgressBanner from '$lib/components/workouts/WorkoutInProgressBanner.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
@@ -104,6 +105,7 @@
 </script>
 
 <H2>Workouts</H2>
+<WorkoutInProgressBanner />
 
 <div class="flex grow flex-col gap-2">
 	<div class="flex gap-1">
