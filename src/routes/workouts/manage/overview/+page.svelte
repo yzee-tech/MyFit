@@ -17,6 +17,8 @@
 	import { workoutRunes } from '../workoutRunes.svelte';
 	import WorkoutComparisonChart from './(components)/WorkoutComparisonChart.svelte';
 	import Quotes from '$lib/components/settings/Quotes.svelte';
+	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
+	import type { RouterOutputs } from '$lib/trpc/router';
 
 	let { data } = $props();
 
@@ -90,7 +92,31 @@
 		return createData;
 	}
 
+	// "Update routine?": asked when a block workout differs from its routine; closing it saves nothing
+	type CreateData = RouterInputs['workouts']['create'];
+	let routineDialogOpen = $state(false);
+	let routinePreview: NonNullable<RouterOutputs['workouts']['routineChanges']> | null = $state(null);
+	let pendingCreateData: CreateData | null = $state(null);
+	let committing = $state(false);
+	$effect(() => {
+		if (routineDialogOpen || committing || pendingCreateData === null) return;
+		pendingCreateData = null;
+		routinePreview = null;
+		savingWorkout = false;
+	});
+
+	async function chooseRoutineUpdate(updateRoutine: boolean) {
+		if (!pendingCreateData) return;
+		committing = true;
+		routineDialogOpen = false;
+		const createData = pendingCreateData;
+		pendingCreateData = null;
+		await submitWorkout({ ...createData, updateRoutine });
+		committing = false;
+	}
+
 	async function saveWorkout() {
+		if (savingWorkout) return;
 		let createData;
 		try {
 			createData = preProcessSetData();
@@ -102,8 +128,32 @@
 			}
 		}
 
-		if (createData === undefined) return;
+		if (createData === undefined) {
+			savingWorkout = false;
+			return;
+		}
 
+		// A new workout from a block: ask first if it changed the routine
+		if (workoutRunes.editingWorkoutId === null && createData.workoutData.workoutOfMesocycle) {
+			try {
+				const preview = await trpc().workouts.routineChanges.mutate(createData);
+				if (preview && preview.changes.length > 0) {
+					routinePreview = preview;
+					pendingCreateData = createData;
+					routineDialogOpen = true;
+					return;
+				}
+			} catch (error) {
+				toast.error(error instanceof TRPCClientError ? error.message : 'Failed to check the routine');
+				savingWorkout = false;
+				return;
+			}
+		}
+		await submitWorkout(createData);
+	}
+
+	async function submitWorkout(createData: CreateData) {
+		savingWorkout = true;
 		try {
 			let message;
 			// A new blank workout (e.g. with a trainer) can be kept as a routine
@@ -192,3 +242,32 @@
 		{/if}
 	</Button>
 </div>
+
+<ResponsiveDialog
+	title={routinePreview ? `Update ${routinePreview.routineName}?` : 'Update routine?'}
+	bind:open={routineDialogOpen}
+>
+	{#snippet description()}
+		This workout was different from the routine:
+	{/snippet}
+	{#if routinePreview}
+		<ul class="list-disc pl-5 text-sm" data-testid="routine-changes">
+			{#each routinePreview.changes as change}
+				<li>{change}</li>
+			{/each}
+		</ul>
+		<p class="text-xs text-muted-foreground">
+			{#if routinePreview.libraryName}
+				Updating changes the routine in your current block and in the routine library “{routinePreview.libraryName}”.
+			{:else}
+				Updating changes the routine in your current block only: its routine library isn't there any more.
+			{/if}
+		</p>
+		<div class="mt-2 grid grid-cols-2 gap-1.5">
+			<Button onclick={() => chooseRoutineUpdate(false)} variant="secondary">Just this workout</Button>
+			<Button onclick={() => chooseRoutineUpdate(true)}>
+				{routinePreview.libraryName ? 'Update routine' : 'Update routine (this block only)'}
+			</Button>
+		</div>
+	{/if}
+</ResponsiveDialog>

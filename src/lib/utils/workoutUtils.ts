@@ -210,9 +210,14 @@ export function createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
 		exercise.changeType = null;
 	}
 
-	if (['Straight', 'MyorepMatch', 'Myorep'].includes(exercise.setType)) {
+	// Myo-rep sets share set 1's load; straight sets only start from it, each keeping its own
+	if (['MyorepMatch', 'Myorep'].includes(exercise.setType)) {
 		newSets.map((set, setIndex) => {
 			if (setIndex) set.load = newSets[0].load;
+		});
+	} else if (exercise.setType === 'Straight') {
+		newSets.map((set, setIndex) => {
+			if (setIndex && set.load === undefined) set.load = newSets[0].load;
 		});
 	}
 

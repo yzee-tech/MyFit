@@ -38,7 +38,13 @@ export async function createExercises(userId: string, exercises: (string | ({ na
 
 /** Picks one of your exercises in the add/edit exercise editor */
 export async function pickExercise(page: Page, name: string) {
-	await page.getByLabel('Pick an exercise').click();
+	// The editor slides in: a tap while it's moving can miss, so tap until the picker is open
+	await expect(async () => {
+		if (!(await page.getByPlaceholder('Search your exercises').isVisible())) {
+			await page.getByLabel('Pick an exercise').click();
+		}
+		await expect(page.getByPlaceholder('Search your exercises')).toBeVisible({ timeout: 1000 });
+	}).toPass();
 	await page.getByPlaceholder('Search your exercises').fill(name);
 	await page.getByRole('option', { name, exact: true }).click();
 }
@@ -80,4 +86,23 @@ export async function createMesocycle(page: Page, options?: { exerciseSplitCreat
 
 export async function pickRoutine(page: Page, routineName: string) {
 	await page.getByRole('radio', { name: new RegExp(`^${routineName}`) }).click();
+}
+
+/**
+ * Saves a workout from its Overview page. `routine` is the "Update routine?" question this test
+ * expects (the changes it lists, and the answer); without it, the workout must match its routine
+ * (or have none), so nothing is asked.
+ */
+export async function saveWorkout(
+	page: Page,
+	routine?: { changes: string[]; answer: 'Update routine' | 'Update routine (this block only)' | 'Just this workout' }
+) {
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	if (routine) {
+		const changes = page.getByTestId('routine-changes');
+		for (const change of routine.changes) await expect(changes).toContainText(change);
+		await page.getByRole('button', { name: routine.answer, exact: true }).click();
+	}
+	await page.waitForURL('/workouts');
+	await expect(page.getByTestId('routine-changes')).toHaveCount(0);
 }

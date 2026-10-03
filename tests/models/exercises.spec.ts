@@ -5,7 +5,8 @@ import {
 	createMesocycle,
 	createTemplateExerciseSplit,
 	pickExercise,
-	pickRoutine
+	pickRoutine,
+	saveWorkout
 } from './commonFunctions';
 
 const prisma = new PrismaClient();
@@ -89,8 +90,7 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByTestId('Barbell rows-set-2-action').click();
 	await page.getByTestId('Barbell rows-set-3-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await page.waitForURL('/workouts');
+	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
 
 	// Rename it on Exercise stats
 	await page.goto('/exercise-stats');
@@ -409,7 +409,11 @@ test('merging when a routine has both exercises: each routine keeps exactly one,
 		expect(workout.name).toEqual('Barbell rows');
 	});
 	expect(await prisma.exercise.count({ where: { id: curls.id } })).toEqual(0);
-	expect(await prisma.exerciseTemplate.count({ where: { name: 'Dumbbell bicep curls' } })).toEqual(0);
+	expect(
+		await prisma.exerciseTemplate.count({
+			where: { name: 'Dumbbell bicep curls', exerciseSplitDay: { exerciseSplit: { userId } } }
+		})
+	).toEqual(0);
 });
 
 test('merging when a workout has both exercises: one entry with all their sets, in order', async ({
@@ -515,7 +519,9 @@ test('reps only: replaces the bodyweight share (with a warning), and suggestions
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 	await expect(page.locator('[id="Sit-ups-set-1-reps"]')).toHaveValue('13');
 	await expect(page.locator('[id="Sit-ups-set-2-reps"]')).toHaveValue('13');
-	await expect(page.locator('[id="Sit-ups-set-1-load"]')).toHaveValue('0');
+	// No load to enter for a reps-only exercise
+	await expect(page.locator('[id="Sit-ups-set-1-load"]')).toHaveCount(0);
+	await expect(page.getByTestId('Sit-ups-set-1-no-load')).toBeVisible();
 	await expect(page.getByTestId('Sit-ups-at-max-reps')).toHaveText(
 		'All sets at your max of 13 reps — try a harder version or add weight.'
 	);
