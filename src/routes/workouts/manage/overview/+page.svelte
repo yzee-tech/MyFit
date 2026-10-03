@@ -95,7 +95,7 @@
 	// "Update routine?": asked when a block workout differs from its routine; closing it saves nothing
 	type CreateData = RouterInputs['workouts']['create'];
 	let routineDialogOpen = $state(false);
-	let routinePreview: NonNullable<RouterOutputs['workouts']['routineChanges']> | null = $state(null);
+	let routinePreview: NonNullable<RouterOutputs['workouts']['previewRoutineChanges']> | null = $state(null);
 	let pendingCreateData: CreateData | null = $state(null);
 	let committing = $state(false);
 	$effect(() => {
@@ -136,7 +136,7 @@
 		// A new workout from a block: ask first if it changed the routine
 		if (workoutRunes.editingWorkoutId === null && createData.workoutData.workoutOfMesocycle) {
 			try {
-				const preview = await trpc().workouts.routineChanges.mutate(createData);
+				const preview = await trpc().workouts.previewRoutineChanges.mutate(createData);
 				if (preview && preview.changes.length > 0) {
 					routinePreview = preview;
 					pendingCreateData = createData;

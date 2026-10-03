@@ -654,8 +654,11 @@ export const workouts = t.router({
 			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets };
 		}),
 
-	/** What a new workout changed about its routine's plan, for the "Update routine?" prompt */
-	routineChanges: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
+	/**
+	 * What a new workout changed about its routine's plan, for the "Update routine?" prompt. Read-only:
+	 * a mutation only so the whole workout is POSTed rather than packed into a URL.
+	 */
+	previewRoutineChanges: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
 		const { workoutOfMesocycle } = input.workoutData;
 		if (!workoutOfMesocycle || workoutOfMesocycle.workoutStatus !== null) return null;
 		const { block, routine } = await findWorkoutRoutine(ctx.userId, workoutOfMesocycle);

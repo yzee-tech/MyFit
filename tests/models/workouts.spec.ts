@@ -160,6 +160,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.locator('[id="Leg\\ press-set-2-RIR"]').fill('0');
 	await page.getByTestId('Leg press-set-1-action').click();
 	await page.getByTestId('Leg press-set-2-action').click();
+	await expectSetsFitPhone(page);
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
@@ -858,6 +859,23 @@ test('save a blank workout as a routine library', async ({ page, userData }) => 
 });
 
 /** Fills a set's numbers by exercise name and set number (1-based); load left out when not given */
+/** At phone width every set row fits: nothing scrolls sideways and every tick box is on screen */
+async function expectSetsFitPhone(page: Page) {
+	await page.setViewportSize({ width: 390, height: 844 });
+	const overflow = await page.evaluate(
+		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+	);
+	expect(overflow).toBeLessThanOrEqual(0);
+	const boxes = page.getByRole('checkbox');
+	expect(await boxes.count()).toBeGreaterThan(0);
+	for (const box of await boxes.all()) {
+		const rect = await box.boundingBox();
+		expect(rect).not.toBeNull();
+		expect(rect!.x).toBeGreaterThanOrEqual(0);
+		expect(rect!.x + rect!.width).toBeLessThanOrEqual(390);
+	}
+}
+
 async function fillSet(
 	page: Page,
 	exercise: string,
@@ -903,6 +921,7 @@ test('first workout with a reps-only exercise: no load to enter, every set ticks
 			await expect(setBox(page, exercise, set)).toHaveAttribute('aria-checked', 'true');
 		}
 	}
+	await expectSetsFitPhone(page);
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/overview/);
 	// Same as the routine: saved without asking
@@ -977,6 +996,30 @@ test('sets: tick in any order, untick, a note for what is missing, and a load pe
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
 	await expect(page.locator('[id="Barbell\\ rows-set-3-load"]')).toHaveValue('35');
+});
+
+test('a note about a missing number stays with its set when another set is removed', async ({ page }) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	await fillSet(page, 'Barbell rows', 3, { reps: '10' });
+	await setBox(page, 'Barbell rows', 3).click();
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
+
+	// Set 1 goes: the old set 3 is now set 2, and the note and outline move with it
+	await page.getByTestId('Barbell rows-set-1-remove').click();
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 2: enter load');
+	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toHaveValue('10');
+	await expect(page.locator('[id="Barbell\\ rows-set-2-load"]')).toHaveAttribute('aria-invalid', 'true');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).not.toHaveAttribute('aria-invalid', 'true');
+
+	// Removing the flagged set takes its note away
+	await page.getByTestId('Barbell rows-set-2-remove').click();
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveCount(0);
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).not.toHaveAttribute('aria-invalid', 'true');
 });
 
 test('add and remove sets; the routine prompt: closing it saves nothing, Update routine changes block and library', async ({

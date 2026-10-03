@@ -20,6 +20,7 @@
 	import UndoIcon from 'virtual:icons/lucide/undo';
 	import XIcon from 'virtual:icons/lucide/x';
 	import { workoutRunes } from '../../workoutRunes.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	type PropsType = {
 		exercise: WorkoutExerciseInProgress;
@@ -30,14 +31,10 @@
 	type WorkoutExerciseSet = WorkoutExerciseInProgress['sets'][number];
 	let { exercise = $bindable(), originalSetLoads = $bindable(), repsOnly = false }: PropsType = $props();
 
-	// A set that can't be ticked yet: which of its boxes is missing, shown under the exercise
+	// Sets someone tried to tick with a box still empty. The notes and outlines are worked out from these
+	// sets as they are now, so they follow a set when others are added or removed, and go once it's filled
 	type Missing = 'reps' | 'load' | 'RIR';
-	let missing: Record<number, Missing[]> = $state({});
-	let missingNotes = $derived(
-		Object.entries(missing)
-			.filter(([, fields]) => fields.length > 0)
-			.map(([idx, fields]) => `Set ${Number(idx) + 1}: enter ${fields.join(' and ')}`)
-	);
+	const triedToTick = new SvelteSet<WorkoutExerciseSet>();
 
 	// Loads here are in the exercise's unit; bodyweight is stored in kg
 	function inExerciseUnit(kg: number | null | undefined) {
@@ -48,6 +45,16 @@
 	let isSameLoadExercise = $derived(['Myorep', 'MyorepMatch'].includes(exercise.setType));
 	// A machine's level, not a weight: no bodyweight, and no rep adjusting by weight
 	let isLevels = $derived(isLevelUnit(exercise.weightUnit));
+
+	let missingBySet = $derived(
+		exercise.sets.map((set, idx) =>
+			triedToTick.has(set) && !set.completed && !set.skipped ? missingFields(set, idx) : []
+		)
+	);
+	let missingNotes = $derived(
+		missingBySet.flatMap((fields, idx) => (fields.length > 0 ? [`Set ${idx + 1}: enter ${fields.join(' and ')}`] : []))
+	);
+	const isMissing = (idx: number, field: Missing) => missingBySet[idx]?.includes(field) ?? false;
 
 	/** The boxes a set still needs before it can be ticked */
 	function missingFields(set: WorkoutExerciseSet, idx: number): Missing[] {
@@ -69,9 +76,11 @@
 		if (!set.completed) {
 			if (repsOnly) set.load = 0;
 			if (isSameLoadExercise && idx > 0) set.load = exercise.sets[0].load;
-			const fields = missingFields(set, idx);
-			missing = { ...missing, [idx]: fields };
-			if (fields.length > 0) return;
+			if (missingFields(set, idx).length > 0) {
+				triedToTick.add(set);
+				return;
+			}
+			triedToTick.delete(set);
 			// Set 1's weight is a starting point for sets without one yet
 			if (idx === 0) fillEmptyLoads();
 		}
@@ -106,29 +115,11 @@
 
 	function removeSet(idx: number) {
 		if (exercise.sets.length <= 1) return;
+		triedToTick.delete(exercise.sets[idx]);
 		exercise.sets.splice(idx, 1);
 		originalSetLoads.splice(idx, 1);
-		// Notes about missing numbers follow their set
-		missing = Object.fromEntries(
-			Object.entries(missing)
-				.filter(([setIdx]) => Number(setIdx) !== idx)
-				.map(([setIdx, fields]) => [Number(setIdx) > idx ? Number(setIdx) - 1 : Number(setIdx), fields])
-		);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
-
-	// Filling in a box clears its note
-	$effect(() => {
-		const stillMissing = Object.fromEntries(
-			Object.entries(missing).map(([idx, fields]) => {
-				const set = exercise.sets[Number(idx)];
-				return [idx, set ? fields.filter((field) => missingFields(set, Number(idx)).includes(field)) : []];
-			})
-		);
-		if (JSON.stringify(stillMissing) !== JSON.stringify(missing)) missing = stillMissing;
-	});
-
-	const isMissing = (idx: number, field: Missing) => missing[idx]?.includes(field) ?? false;
 
 	function shouldMiniSetBeDisabled(setIndex: number, miniSetIndex: number) {
 		const parentSet = exercise.sets[setIndex];
