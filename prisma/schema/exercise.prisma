@@ -9,6 +9,10 @@ model Exercise {
   bodyweightFraction Float?
   /// How to do it, shown wherever it's used
   note               String?
+  /// Suggestions only ever add reps, never weight (e.g. sit-ups); never with a bodyweight share
+  repsOnly           Boolean     @default(false)
+  /// Reps-only cap: suggestions stop at this many reps; none means no cap
+  maxReps            Int?
   /// Deleted but kept for the workouts that used it
   archived           Boolean     @default(false)
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)

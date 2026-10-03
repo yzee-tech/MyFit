@@ -1,6 +1,6 @@
 /**
  * The Exercises page: the only place an exercise is created or its details (name, muscle group,
- * bodyweight share, note) are changed. Routines and workouts pick exercises from this list.
+ * bodyweight share, note, reps only) are changed. Routines and workouts pick exercises from this list.
  */
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
@@ -12,18 +12,26 @@ import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { z } from 'zod';
 
-const exerciseDetailsInput = z
+export const exerciseDetailsInput = z
 	.strictObject({
 		name: z.string().trim().min(1).max(100),
 		targetMuscleGroup: MuscleGroupSchema,
 		customMuscleGroup: z.string().trim().max(60).nullable(),
 		bodyweightFraction: z.number().min(0.01).max(2).nullable(),
-		note: z.string().trim().max(1000).nullable()
+		note: z.string().trim().max(1000).nullable(),
+		repsOnly: z.boolean().default(false),
+		maxReps: z.number().int().min(1).max(500).nullable().default(null)
+	})
+	// Reps only never counts bodyweight: one or the other
+	.refine((details) => !(details.repsOnly && details.bodyweightFraction !== null), {
+		message: 'Pick either Reps only or a bodyweight share'
 	})
 	.transform((details) => ({
 		...details,
 		customMuscleGroup: details.targetMuscleGroup === 'Custom' ? details.customMuscleGroup || null : null,
-		note: details.note || null
+		note: details.note || null,
+		// A rep cap only applies to reps-only exercises
+		maxReps: details.repsOnly ? details.maxReps : null
 	}))
 	.refine((details) => details.targetMuscleGroup !== 'Custom' || details.customMuscleGroup, {
 		message: 'Enter the muscle group'
@@ -346,10 +354,11 @@ export const exercises = t.router({
 		.mutation(async ({ ctx, input }) => {
 			const exercise = await findOwnExercise(ctx.userId, input.id);
 			if (input.details.name !== exercise.name) await assertNameFree(ctx.userId, input.details.name, exercise.id);
-			const { note, ...shared } = input.details;
+			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
+			const { note, repsOnly, maxReps, ...shared } = input.details;
 			await prisma.$transaction([
 				...updateExerciseEverywhere(exercise.id, shared),
-				prisma.exercise.update({ where: { id: exercise.id }, data: { note } })
+				prisma.exercise.update({ where: { id: exercise.id }, data: { note, repsOnly, maxReps } })
 			]);
 			return { message: 'Exercise saved' };
 		}),

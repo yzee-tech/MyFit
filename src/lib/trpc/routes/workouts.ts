@@ -8,6 +8,7 @@ import {
 	getBlockWeek,
 	isDeloadWeek,
 	progressiveOverloadMagic,
+	type RepsOnlySettings,
 	type ProgressionMode,
 	type ExerciseHistory,
 	type WorkoutExerciseInProgress,
@@ -73,8 +74,17 @@ type ActiveBlockData = {
 	routines: RoutineOption[];
 };
 
+/** Reps-only exercises by name, with their rep cap */
+function repsOnlySettings(exercises: { name: string; repsOnly: boolean; maxReps: number | null }[]): RepsOnlySettings {
+	return new Map(
+		exercises.filter((exercise) => exercise.repsOnly).map((exercise) => [exercise.name, exercise.maxReps])
+	);
+}
+
 type WorkoutExercisesWithPreviousData = {
 	todaysWorkoutExercises: WorkoutExerciseInProgress[];
+	/** Today's reps-only exercises by name, with their rep cap (null for none) */
+	repsOnly: Record<string, number | null>;
 	previousWorkoutData: null | {
 		exercises: WorkoutExerciseWithSets[];
 		userBodyweight: number;
@@ -381,6 +391,7 @@ export const workouts = t.router({
 
 			const workoutExercisesWithPreviousData: WorkoutExercisesWithPreviousData = {
 				todaysWorkoutExercises: [],
+				repsOnly: {},
 				previousWorkoutData: null
 			};
 			const todaysSplitDay = data?.mesocycleExerciseSplitDays[splitDayIndex];
@@ -427,14 +438,13 @@ export const workouts = t.router({
 			if (isDeloadWeek(data.weeklyRIR, weekNumber)) mode = 'deload';
 			else if (input.welcomeBack) mode = 'welcomeBack';
 
-			const exerciseNotes = new Map(
-				(
-					await prisma.exercise.findMany({
-						where: { userId: ctx.userId, name: { in: exerciseNames } },
-						select: { name: true, note: true }
-					})
-				).map((exercise) => [exercise.name, exercise.note])
-			);
+			const exercises = await prisma.exercise.findMany({
+				where: { userId: ctx.userId, name: { in: exerciseNames } },
+				select: { name: true, note: true, repsOnly: true, maxReps: true }
+			});
+			const exerciseNotes = new Map(exercises.map((exercise) => [exercise.name, exercise.note]));
+			const repsOnly = repsOnlySettings(exercises);
+			workoutExercisesWithPreviousData.repsOnly = Object.fromEntries(repsOnly);
 
 			// Suggestions are worked out in kg, then shown in each exercise's unit
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
@@ -444,7 +454,8 @@ export const workouts = t.router({
 				splitDayIndex,
 				exerciseHistory,
 				mode,
-				weightSets
+				weightSets,
+				repsOnly
 			).map((exercise) => ({
 				...convertExerciseLoads(exercise, 'toDisplay'),
 				// The exercise's own note, shown with the routine's note
@@ -471,8 +482,8 @@ export const workouts = t.router({
 		}),
 
 	/**
-	 * Suggested sets for an exercise added during a workout, from the last times it was done
-	 * (in the exercise's unit). Null when it hasn't been done before.
+	 * Suggested sets for an exercise added during a workout, from the last times it was done (in the
+	 * exercise's unit; null when it hasn't been done before), and whether it's reps only
 	 */
 	suggestSets: t.procedure
 		.input(
@@ -504,7 +515,10 @@ export const workouts = t.router({
 					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
 				})
 			]);
-			if (comparablePerformances(history[exercise.name] ?? [], input.weightUnit).length === 0) return null;
+			const settings = { repsOnly: exercise.repsOnly, maxReps: exercise.maxReps };
+			if (comparablePerformances(history[exercise.name] ?? [], input.weightUnit).length === 0) {
+				return { ...settings, sets: null };
+			}
 
 			// The current block's effort and overload settings, else steady defaults
 			const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
@@ -565,9 +579,10 @@ export const workouts = t.router({
 				0,
 				history,
 				mode,
-				weightSets
+				weightSets,
+				repsOnlySettings([exercise])
 			);
-			return convertExerciseLoads(suggestion, 'toDisplay').sets;
+			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets };
 		}),
 
 	create: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {

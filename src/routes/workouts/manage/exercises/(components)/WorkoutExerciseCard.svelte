@@ -4,7 +4,12 @@
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { page } from '$app/stores';
-	import { getNextWeightHint, switchExerciseUnit, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+	import {
+		allSetsAtMaxReps,
+		getNextWeightHint,
+		switchExerciseUnit,
+		type WorkoutExerciseInProgress
+	} from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, type WeightSetLike } from '$lib/utils/weightSets';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { dragHandle } from 'svelte-dnd-action';
@@ -32,12 +37,29 @@
 	let originalSetLoads = $state(exercise.sets.map((set) => set.load));
 	let isContextMenuOpen = $state(false);
 
+	// Reps only: suggestions add reps, never weight, up to an optional cap
+	let isRepsOnly = $derived(exercise.name in workoutRunes.repsOnly);
+	let maxReps = $derived(workoutRunes.repsOnly[exercise.name] ?? null);
+	// About the suggestion: decided once every set has reps, so typing different reps doesn't change it
+	let suggestionAtMaxReps: boolean | undefined = $state();
+	$effect(() => {
+		if (suggestionAtMaxReps !== undefined || readOnly || !isRepsOnly || exercise.sets.length === 0) return;
+		if (exercise.sets.every((set) => set.skipped || set.reps !== undefined))
+			suggestionAtMaxReps = allSetsAtMaxReps(exercise, maxReps);
+	});
+	let atMaxReps = $derived(suggestionAtMaxReps === true);
+
 	// Weights this gym has for the exercise; when the next one is a big jump, say how to get there
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
 	let nextWeightHint = $derived(
 		readOnly
 			? null
-			: getNextWeightHint(exercise, availableWeightsFor(exercise, weightSets), workoutRunes.workoutData?.userBodyweight)
+			: getNextWeightHint(
+					exercise,
+					availableWeightsFor(exercise, weightSets),
+					workoutRunes.workoutData?.userBodyweight,
+					isRepsOnly
+				)
 	);
 
 	function toggleUnit() {
@@ -46,7 +68,8 @@
 			$state.snapshot(exercise),
 			to,
 			workoutRunes.workoutData?.userBodyweight ?? 0,
-			weightSets
+			weightSets,
+			isRepsOnly
 		);
 		originalSetLoads = exercise.sets.map((set) => set.load);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
@@ -132,6 +155,9 @@
 			{convertCamelCaseToNormal(exercise.setType)} sets of
 			{exercise.repRangeStart} to {exercise.repRangeEnd} reps
 		</span>
+		{#if isRepsOnly}
+			<Badge class="whitespace-nowrap" variant="outline">Reps only</Badge>
+		{/if}
 		{#if exercise.bodyweightFraction !== null && !isLevelUnit(exercise.weightUnit)}
 			<Badge variant="outline">BW</Badge>
 		{/if}
@@ -149,6 +175,11 @@
 	{#if exercise.note}
 		<div class="mt-1 flex items-center bg-secondary/60 px-1 py-0.5 text-sm" data-testid="{exercise.name}-routine-note">
 			{exercise.note}
+		</div>
+	{/if}
+	{#if atMaxReps && !reordering}
+		<div class="mt-1 rounded bg-secondary/60 px-1 py-0.5 text-sm" data-testid="{exercise.name}-at-max-reps">
+			All sets at your max of {maxReps} reps — try a harder version or add weight.
 		</div>
 	{/if}
 	{#if nextWeightHint && !reordering}

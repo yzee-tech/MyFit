@@ -81,7 +81,8 @@
 			Its name, muscle group, bodyweight and note are the same in every routine. Sets and reps are set per routine.
 		{/snippet}
 		<ExerciseForm
-			existingNames={exercises === 'loading' ? [] : exercises.map((exercise) => exercise.name)}
+			existingExercises={exercises === 'loading' ? [] : exercises}
+			onPickExisting={(existing) => goto(`/exercises/${existing.id}`)}
 			onSubmit={createExercise}
 			submitLabel="Create exercise"
 		/>

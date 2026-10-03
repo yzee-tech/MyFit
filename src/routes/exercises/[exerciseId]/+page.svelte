@@ -153,6 +153,15 @@
 		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${convertCamelCaseToNormal(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
 </script>
 
+<!-- Reps only: the cap wins over a routine's range, so say when the range starts above it -->
+{#snippet maxBelowRange(entry: { repRangeStart: number; repRangeEnd: number })}
+	{#if data !== 'loading' && data.exercise.repsOnly && data.exercise.maxReps && data.exercise.maxReps < entry.repRangeStart}
+		<span class="text-xs text-amber-600 dark:text-amber-400" data-testid="max-below-range">
+			Max reps ({data.exercise.maxReps}) is below this routine's range ({entry.repRangeStart}–{entry.repRangeEnd})
+		</span>
+	{/if}
+{/snippet}
+
 {#if data === 'loading'}
 	<Skeleton class="mb-4 h-10 w-48" />
 	<Skeleton class="h-40 w-full" />
@@ -194,6 +203,9 @@
 				{#if exercise.bodyweightFraction !== null}
 					<Badge variant="outline">{Math.round(exercise.bodyweightFraction * 100)}% of bodyweight</Badge>
 				{/if}
+				{#if exercise.repsOnly}
+					<Badge variant="outline">Reps only{exercise.maxReps ? `, max ${exercise.maxReps}` : ''}</Badge>
+				{/if}
 			</div>
 			{#if exercise.note}
 				<p class="rounded-md bg-secondary px-2 py-1 text-sm">{exercise.note}</p>
@@ -209,6 +221,7 @@
 				<a class="flex flex-col rounded-md border p-2 hover:bg-accent" href="/exercise-splits/{entry.libraryId}">
 					<span class="text-sm font-medium">{entry.libraryName} › {entry.routineName}</span>
 					<span class="text-xs text-muted-foreground">{setsText(entry)}</span>
+					{@render maxBelowRange(entry)}
 				</a>
 			{/each}
 			{#if data.activeBlock}
@@ -216,6 +229,7 @@
 					<a class="flex flex-col rounded-md border p-2 hover:bg-accent" href="/mesocycles/{data.activeBlock.id}">
 						<span class="text-sm font-medium">Current block {data.activeBlock.name} › {entry.routineName}</span>
 						<span class="text-xs text-muted-foreground">{setsText(entry)}</span>
+						{@render maxBelowRange(entry)}
 					</a>
 				{/each}
 			{/if}
@@ -255,7 +269,7 @@
 			Changes apply everywhere it's used, including past workouts.
 		{/snippet}
 		{#if editOpen}
-			<ExerciseForm initial={exercise} onSubmit={saveDetails} submitLabel="Save" />
+			<ExerciseForm initial={exercise} onSubmit={saveDetails} pastWorkoutCount={data.workoutCount} submitLabel="Save" />
 		{/if}
 	</ResponsiveDialog>
 

@@ -60,6 +60,7 @@
 		if (workoutRunes.previousWorkoutData === null) {
 			workoutRunes.previousWorkoutData = serverData?.previousWorkoutData ?? null;
 		}
+		if (serverData?.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
 	});
 
 	function getFormattedDate(date: string | Date) {
