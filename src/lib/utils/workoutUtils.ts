@@ -140,6 +140,19 @@ export type PreviousPerformance = {
 /** Past performances of each exercise, keyed by exercise name, oldest first */
 export type ExerciseHistory = Record<string, PreviousPerformance[]>;
 
+/** Reps-only exercises by name, with their rep cap (null for none) */
+export type RepsOnlySettings = Map<string, number | null>;
+
+/** Whether every suggested set of a reps-only exercise is at its rep cap */
+export function allSetsAtMaxReps(
+	ex: { sets: { reps?: number; skipped?: boolean | null }[] },
+	maxReps: number | null | undefined
+) {
+	if (typeof maxReps !== 'number') return false;
+	const sets = ex.sets.filter((set) => !set.skipped);
+	return sets.length > 0 && sets.every((set) => set.reps !== undefined && set.reps >= maxReps);
+}
+
 /**
  * The performances that compare with an exercise in `unit`: levels only with levels, and kg or lb
  * only with kg or lb (a level isn't a weight)
@@ -561,10 +574,11 @@ export function snapSetsToAvailableWeights(ex: WorkoutExerciseInProgress, userBo
 export function getNextWeightHint(
 	ex: WorkoutExerciseInProgress,
 	weights: number[] | null,
-	userBodyweightKg: number | null | undefined
+	userBodyweightKg: number | null | undefined,
+	repsOnly = false
 ): { currentWeight: number; nextWeight: number; moreReps: number } | null {
-	// Levels go up with double progression instead
-	if (!weights || isLevelUnit(ex.weightUnit)) return null;
+	// Levels go up with double progression instead, and reps-only exercises never add weight
+	if (!weights || repsOnly || isLevelUnit(ex.weightUnit)) return null;
 	const setIdx = ex.sets.findIndex(
 		(set) => set.reps !== undefined && set.RIR !== undefined && set.load !== undefined && set.load > 0
 	);
@@ -605,11 +619,14 @@ export function switchExerciseUnit(
 	ex: WorkoutExerciseInProgress,
 	to: MassUnit,
 	userBodyweightKg: number,
-	weightSets: WeightSetLike[] = []
+	weightSets: WeightSetLike[] = [],
+	repsOnly = false
 ): WorkoutExerciseInProgress {
 	// A level stays a level
 	if ((ex.weightUnit ?? 'KG') === to || isLevelUnit(ex.weightUnit)) return ex;
 	const inKg = convertExerciseLoads(ex, 'toKg');
+	// Reps only keeps the exact weight, just shown in the other unit (e.g. 5 kg is 11.02 lb)
+	if (repsOnly) return convertExerciseLoads({ ...inKg, weightUnit: to }, 'toDisplay');
 	const snapped: WorkoutExerciseInProgress = structuredClone({ ...inKg, weightUnit: to, minimumWeightChange: null });
 	// The exercise's weight set, if it's in the new unit; otherwise the new unit's standard steps
 	const weights = availableWeightsFor(snapped, weightSets);
@@ -687,9 +704,13 @@ export function progressiveOverloadMagic(
 	splitDayIndex: number,
 	exerciseHistory: ExerciseHistory = {},
 	mode: ProgressionMode = 'normal',
-	weightSets: WeightSetLike[] = []
+	weightSets: WeightSetLike[] = [],
+	/** Reps-only exercises by name, with their rep cap (null for none) */
+	repsOnly: RepsOnlySettings = new Map()
 ) {
 	const { mesocycleExerciseSplitDays, ...mesocycle } = mesocycleWithProgressionData;
+	// Levels keep their own rule, so reps only applies to exercises with weights
+	const isRepsOnly = (ex: WorkoutExerciseInProgress) => repsOnly.has(ex.name) && !isLevelUnit(ex.weightUnit);
 
 	const weekRIR = getRIRForWeek(mesocycle.weeklyRIR, cycleNumber);
 	let currentCycleRIR = weekRIR;
@@ -720,6 +741,16 @@ export function progressiveOverloadMagic(
 			ex.sets = lastPerformance.exercise.sets.slice(0, routineSetCount).map((oldSet) => addExtraSetProperties(oldSet));
 			if (!easySession) ex.sets = progressLevels(ex, weights);
 			fitSetsToRoutine(ex, routineSetCount);
+			return;
+		}
+
+		// Reps only: the same load as last time (never snapped or raised), and a rep more on every set
+		if (isRepsOnly(ex)) {
+			ex.sets = lastPerformance.exercise.sets.map((oldSet) => addExtraSetProperties(oldSet));
+			fitSetsToRoutine(ex, routineSetCount);
+			if (!easySession) {
+				ex.sets = ex.sets.map((set) => (set.skipped || set.reps === undefined ? set : { ...set, reps: set.reps + 1 }));
+			}
 			return;
 		}
 
@@ -806,8 +837,9 @@ export function progressiveOverloadMagic(
 			// Adjust reps when RIR changed
 			const RIRDifference = set.RIR - oldRIR;
 			if (set.reps === undefined) return;
-			// Levels already add a rep each time, so a harder week doesn't add more
-			if (isLevelUnit(ex.weightUnit) && RIRDifference < 0) return;
+			// Levels and reps only already add a rep each time, so a harder week doesn't add more
+			const repEachTime = isLevelUnit(ex.weightUnit) || isRepsOnly(ex);
+			if (repEachTime && RIRDifference < 0) return;
 
 			// Easy sessions always take reps off to match the easier effort
 			const forceRIRMatching = easySession || (ex.forceRIRMatching ?? mesocycle.forceRIRMatching);
@@ -821,9 +853,11 @@ export function progressiveOverloadMagic(
 			// If the RIR adjustment we are about to make causes reps to fall outside of lower rep range
 			// (a deload is meant to be easy, so there reps may drop below the range)
 			const adjustedReps = set.reps - RIRDifference;
-			// Levels: an easier week takes reps off, but not below the range, and keeps the week's effort
-			if (isLevelUnit(ex.weightUnit) && mode !== 'deload') {
-				set.reps = Math.max(adjustedReps, Math.min(set.reps, repRangeStart));
+			// Levels and reps only: an easier week takes reps off, but not below the range (or a lower rep
+			// cap), and keeps the week's effort
+			if (repEachTime && mode !== 'deload') {
+				const floor = Math.min(repRangeStart, repsOnly.get(ex.name) ?? Infinity);
+				set.reps = Math.max(adjustedReps, Math.min(set.reps, floor));
 				return;
 			}
 			if (mode !== 'deload' && adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
@@ -833,6 +867,15 @@ export function progressiveOverloadMagic(
 				return;
 			}
 			set.reps -= RIRDifference;
+		});
+	});
+
+	// Reps-only cap: the last word, after every other change to reps
+	workoutExercises.forEach((ex) => {
+		const maxReps = isRepsOnly(ex) ? repsOnly.get(ex.name) : null;
+		if (typeof maxReps !== 'number') return;
+		ex.sets.forEach((set) => {
+			if (set.reps !== undefined) set.reps = Math.min(set.reps, maxReps);
 		});
 	});
 

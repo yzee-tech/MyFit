@@ -8,7 +8,14 @@
 		customMuscleGroup: string | null;
 		bodyweightFraction: number | null;
 		note: string | null;
+		/** Suggestions only add reps, never weight; never with a bodyweight share */
+		repsOnly: boolean;
+		/** Reps-only cap; null for none */
+		maxReps: number | null;
 	};
+
+	/** One of the user's exercises, for "Already on your list" */
+	export type ExistingExercise = { id: string; name: string };
 </script>
 
 <script lang="ts">
@@ -21,16 +28,28 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { MuscleGroup as MuscleGroups } from '$lib/utils/prismaEnums';
+	import AddIcon from 'virtual:icons/lucide/plus';
 
 	type PropsType = {
 		/** The exercise being edited; a new one when missing */
 		initial?: ExerciseFormDetails;
-		/** Names already used, so built-in suggestions leave them out */
-		existingNames?: string[];
+		/** Your exercises: matches show as "Already on your list", and built-in suggestions leave them out */
+		existingExercises?: ExistingExercise[];
+		/** Tapping one of your exercises instead of making a new one */
+		onPickExisting?: (exercise: ExistingExercise) => void;
+		/** Past workouts of the exercise being edited, for the warning about bodyweight */
+		pastWorkoutCount?: number;
 		submitLabel: string;
 		onSubmit: (details: ExerciseFormDetails) => Promise<unknown>;
 	};
-	let { initial, existingNames = [], submitLabel, onSubmit }: PropsType = $props();
+	let {
+		initial,
+		existingExercises = [],
+		onPickExisting,
+		pastWorkoutCount = 0,
+		submitLabel,
+		onSubmit
+	}: PropsType = $props();
 
 	let name = $state(initial?.name ?? '');
 	let targetMuscleGroup: MuscleGroup | undefined = $state(initial?.targetMuscleGroup);
@@ -40,14 +59,26 @@
 		initial?.bodyweightFraction ? Math.round(initial.bodyweightFraction * 100) : 100
 	);
 	let note = $state(initial?.note ?? '');
+	let repsOnly = $state(initial?.repsOnly ?? false);
+	let maxReps: number | undefined = $state(initial?.maxReps ?? undefined);
 	let saving = $state(false);
+
+	// Turning on reps only drops a bodyweight share the exercise already had
+	let dropsBodyweight = $derived(repsOnly && typeof initial?.bodyweightFraction === 'number');
+
+	// Your own exercises that match what's typed
+	let existingMatches = $derived.by(() => {
+		const typed = name.trim().toLowerCase();
+		if (initial || typed.length < 2) return [];
+		return existingExercises.filter((ex) => ex.name.toLowerCase().includes(typed)).slice(0, 5);
+	});
 
 	// Built-in exercises to start from, when making a new one
 	const builtIns = commonExercisePerMuscleGroup.flatMap((group) => group.exercises);
 	let suggestions = $derived.by(() => {
 		const typed = name.trim().toLowerCase();
 		if (initial || typed.length < 2) return [];
-		const taken = new Set(existingNames.map((existing) => existing.toLowerCase()));
+		const taken = new Set(existingExercises.map((existing) => existing.name.toLowerCase()));
 		return builtIns
 			.filter((ex) => ex.name.toLowerCase().includes(typed) && ex.name.toLowerCase() !== typed)
 			.filter((ex) => !taken.has(ex.name.toLowerCase()))
@@ -59,6 +90,7 @@
 		targetMuscleGroup = suggestion.targetMuscleGroup;
 		customMuscleGroup = suggestion.customMuscleGroup ?? '';
 		countsBodyweight = typeof suggestion.bodyweightFraction === 'number';
+		if (countsBodyweight) repsOnly = false;
 		bodyweightPercentage = suggestion.bodyweightFraction ? Math.round(suggestion.bodyweightFraction * 100) : 100;
 		note = suggestion.note ?? '';
 	}
@@ -72,8 +104,11 @@
 				name: name.trim(),
 				targetMuscleGroup,
 				customMuscleGroup: targetMuscleGroup === 'Custom' ? customMuscleGroup.trim() || null : null,
-				bodyweightFraction: countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
-				note: note.trim() || null
+				// Reps only and a bodyweight share are one or the other
+				bodyweightFraction: !repsOnly && countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
+				note: note.trim() || null,
+				repsOnly,
+				maxReps: repsOnly && maxReps ? maxReps : null
 			});
 		} finally {
 			saving = false;
@@ -85,13 +120,45 @@
 	<div class="grid gap-1.5">
 		<Label for="exercise-form-name">Name</Label>
 		<Input id="exercise-form-name" maxlength={100} placeholder="e.g. Incline DB press" required bind:value={name} />
+		{#if existingMatches.length > 0}
+			<div class="mt-1 grid gap-1" data-testid="existing-exercise-matches">
+				<span class="text-xs font-medium">Already on your list</span>
+				<div class="flex flex-wrap gap-1">
+					{#each existingMatches as existing (existing.id)}
+						<Button
+							class="h-7 px-2"
+							disabled={!onPickExisting}
+							onclick={() => onPickExisting?.(existing)}
+							size="sm"
+							type="button"
+							variant="secondary"
+						>
+							{existing.name}
+						</Button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 		{#if suggestions.length > 0}
-			<div class="flex flex-wrap gap-1" aria-label="Built-in exercises">
-				{#each suggestions as suggestion (suggestion.name)}
-					<Button class="h-7 px-2" onclick={() => useSuggestion(suggestion)} size="sm" type="button" variant="outline">
-						{suggestion.name}
-					</Button>
-				{/each}
+			<div class="mt-1 grid gap-1" data-testid="built-in-suggestions">
+				<span class="text-xs font-medium">Suggestions — not on your list yet</span>
+				<div class="flex flex-wrap gap-1" aria-label="Built-in exercises">
+					{#each suggestions as suggestion (suggestion.name)}
+						<Button
+							class="h-7 gap-1 px-2"
+							onclick={() => useSuggestion(suggestion)}
+							size="sm"
+							type="button"
+							variant="outline"
+						>
+							<AddIcon class="h-3 w-3" />
+							{suggestion.name}
+						</Button>
+					{/each}
+				</div>
+				<span class="text-xs text-muted-foreground">
+					Tap one to fill in its details. It's added when you tap {submitLabel}.
+				</span>
 			</div>
 		{/if}
 	</div>
@@ -127,6 +194,37 @@
 	</div>
 
 	<div class="grid gap-1.5">
+		<div class="flex items-center justify-between gap-4">
+			<div class="grid gap-0.5">
+				<Label for="exercise-form-reps-only">Reps only</Label>
+				<span class="text-xs text-muted-foreground">Never suggest adding weight — just more reps.</span>
+			</div>
+			<Switch id="exercise-form-reps-only" bind:checked={repsOnly} />
+		</div>
+		{#if repsOnly}
+			<Label class="mt-1" for="exercise-form-max-reps">Max reps (optional)</Label>
+			<Input
+				id="exercise-form-max-reps"
+				max={500}
+				min={1}
+				placeholder="No limit"
+				step={1}
+				type="number"
+				bind:value={maxReps}
+			/>
+			<span class="text-xs text-muted-foreground">Suggestions stop at this many reps.</span>
+			{#if dropsBodyweight}
+				<p class="rounded-md bg-muted/50 p-2 text-xs" data-testid="reps-only-bodyweight-warning">
+					This exercise counts {Math.round((initial?.bodyweightFraction ?? 0) * 100)}% of your bodyweight. Turning on
+					Reps only removes that{#if pastWorkoutCount > 0}, so its {pastWorkoutCount} past
+						{pastWorkoutCount === 1 ? 'workout' : 'workouts'} will count as 0 volume in stats{/if}. Your reps and
+					weights don't change.
+				</p>
+			{/if}
+		{/if}
+	</div>
+
+	<div class="grid gap-1.5" class:hidden={repsOnly}>
 		<div class="flex items-center justify-between gap-4">
 			<Label for="exercise-form-bodyweight">Counts bodyweight</Label>
 			<Switch id="exercise-form-bodyweight" bind:checked={countsBodyweight} />

@@ -22,6 +22,8 @@ function createWorkoutRunes() {
 	let workoutExercises: WorkoutExerciseInProgress[] | null = $state(null);
 	let editingWorkoutId: string | null = $state(null);
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
+	/** This workout's reps-only exercises by name, with their rep cap (null for none) */
+	let repsOnly: Record<string, number | null> = $state({});
 
 	let editingExerciseIndex: number | undefined = $state();
 	let editingExercise: MesocycleExerciseTemplateWithoutIdsOrIndex | undefined = $state();
@@ -33,13 +35,13 @@ function createWorkoutRunes() {
 
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('workoutRunes');
-		if (savedState) ({ workoutData, workoutExercises, previousWorkoutData } = JSON.parse(savedState));
+		if (savedState) ({ workoutData, workoutExercises, previousWorkoutData, repsOnly = {} } = JSON.parse(savedState));
 	}
 
 	function saveStoresToLocalStorage() {
 		localStorage.setItem(
 			'workoutRunes',
-			JSON.stringify({ workoutData, workoutExercises, editingWorkoutId, previousWorkoutData })
+			JSON.stringify({ workoutData, workoutExercises, editingWorkoutId, previousWorkoutData, repsOnly })
 		);
 	}
 
@@ -48,6 +50,26 @@ function createWorkoutRunes() {
 		workoutExercises = null;
 		editingWorkoutId = null;
 		previousWorkoutData = null;
+		repsOnly = {};
+		saveStoresToLocalStorage();
+	}
+
+	/** Looks up which of these exercises are reps only (e.g. when editing a past workout) */
+	async function loadRepsOnly(exerciseNames: string[]) {
+		try {
+			const exercises = await trpc().exercises.forPicker.query();
+			for (const exercise of exercises) {
+				if (exerciseNames.includes(exercise.name)) setRepsOnly(exercise.name, exercise);
+			}
+		} catch (error) {
+			console.error('Failed to load reps-only settings:', error);
+		}
+	}
+
+	/** Remembers whether an exercise is reps only (and its cap) */
+	function setRepsOnly(exerciseName: string, settings: { repsOnly: boolean; maxReps: number | null }) {
+		const { [exerciseName]: _, ...others } = repsOnly;
+		repsOnly = settings.repsOnly ? { ...others, [exerciseName]: settings.maxReps } : others;
 		saveStoresToLocalStorage();
 	}
 
@@ -96,11 +118,13 @@ function createWorkoutRunes() {
 				weightSetId: exercise.weightSetId,
 				userBodyweight
 			});
+			if (!suggested) return;
+			setRepsOnly(exerciseName, suggested);
 			// Only if it's still there and nothing has been entered yet
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
-			if (!suggested || !current || !untouched) return;
-			current.sets = suggested;
+			if (!suggested.sets || !current || !untouched) return;
+			current.sets = suggested.sets;
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);
@@ -190,6 +214,8 @@ function createWorkoutRunes() {
 
 	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {
 		editingWorkoutId = workout.id;
+		repsOnly = {};
+		loadRepsOnly(workout.workoutExercises.map((ex) => ex.name));
 		workoutData = {
 			startedAt: workout.startedAt,
 			endedAt: workout.endedAt,
@@ -245,6 +271,14 @@ function createWorkoutRunes() {
 		set editingWorkoutId(value) {
 			editingWorkoutId = value;
 		},
+		get repsOnly() {
+			return repsOnly;
+		},
+		set repsOnly(value) {
+			repsOnly = value;
+			saveStoresToLocalStorage();
+		},
+		setRepsOnly,
 		get previousWorkoutData() {
 			return previousWorkoutData;
 		},

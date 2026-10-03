@@ -12,6 +12,7 @@ import {
 	switchExerciseUnit,
 	getNextWeightHint,
 	getExerciseVolume,
+	allSetsAtMaxReps,
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
@@ -551,4 +552,175 @@ test('levels: down sets move up together, keeping their gaps', () => {
 		[9, 16],
 		[8, 16]
 	]);
+});
+
+// Reps only: Barbell rows at 8–12 reps, no set to failure, steady effort (RIR 3 every week)
+function repsOnlySuggestion(
+	history: PreviousPerformance[],
+	options: {
+		repsOnly?: Map<string, number | null>;
+		weightSetId?: string | null;
+		weightSets?: WeightSetLike[];
+		plan?: { weeklyRIR: number[]; week: number };
+		mode?: 'normal' | 'deload' | 'welcomeBack';
+		routineSets?: number;
+	} = {}
+) {
+	const block = blockWithWeightSet(options.weightSetId ?? null);
+	block.weeklyRIR = options.plan?.weeklyRIR ?? [3];
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	if (options.routineSets) rows.sets = options.routineSets;
+	const output = progressiveOverloadMagic(
+		block,
+		options.plan?.week ?? 1,
+		100,
+		0,
+		{ 'Barbell rows': history },
+		options.mode ?? 'normal',
+		options.weightSets ?? [],
+		options.repsOnly ?? new Map()
+	);
+	return output.find((exercise) => exercise.name === 'Barbell rows')!;
+}
+const repsOnlyRows = (maxReps: number | null = null) => new Map([['Barbell rows', maxReps]]);
+const shapeOf = (ex: { sets: { load?: number; reps?: number }[] }) => ex.sets.map((set) => [set.load, set.reps]);
+
+test('reps only: past the top of the range, more reps at the same load, where normally the load goes up', () => {
+	const history = [performance('Barbell rows', sets(40, 13, 13, 13))];
+	// Normally: past 12 reps, the load goes up
+	const normal = repsOnlySuggestion(history);
+	normal.sets.forEach((set) => expect(set.load!).toBeGreaterThan(40));
+	// Reps only: same 40 kg, a rep more on every set
+	const repsOnly = repsOnlySuggestion(history, { repsOnly: repsOnlyRows() });
+	expect(shapeOf(repsOnly)).toEqual([
+		[40, 14],
+		[40, 14],
+		[40, 14]
+	]);
+	// No next-weight note either, where there would be one otherwise (10 kg × 13, next is 14 kg)
+	const nearTop = repsOnlySuggestion([performance('Barbell rows', sets(10, 12, 12, 11))], {
+		repsOnly: repsOnlyRows(),
+		weightSetId: buildingDumbbells.id,
+		weightSets: [buildingDumbbells]
+	});
+	expect(getNextWeightHint(nearTop, buildingDumbbells.weights, 100, false)).not.toBeNull();
+	expect(getNextWeightHint(nearTop, buildingDumbbells.weights, 100, true)).toBeNull();
+});
+
+test('reps only: plain sit-ups at load 0 keep going up in reps (no weight, no NaN)', () => {
+	const history = [performance('Barbell rows', sets(0, 20, 20, 19))];
+	const situps = repsOnlySuggestion(history, { repsOnly: repsOnlyRows() });
+	expect(shapeOf(situps)).toEqual([
+		[0, 21],
+		[0, 21],
+		[0, 20]
+	]);
+	situps.sets.forEach((set) => expect(Number.isFinite(set.reps)).toBe(true));
+});
+
+test('reps only: the load is never snapped to a weight set or to the steps of a new unit', () => {
+	// 11 kg isn't one of the building's dumbbells (10 and 14 are), but it stays 11 kg
+	const withWeightSet = repsOnlySuggestion([performance('Barbell rows', sets(11, 10, 10, 10))], {
+		repsOnly: repsOnlyRows(),
+		weightSetId: buildingDumbbells.id,
+		weightSets: [buildingDumbbells]
+	});
+	expect(shapeOf(withWeightSet)).toEqual([
+		[11, 11],
+		[11, 11],
+		[11, 11]
+	]);
+	// Done in lb last time (30 lb = 13.61 kg), in kg now: the exact same weight, not 12.5 kg
+	const lb30 = toKg(30, 'LB');
+	const unitChanged = repsOnlySuggestion([performance('Barbell rows', sets(lb30, 10, 10, 10), 100, 'LB')], {
+		repsOnly: repsOnlyRows()
+	});
+	unitChanged.sets.forEach((set) => expect(set.load).toEqual(lb30));
+});
+
+test('reps only: the routine decides the number of sets, and added sets get the rep too', () => {
+	const rows = repsOnlySuggestion([performance('Barbell rows', sets(10, 10, 10, 10))], {
+		repsOnly: repsOnlyRows(),
+		routineSets: 4
+	});
+	expect(shapeOf(rows)).toEqual([
+		[10, 11],
+		[10, 11],
+		[10, 11],
+		[10, 11]
+	]);
+});
+
+test('reps only: max reps caps suggestions, even in a harder week; without a cap they keep going', () => {
+	const at15 = [performance('Barbell rows', sets(0, 15, 15, 15))];
+	expect(shapeOf(repsOnlySuggestion(at15, { repsOnly: repsOnlyRows(15) }))).toEqual([
+		[0, 15],
+		[0, 15],
+		[0, 15]
+	]);
+	expect(shapeOf(repsOnlySuggestion(at15, { repsOnly: repsOnlyRows() }))).toEqual([
+		[0, 16],
+		[0, 16],
+		[0, 16]
+	]);
+	// A harder week (RIR 3 → 1) doesn't add extra reps on top of the one, and never past the cap
+	const harder = { weeklyRIR: [3, 1], week: 2 };
+	const at14 = [performance('Barbell rows', sets(0, 14, 14, 14))];
+	expect(shapeOf(repsOnlySuggestion(at14, { repsOnly: repsOnlyRows(), plan: harder }))).toEqual([
+		[0, 15],
+		[0, 15],
+		[0, 15]
+	]);
+	expect(shapeOf(repsOnlySuggestion(at14, { repsOnly: repsOnlyRows(14), plan: harder }))).toEqual([
+		[0, 14],
+		[0, 14],
+		[0, 14]
+	]);
+	// A cap below the routine's range (8–12) wins: 6 reps, not 10
+	const capBelowRange = repsOnlySuggestion([performance('Barbell rows', sets(0, 9, 9, 9))], {
+		repsOnly: repsOnlyRows(6)
+	});
+	capBelowRange.sets.forEach((set) => expect(set.reps).toEqual(6));
+});
+
+test('reps only: deload and welcome back repeat last time at an easier effort, same load', () => {
+	const history = [performance('Barbell rows', sets(10, 12, 12, 12))];
+	const deload = repsOnlySuggestion(history, { repsOnly: repsOnlyRows(), mode: 'deload' });
+	expect(deload.sets).toHaveLength(2);
+	deload.sets.forEach((set) => {
+		expect(set.load).toEqual(10);
+		expect(set.reps).toEqual(11); // RIR 3 → 4
+	});
+	const welcomeBack = repsOnlySuggestion(history, { repsOnly: repsOnlyRows(), mode: 'welcomeBack' });
+	expect(shapeOf(welcomeBack)).toEqual([
+		[10, 11],
+		[10, 11],
+		[10, 11]
+	]);
+});
+
+test('reps only: a level exercise keeps its own rule; the at-max check', () => {
+	// Reps only doesn't stop a level machine going up a level
+	const levels = levelSuggestion([levelPerformance(levelSets(7, 15, 15, 15))]);
+	const block = blockWithWeightSet(hotelChestPress.id);
+	block.weeklyRIR = [3];
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL' });
+	const withRepsOnly = progressiveOverloadMagic(
+		block,
+		1,
+		100,
+		0,
+		{ 'Barbell rows': [levelPerformance(levelSets(7, 15, 15, 15))] },
+		'normal',
+		[hotelChestPress],
+		repsOnlyRows(15)
+	).find((exercise) => exercise.name === 'Barbell rows')!;
+	expect(shapeOf(withRepsOnly)).toEqual(shapeOf(levels));
+	expect(withRepsOnly.sets[0].load).toEqual(8);
+
+	const ex = (...reps: number[]) => ({ sets: reps.map((r) => ({ reps: r, skipped: false })) });
+	expect(allSetsAtMaxReps(ex(30, 30, 30), 30)).toBe(true);
+	expect(allSetsAtMaxReps(ex(30, 30, 28), 30)).toBe(false);
+	expect(allSetsAtMaxReps(ex(30, 30, 30), null)).toBe(false);
 });

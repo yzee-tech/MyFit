@@ -529,7 +529,13 @@
 	{/snippet}
 	{#if newExerciseOpen}
 		<ExerciseForm
-			existingNames={pickerExercises.map((exercise) => exercise.name)}
+			existingExercises={pickerExercises}
+			onPickExisting={(existing) => {
+				// Already one of yours: pick it here, keeping what's filled in for this routine
+				const picked = pickerExercises.find((exercise) => exercise.id === existing.id);
+				if (picked) selectExercise(picked);
+				newExerciseOpen = false;
+			}}
 			onSubmit={createExercise}
 			submitLabel="Create exercise"
 		/>

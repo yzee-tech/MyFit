@@ -1,6 +1,12 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createExercises, createMesocycle, pickExercise, pickRoutine } from './commonFunctions';
+import {
+	createExercises,
+	createMesocycle,
+	createTemplateExerciseSplit,
+	pickExercise,
+	pickRoutine
+} from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -468,4 +474,118 @@ test('merging when a workout has both exercises: one entry with all their sets, 
 		[2, 45]
 	]);
 	expect(await prisma.exercise.count({ where: { id: misspelt.id } })).toEqual(0);
+});
+
+test('reps only: replaces the bodyweight share (with a warning), and suggestions add reps up to the max', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs', bodyweightFraction: 0.4 }]);
+	await logPastWorkout(userId, 'Sit-ups', 0);
+	const situps = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Sit-ups' } } });
+
+	// Turning on reps only warns about the bodyweight share and hides it; then a max of 13
+	await page.goto(`/exercises/${situps.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByLabel('Counts bodyweight')).toBeVisible();
+	await page.getByLabel('Reps only').click();
+	await expect(page.getByTestId('reps-only-bodyweight-warning')).toContainText(
+		'counts 40% of your bodyweight. Turning on Reps only removes that, so its 1 past workout will count as 0 volume'
+	);
+	await expect(page.getByLabel('Counts bodyweight')).toBeHidden();
+	await page.getByLabel('Max reps (optional)').fill('13');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('main')).toContainText('Reps only, max 13');
+
+	const saved = await prisma.exercise.findUniqueOrThrow({ where: { id: situps.id } });
+	expect(saved).toMatchObject({ repsOnly: true, maxReps: 13, bodyweightFraction: null });
+	const past = await prisma.workoutExercise.findFirstOrThrow({ where: { exerciseId: situps.id } });
+	expect(past.bodyweightFraction).toBeNull();
+
+	// Last time 12 reps at 0: next time 13 at 0, which is the max, so the note shows
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByLabel('add-exercise').click();
+	await pickExercise(page, 'Sit-ups');
+	await page.getByLabel('Sets').fill('2');
+	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await expect(page.locator('[id="Sit-ups-set-1-reps"]')).toHaveValue('13');
+	await expect(page.locator('[id="Sit-ups-set-2-reps"]')).toHaveValue('13');
+	await expect(page.locator('[id="Sit-ups-set-1-load"]')).toHaveValue('0');
+	await expect(page.getByTestId('Sit-ups-at-max-reps')).toHaveText(
+		'All sets at your max of 13 reps — try a harder version or add weight.'
+	);
+	await expect(page.getByTestId('Sit-ups-next-weight')).toHaveCount(0);
+});
+
+test('New exercise: your exercises and built-in suggestions are labelled apart; yours opens', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [{ name: 'Barbell rows', targetMuscleGroup: 'Traps' }]);
+	const rows = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } }
+	});
+
+	await page.goto('/exercises');
+	await page.getByLabel('New exercise').click();
+	await page.getByLabel('Name').fill('Barbell');
+	const yours = page.getByTestId('existing-exercise-matches');
+	const builtIns = page.getByTestId('built-in-suggestions');
+	await expect(yours).toContainText('Already on your list');
+	await expect(yours).toContainText('Barbell rows');
+	await expect(builtIns).toContainText('Suggestions — not on your list yet');
+	await expect(builtIns).toContainText('Barbell bench press');
+	await expect(builtIns).not.toContainText('Barbell rows');
+
+	await yours.getByRole('button', { name: 'Barbell rows' }).click();
+	await page.waitForURL(`/exercises/${rows.id}`);
+});
+
+test('New exercise in a routine: picking one already on your list keeps what you filled in', async ({
+	page,
+	userData
+}) => {
+	await page.goto('/exercise-splits');
+	await createTemplateExerciseSplit(page);
+	await createExercises(userData.userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs' }]);
+
+	// Edit face pulls in the library: 4 sets and a routine note first
+	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
+	await page.getByLabel('exercise-split-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL('/exercise-splits/manage/exercises');
+	await page.getByRole('tab', { name: 'Pull A' }).click();
+	await page.getByLabel('Face pulls options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.locator('#exercise-sets').fill('4');
+	await page.locator('#exercise-note').fill('seat on 4');
+
+	// Start a new exercise, then pick Sit-ups from your list instead
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByRole('button', { name: 'New exercise' }).click();
+	await page.locator('#exercise-form-name').fill('Sit');
+	await page.getByTestId('existing-exercise-matches').getByRole('button', { name: 'Sit-ups' }).click();
+
+	await expect(page.getByLabel('Pick an exercise')).toHaveText('Sit-ups');
+	await expect(page.locator('#exercise-sets')).toHaveValue('4');
+	await expect(page.locator('#exercise-note')).toHaveValue('seat on 4');
+	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/manage/exercises');
+	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await expect(page.getByRole('main')).toContainText('Pull-ups');
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({ timeout: 10000 });
+
+	const pullA = await prisma.exerciseSplitDay.findFirstOrThrow({
+		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
+		include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
+	});
+	expect(pullA.exercises.map((ex) => ex.name)).toEqual(['Pull-ups', 'Barbell rows', 'Dumbbell bicep curls', 'Sit-ups']);
+	const situps = pullA.exercises.find((ex) => ex.name === 'Sit-ups')!;
+	expect(situps).toMatchObject({ sets: 4, note: 'seat on 4' });
 });
