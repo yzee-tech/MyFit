@@ -18,7 +18,8 @@
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import TargetIcon from 'virtual:icons/lucide/target';
 	import UndoIcon from 'virtual:icons/lucide/undo';
-	import XIcon from 'virtual:icons/lucide/x';
+	import TrashIcon from 'virtual:icons/lucide/trash-2';
+	import { toast } from 'svelte-sonner';
 	import { workoutRunes } from '../../workoutRunes.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 
@@ -85,6 +86,8 @@
 			if (idx === 0) fillEmptyLoads();
 		}
 		set.completed = !set.completed;
+		// A new workout ends at its last ticked set
+		if (set.completed) workoutRunes.markActivity();
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -113,11 +116,27 @@
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
+	/** Removes a set that isn't done yet (a ticked set is done: untick it first), with a way back */
 	function removeSet(idx: number) {
-		if (exercise.sets.length <= 1) return;
-		triedToTick.delete(exercise.sets[idx]);
+		const set = exercise.sets[idx];
+		if (exercise.sets.length <= 1 || !set || set.completed) return;
+		const originalLoad = originalSetLoads[idx];
+		// Its note about missing numbers comes back with it
+		const wasTried = triedToTick.delete(set);
 		exercise.sets.splice(idx, 1);
 		originalSetLoads.splice(idx, 1);
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+		toast(`Set ${idx + 1} removed`, {
+			action: { label: 'Undo', onClick: () => restoreSet(set, idx, originalLoad, wasTried) }
+		});
+	}
+
+	/** Puts a removed set back where it was, with its numbers */
+	function restoreSet(set: WorkoutExerciseSet, idx: number, originalLoad: number | undefined, wasTried: boolean) {
+		const at = Math.min(idx, exercise.sets.length);
+		exercise.sets.splice(at, 0, set);
+		originalSetLoads.splice(at, 0, originalLoad);
+		if (wasTried) triedToTick.add(exercise.sets[at]);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -148,6 +167,7 @@
 		if (!miniSet.completed && [miniSet.reps, miniSet.load, miniSet.RIR].some((value) => typeof value !== 'number'))
 			return;
 		miniSet.completed = !miniSet.completed;
+		if (miniSet.completed) workoutRunes.markActivity();
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -381,16 +401,6 @@
 					{/if}
 				{/if}
 				<Button
-					class="h-7 w-7 p-1 text-muted-foreground"
-					aria-label="Remove set {idx + 1} of {exercise.name}"
-					data-testid="{exercise.name}-set-{idx + 1}-remove"
-					disabled={exercise.sets.length <= 1}
-					onclick={() => removeSet(idx)}
-					variant="ghost"
-				>
-					<XIcon />
-				</Button>
-				<Button
 					class="h-9 w-9 border-2 p-1"
 					aria-checked={set.completed}
 					aria-label="Set {idx + 1} of {exercise.name} done"
@@ -405,6 +415,19 @@
 					{:else if set.completed}
 						<CheckIcon />
 					{/if}
+				</Button>
+				<!-- Less often needed than the tick, so after it. A ticked set is done: its space stays, the button doesn't -->
+				<Button
+					class="h-9 w-9 p-2 text-muted-foreground {set.completed ? 'invisible' : ''}"
+					aria-hidden={set.completed}
+					aria-label="Remove set {idx + 1} of {exercise.name}"
+					data-testid="{exercise.name}-set-{idx + 1}-remove"
+					disabled={exercise.sets.length <= 1 || set.completed}
+					onclick={() => removeSet(idx)}
+					tabindex={set.completed ? -1 : undefined}
+					variant="ghost"
+				>
+					<TrashIcon />
 				</Button>
 			</div>
 		</form>

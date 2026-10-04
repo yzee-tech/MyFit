@@ -5,7 +5,6 @@
 	import { onMount } from 'svelte';
 	import GetStartedComponent from './(components)/GetStartedComponent.svelte';
 	import TodaysWorkoutCard from './(components)/TodaysWorkoutCard.svelte';
-	import WorkoutInProgressBanner from '$lib/components/workouts/WorkoutInProgressBanner.svelte';
 
 	let { data } = $props();
 	let entityCounts: RouterOutputs['users']['getEntityCounts'] | undefined = $state(undefined);
@@ -23,5 +22,4 @@
 <GetStartedComponent {entityCounts} />
 
 <H3>Current block</H3>
-<WorkoutInProgressBanner />
 <TodaysWorkoutCard {...data} />
