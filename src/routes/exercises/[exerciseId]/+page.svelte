@@ -31,10 +31,8 @@
 	let deleteOpen = $state(false);
 	let busy = $state(false);
 
-	let libraryRoutinesToAdd: string[] = $state([]);
-	let blockRoutinesToAdd: string[] = $state([]);
-	let libraryEntriesToRemove: string[] = $state([]);
-	let blockEntriesToRemove: string[] = $state([]);
+	let routinesToAdd: string[] = $state([]);
+	let entriesToRemove: string[] = $state([]);
 	let mergeIntoId: string | undefined = $state();
 
 	async function load() {
@@ -80,8 +78,7 @@
 	}
 
 	async function openAdd() {
-		libraryRoutinesToAdd = [];
-		blockRoutinesToAdd = [];
+		routinesToAdd = [];
 		routineTargets = await trpc().exercises.routineTargets.query();
 		addOpen = true;
 	}
@@ -90,12 +87,7 @@
 		if (data === 'loading') return;
 		const exerciseId = data.exercise.id;
 		const done = await run(
-			() =>
-				trpc().exercises.addToRoutines.mutate({
-					exerciseId,
-					libraryRoutineIds: libraryRoutinesToAdd,
-					blockRoutineIds: blockRoutinesToAdd
-				}),
+			() => trpc().exercises.addToRoutines.mutate({ exerciseId, routineIds: routinesToAdd }),
 			({ added }) => `Added to ${added} ${added === 1 ? 'routine' : 'routines'}`
 		);
 		if (done) {
@@ -108,12 +100,7 @@
 		if (data === 'loading') return;
 		const exerciseId = data.exercise.id;
 		const done = await run(
-			() =>
-				trpc().exercises.removeFromRoutines.mutate({
-					exerciseId,
-					libraryEntryIds: libraryEntriesToRemove,
-					blockEntryIds: blockEntriesToRemove
-				}),
+			() => trpc().exercises.removeFromRoutines.mutate({ exerciseId, entryIds: entriesToRemove }),
 			({ removed }) => `Removed from ${removed} ${removed === 1 ? 'routine' : 'routines'}`
 		);
 		if (done) {
@@ -214,30 +201,21 @@
 
 		<section class="flex flex-col gap-1">
 			<h3 class="font-semibold">Used in</h3>
-			{#if data.libraryEntries.length === 0 && data.blockEntries.length === 0}
+			{#if data.routineEntries.length === 0}
 				<p class="text-sm text-muted-foreground">Not in a routine yet</p>
 			{/if}
-			{#each data.libraryEntries as entry (entry.id)}
-				<a class="flex flex-col rounded-md border p-2 hover:bg-accent" href="/exercise-splits/{entry.libraryId}">
-					<span class="text-sm font-medium">{entry.libraryName} › {entry.routineName}</span>
+			{#each data.routineEntries as entry (entry.id)}
+				<a class="flex flex-col rounded-md border p-2 hover:bg-accent" href="/exercise-splits">
+					<span class="text-sm font-medium">My routines › {entry.routineName}</span>
 					<span class="text-xs text-muted-foreground">{setsText(entry)}</span>
 					{@render maxBelowRange(entry)}
 				</a>
 			{/each}
-			{#if data.activeBlock}
-				{#each data.blockEntries as entry (entry.id)}
-					<a class="flex flex-col rounded-md border p-2 hover:bg-accent" href="/mesocycles/{data.activeBlock.id}">
-						<span class="text-sm font-medium">Current block {data.activeBlock.name} › {entry.routineName}</span>
-						<span class="text-xs text-muted-foreground">{setsText(entry)}</span>
-						{@render maxBelowRange(entry)}
-					</a>
-				{/each}
-			{/if}
 			<div class="mt-1 grid grid-cols-2 gap-1">
 				<Button onclick={openAdd} size="sm" variant="secondary">Add to routine</Button>
 				<Button
-					disabled={data.libraryEntries.length === 0 && data.blockEntries.length === 0}
-					onclick={() => ((libraryEntriesToRemove = []), (blockEntriesToRemove = []), (removeOpen = true))}
+					disabled={data.routineEntries.length === 0}
+					onclick={() => ((entriesToRemove = []), (removeOpen = true))}
 					size="sm"
 					variant="outline"
 				>
@@ -278,55 +256,24 @@
 			Sets and reps start from where you last used it; change them in the routine.
 		{/snippet}
 		{#if routineTargets}
-			<div class="flex max-h-80 flex-col gap-3 overflow-y-auto">
-				{#if routineTargets.activeBlock}
-					{@const block = routineTargets.activeBlock}
-					<div class="flex flex-col gap-1">
-						<span class="text-sm font-semibold">Current block: {block.name}</span>
-						{#each block.routines as routine (routine.id)}
-							{@const already = routine.exerciseIds.includes(exercise.id)}
-							<div class="flex items-center gap-2">
-								<Checkbox
-									id="add-block-{routine.id}"
-									aria-label="Current block {routine.name}"
-									checked={already || blockRoutinesToAdd.includes(routine.id)}
-									disabled={already}
-									onCheckedChange={(c) => (blockRoutinesToAdd = toggle(blockRoutinesToAdd, routine.id, c === true))}
-								/>
-								<Label for="add-block-{routine.id}">{routine.name}{already ? ' (already in it)' : ''}</Label>
-							</div>
-						{/each}
+			<div class="flex max-h-80 flex-col gap-1 overflow-y-auto">
+				{#each routineTargets as routine (routine.id)}
+					{@const already = routine.exerciseIds.includes(exercise.id)}
+					<div class="flex items-center gap-2">
+						<Checkbox
+							id="add-routine-{routine.id}"
+							aria-label="My routines {routine.name}"
+							checked={already || routinesToAdd.includes(routine.id)}
+							disabled={already}
+							onCheckedChange={(c) => (routinesToAdd = toggle(routinesToAdd, routine.id, c === true))}
+						/>
+						<Label for="add-routine-{routine.id}">{routine.name}{already ? ' (already in it)' : ''}</Label>
 					</div>
-				{/if}
-				{#each routineTargets.libraries as library (library.id)}
-					<div class="flex flex-col gap-1">
-						<span class="text-sm font-semibold">{library.name}</span>
-						{#each library.routines as routine (routine.id)}
-							{@const already = routine.exerciseIds.includes(exercise.id)}
-							<div class="flex items-center gap-2">
-								<Checkbox
-									id="add-library-{routine.id}"
-									aria-label="{library.name} {routine.name}"
-									checked={already || libraryRoutinesToAdd.includes(routine.id)}
-									disabled={already}
-									onCheckedChange={(c) => (libraryRoutinesToAdd = toggle(libraryRoutinesToAdd, routine.id, c === true))}
-								/>
-								<Label for="add-library-{routine.id}">{routine.name}{already ? ' (already in it)' : ''}</Label>
-							</div>
-						{/each}
-					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">No routines yet: create them in My routines first.</p>
 				{/each}
-				{#if !routineTargets.activeBlock && routineTargets.libraries.length === 0}
-					<p class="text-sm text-muted-foreground">No routines yet: create a routine library first.</p>
-				{/if}
 			</div>
-			<Button
-				class="mt-2"
-				disabled={busy || libraryRoutinesToAdd.length + blockRoutinesToAdd.length === 0}
-				onclick={addToRoutines}
-			>
-				Add
-			</Button>
+			<Button class="mt-2" disabled={busy || routinesToAdd.length === 0} onclick={addToRoutines}>Add</Button>
 		{/if}
 	</ResponsiveDialog>
 
@@ -335,34 +282,21 @@
 			Your past workouts keep it.
 		{/snippet}
 		<div class="flex max-h-80 flex-col gap-1 overflow-y-auto">
-			{#if data.activeBlock}
-				{#each data.blockEntries as entry (entry.id)}
-					<div class="flex items-center gap-2">
-						<Checkbox
-							id="remove-block-{entry.id}"
-							aria-label="Remove from current block {entry.routineName}"
-							checked={blockEntriesToRemove.includes(entry.id)}
-							onCheckedChange={(c) => (blockEntriesToRemove = toggle(blockEntriesToRemove, entry.id, c === true))}
-						/>
-						<Label for="remove-block-{entry.id}">Current block › {entry.routineName}</Label>
-					</div>
-				{/each}
-			{/if}
-			{#each data.libraryEntries as entry (entry.id)}
+			{#each data.routineEntries as entry (entry.id)}
 				<div class="flex items-center gap-2">
 					<Checkbox
-						id="remove-library-{entry.id}"
-						aria-label="Remove from {entry.libraryName} {entry.routineName}"
-						checked={libraryEntriesToRemove.includes(entry.id)}
-						onCheckedChange={(c) => (libraryEntriesToRemove = toggle(libraryEntriesToRemove, entry.id, c === true))}
+						id="remove-routine-{entry.id}"
+						aria-label="Remove from My routines {entry.routineName}"
+						checked={entriesToRemove.includes(entry.id)}
+						onCheckedChange={(c) => (entriesToRemove = toggle(entriesToRemove, entry.id, c === true))}
 					/>
-					<Label for="remove-library-{entry.id}">{entry.libraryName} › {entry.routineName}</Label>
+					<Label for="remove-routine-{entry.id}">My routines › {entry.routineName}</Label>
 				</div>
 			{/each}
 		</div>
 		<Button
 			class="mt-2"
-			disabled={busy || libraryEntriesToRemove.length + blockEntriesToRemove.length === 0}
+			disabled={busy || entriesToRemove.length === 0}
 			onclick={removeFromRoutines}
 			variant="destructive"
 		>

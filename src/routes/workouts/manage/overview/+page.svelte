@@ -13,7 +13,6 @@
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import ExerciseSplitExercisesCharts from '../../../exercise-splits/(components)/ExerciseSplitExercisesCharts.svelte';
-	import { mesocycleExerciseSplitRunes } from '../../../mesocycles/[mesocycleId]/edit-split/mesocycleExerciseSplitRunes.svelte';
 	import { workoutRunes } from '../workoutRunes.svelte';
 	import WorkoutComparisonChart from './(components)/WorkoutComparisonChart.svelte';
 	import Quotes from '$lib/components/settings/Quotes.svelte';
@@ -183,12 +182,6 @@
 			}
 			await invalidate('workouts:all');
 			workoutRunes.resetStores();
-			// Reset meso editing store as it won't change if workout affects meso split days and same mesocycle gets edited
-			// 1. User attempts active meso edit but doesn't complete it (stores save meso data)
-			// 2. User performs workouts affecting the meso split structure
-			// 3. User tries to update meso again, but sees old data as it didn't sync the new changes from workouts
-			// So to prevent this from happening, just reset the meso split runes after a workout is completed
-			mesocycleExerciseSplitRunes.resetStores();
 
 			await goto('/workouts');
 		} catch (error) {
@@ -256,18 +249,10 @@
 				<li>{change}</li>
 			{/each}
 		</ul>
-		<p class="text-xs text-muted-foreground">
-			{#if routinePreview.libraryName}
-				Updating changes the routine in your current block and in the routine library “{routinePreview.libraryName}”.
-			{:else}
-				Updating changes the routine in your current block only: its routine library isn't there any more.
-			{/if}
-		</p>
+		<p class="text-xs text-muted-foreground">Updating changes {routinePreview.routineName} in My routines.</p>
 		<div class="mt-2 grid grid-cols-2 gap-1.5">
 			<Button onclick={() => chooseRoutineUpdate(false)} variant="secondary">Just this workout</Button>
-			<Button onclick={() => chooseRoutineUpdate(true)}>
-				{routinePreview.libraryName ? 'Update routine' : 'Update routine (this block only)'}
-			</Button>
+			<Button onclick={() => chooseRoutineUpdate(true)}>Update routine</Button>
 		</div>
 	{/if}
 </ResponsiveDialog>

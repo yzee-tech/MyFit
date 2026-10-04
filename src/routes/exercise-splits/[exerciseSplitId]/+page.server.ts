@@ -1,8 +1,4 @@
-import { createCaller } from '$lib/trpc/router';
-import { createContext } from '$lib/trpc/context';
+import { redirect } from '@sveltejs/kit';
 
-export const load = async (event) => {
-	const trpc = createCaller(await createContext(event));
-	const exerciseSplit = trpc.exerciseSplits.findById(event.params.exerciseSplitId);
-	return { exerciseSplit };
-};
+/** Old links to a routine library: everyone has one list of routines now */
+export const load = () => redirect(308, '/exercise-splits');

@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, type Page } from '../fixtures';
 import { createMesocycle, createTemplateExerciseSplit } from './commonFunctions';
 import { PrismaClient } from '@prisma/client';
 
@@ -8,11 +8,24 @@ test.beforeEach(async ({ page }) => {
 	await page.goto('/exercise-splits');
 });
 
-test('create an exercise split', async ({ page }) => {
-	await page.getByLabel('exercise-split-new-options').click();
-	await page.getByRole('menuitem', { name: 'Start from scratch' }).click();
-	await page.getByPlaceholder('Type here').fill('Pull Push Legs');
-	// A new library starts with a single routine
+async function saveRoutines(page: Page) {
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	await page.waitForURL('/exercise-splits');
+}
+
+async function editExercise(page: Page, exerciseName: string, change: () => Promise<void>) {
+	await page.getByLabel(`${exerciseName} options`).click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await change();
+	await page.getByRole('button', { name: 'Edit exercise' }).click();
+}
+
+test('create My routines from scratch', async ({ page }) => {
+	await expect(page.getByTestId('my-routines-count')).toHaveText('No routines yet');
+	await page.getByRole('button', { name: 'Create' }).click();
+	// One list per person: no name to give it, and it starts with a single routine
+	await expect(page.getByLabel('Library name')).toHaveCount(0);
 	await expect(page.getByLabel('Routine 2 name')).toHaveCount(0);
 	await page.getByLabel('Routine 1 name').fill('Pull');
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -37,209 +50,108 @@ test('create an exercise split', async ({ page }) => {
 	await page.getByPlaceholder('For this routine').fill('Seat on 4');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible({
-		timeout: 10000
-	});
-	await expect(page.getByRole('main')).toContainText('Pull Push Legs 1 routine');
+	await saveRoutines(page);
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('My routines');
+	await expect(page.getByTestId('my-routines-count')).toHaveText('1 routine');
 });
 
-test('create exercise split from PPL template', async ({ page }) => {
+test('a template’s routines are added to My routines; adding it again names the copies “(2)”', async ({
+	page,
+	userData
+}) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	// The library's name as the title, then its routines' exercises: no info tab or charts
-	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Pull Push Legs');
-	await expect(page.getByRole('main')).toContainText('Routine library · 6 routines');
-	await expect(page.getByRole('tab', { name: 'Info' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('My routines');
+	await expect(page.getByTestId('my-routines-count')).toHaveText('6 routines');
 	await expect(page.getByRole('main')).not.toContainText('Rest');
 	await expect(page.getByRole('main')).toContainText(
 		'Pull APush ALegs APull BPush BLegs B Pull A 4 exercises Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Barbell rows 3 Straight sets of 10 to 15 reps Traps Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Face pulls 3 Straight sets of 15 to 30 reps Rear delts'
 	);
-});
 
-test('create a clone of a split', async ({ page }) => {
+	// The template's routines go after the ones you have; the list keeps its name
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Clone' }).click();
-	await page.getByPlaceholder('Type here').click();
-	await page.getByPlaceholder('Type here').fill('Pull Push Legs (clone)');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/exercise-splits/manage/exercises');
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').first().filter({ hasText: 'Routine library created' })).toBeVisible({
-		timeout: 10000
+	await expect(page.getByTestId('my-routines-count')).toHaveText('12 routines');
+	const lists = await prisma.exerciseSplit.findMany({
+		where: { userId: userData.userId },
+		include: { exerciseSplitDays: { orderBy: { dayIndex: 'asc' } } }
 	});
-	await expect(page.locator('div').filter({ hasText: 'Pull Push Legs (clone) 6 routines' }).nth(1)).toBeVisible();
+	expect(lists.map((list) => list.name)).toEqual(['My routines']);
+	expect(lists[0].exerciseSplitDays.map((routine) => routine.name).slice(5, 8)).toEqual([
+		'Legs B',
+		'Pull A (2)',
+		'Push A (2)'
+	]);
 });
 
-test('delete an exercise split', async ({ page }) => {
+test('edit My routines: delete a routine from the middle', async ({ page }) => {
 	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Delete' }).click();
-	await page.getByRole('button', { name: 'Yes, delete' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library deleted' })).toBeVisible({
-		timeout: 10000
-	});
-	await expect(page.getByRole('main')).toContainText('No routine libraries found');
-});
-
-test('edit an exercise split', async ({ page }) => {
-	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByPlaceholder('Type here').click();
-	await page.getByPlaceholder('Type here').fill('Pull Push Legs (edited)');
-	// Delete a routine from the middle; it has exercises, so confirm
+	await page.getByRole('button', { name: 'Edit' }).click();
+	// It has exercises, so confirm
 	await page.getByLabel('Delete routine 4').click();
 	await page.getByRole('button', { name: 'Delete', exact: true }).click();
 	await expect(page.getByLabel('Routine 4 name')).toHaveValue('Push B');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({
-		timeout: 10000
-	});
-	await page.getByRole('link', { name: 'Pull Push Legs (edited) 5 routines' }).click();
-	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Pull Push Legs (edited)');
+	await saveRoutines(page);
+	await expect(page.getByTestId('my-routines-count')).toHaveText('5 routines');
 	await expect(page.getByRole('main')).toContainText('Pull APush ALegs APush BLegs B');
 });
 
-test('editing a library can update the current block, keeping its sets and link', async ({ page, userData }) => {
-	await createMesocycle(page);
-	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
-	// The block remembers 5 sets of barbell rows (e.g. changed during a workout)
-	await prisma.mesocycleExerciseTemplate.updateMany({
-		where: { name: 'Barbell rows', mesocycleExerciseSplitDay: { mesocycleId: block.id } },
-		data: { sets: 5 }
-	});
-
-	// Edit straight away, no pop-up; rename the first routine
-	await page.goto('/exercise-splits');
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.waitForURL('/exercise-splits/manage/structure');
-	await page.getByLabel('Routine 1 name').fill('Hotel – Pull');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByLabel('Also update my current block “MyMeso”')).toBeChecked();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library and current block updated' })).toBeVisible({
-		timeout: 10000
-	});
-
-	const routines = await prisma.mesocycleExerciseSplitDay.findMany({
-		where: { mesocycleId: block.id },
-		include: { mesocycleSplitDayExercises: true },
-		orderBy: { dayIndex: 'asc' }
-	});
-	expect(routines.map((routine) => routine.name)).toEqual([
-		'Hotel – Pull',
-		'Push A',
-		'Legs A',
-		'Pull B',
-		'Push B',
-		'Legs B'
-	]);
-	const rows = routines[0].mesocycleSplitDayExercises.find((exercise) => exercise.name === 'Barbell rows')!;
-	expect(rows.sets).toEqual(5);
-	// Still linked to the library it came from
-	const library = await prisma.exerciseSplit.findFirstOrThrow({ where: { userId: userData.userId } });
-	expect((await prisma.mesocycle.findUniqueOrThrow({ where: { id: block.id } })).exerciseSplitId).toEqual(library.id);
-
-	// Untick to change only the library
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByLabel('Routine 1 name').fill('Home – Pull');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('Also update my current block “MyMeso”').click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({
-		timeout: 10000
-	});
-	const firstRoutine = await prisma.mesocycleExerciseSplitDay.findFirstOrThrow({
-		where: { mesocycleId: block.id, dayIndex: 0 }
-	});
-	expect(firstRoutine.name).toEqual('Hotel – Pull');
-});
-
-test('library set counts: a new block starts with them; ones changed later carry into the current block', async ({
+test('the current block follows My routines: a rename, set counts, overrides, a removed routine', async ({
 	page,
 	userData
 }) => {
-	const openLibraryEditor = async () => {
-		await page.goto('/exercise-splits');
-		await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-		await page.getByLabel('exercise-split-options').click();
-		await page.getByRole('menuitem', { name: 'Edit' }).click();
-		await page.waitForURL('/exercise-splits/manage/structure');
-		await page.getByRole('button', { name: 'Next' }).click();
-		await page.getByRole('tab', { name: 'Pull A' }).click();
-	};
-	const setSets = async (exerciseName: string, sets: string) => {
-		await page.getByLabel(`${exerciseName} options`).click();
-		await page.getByRole('menuitem', { name: 'Edit' }).click();
-		await page.locator('#exercise-sets').fill(sets);
-		await page.getByRole('button', { name: 'Edit exercise' }).click();
-	};
-
-	// 4 sets of barbell rows in the library; the rest have no set count yet
-	await createTemplateExerciseSplit(page);
-	await openLibraryEditor();
-	await setSets('Barbell rows', '4');
-	await expect(page.getByRole('main')).toContainText(/4\s+Straight sets of/);
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({ timeout: 10000 });
-
-	// The new block takes each routine's count: 4 for rows, the usual 3 for the rest
-	await page.goto('/mesocycles');
-	await page.getByLabel('create-new-mesocycle').click();
-	await page.getByLabel('Mesocycle name').fill('MyMeso');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByText('Pick one').click();
-	await page.getByRole('option', { name: 'Pull Push Legs' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/mesocycles\/manage\/volume/);
-	// No "sets per exercise" step any more: each exercise has its routine's count (the usual 3 if none)
-	await expect(page.getByTestId('sets-from-library')).toBeVisible();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('Start immediately').click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle created successfully' })).toBeVisible({
-		timeout: 10000
-	});
-
-	const pullA = () =>
-		prisma.mesocycleExerciseTemplate.findMany({
-			where: { mesocycleExerciseSplitDay: { name: 'Pull A', mesocycle: { userId: userData.userId } } }
+	await createMesocycle(page);
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
+	const blockRoutines = () =>
+		prisma.mesocycleExerciseSplitDay.findMany({
+			where: { mesocycleId: block.id },
+			include: { mesocycleSplitDayExercises: { orderBy: { exerciseIndex: 'asc' } } },
+			orderBy: { dayIndex: 'asc' }
 		});
-	const setsOf = (exercises: { name: string; sets: number }[], name: string) =>
-		exercises.find((exercise) => exercise.name === name)?.sets;
-	let blockPullA = await pullA();
-	expect(setsOf(blockPullA, 'Barbell rows')).toEqual(4);
-	expect(setsOf(blockPullA, 'Face pulls')).toEqual(3);
+	const before = await blockRoutines();
 
-	// The block moves rows to 5 (e.g. during a workout); the library changes face pulls to 2
-	await prisma.mesocycleExerciseTemplate.updateMany({
-		where: { id: blockPullA.find((exercise) => exercise.name === 'Barbell rows')!.id },
-		data: { sets: 5 }
+	// Rename Pull A, 4 sets of rows with their own overload, Legs B removed
+	await page.goto('/exercise-splits');
+	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.getByLabel('Routine 1 name').fill('Hotel – Pull');
+	await page.getByLabel('Delete routine 6').click();
+	await page.getByRole('button', { name: 'Delete', exact: true }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('block-follows-routines')).toBeVisible();
+	await editExercise(page, 'Barbell rows', async () => {
+		await page.locator('#exercise-sets').fill('4');
+		await page.getByRole('button', { name: 'Overrides' }).click();
+		await page.locator('#exercise-override-overload-percentage').click();
+		await page.locator('#exercise-override-overload-percentage-value').fill('5');
+		await page.getByRole('button', { name: 'Basics' }).click();
 	});
-	await openLibraryEditor();
-	await setSets('Face pulls', '2');
-	await expect(page.getByLabel('Also update my current block “MyMeso”')).toBeChecked();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library and current block updated' })).toBeVisible({
-		timeout: 10000
-	});
+	await saveRoutines(page);
 
-	// The changed count carries over; the block keeps its own for the rest
-	blockPullA = await pullA();
-	expect(setsOf(blockPullA, 'Face pulls')).toEqual(2);
-	expect(setsOf(blockPullA, 'Barbell rows')).toEqual(5);
-	const libraryRows = await prisma.exerciseTemplate.findFirstOrThrow({
-		where: { name: 'Barbell rows', exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } }
-	});
-	expect(libraryRows.sets).toEqual(4);
+	const after = await blockRoutines();
+	// Same rows in the same places: past workouts keep pointing at the right routine
+	expect(after.map((routine) => routine.id)).toEqual(before.map((routine) => routine.id));
+	expect(after.map((routine) => [routine.name, routine.dayIndex, routine.hidden])).toEqual([
+		['Hotel – Pull', 0, false],
+		['Push A', 1, false],
+		['Legs A', 2, false],
+		['Pull B', 3, false],
+		['Push B', 4, false],
+		['Legs B', 5, true]
+	]);
+	const rows = after[0].mesocycleSplitDayExercises.find((exercise) => exercise.name === 'Barbell rows')!;
+	expect([rows.sets, rows.overloadPercentage]).toEqual([4, 5]);
+
+	// The block shows them read-only, without Legs B, with a way to edit My routines
+	await page.goto(`/mesocycles/${block.id}`);
+	await page.getByRole('tab', { name: 'Routines' }).click();
+	await expect(page.getByTestId('mesocycle-routines-note')).toHaveText('This mesocycle uses My routines');
+	await expect(page.getByRole('tab', { name: 'Legs B' })).toHaveCount(0);
+	await expect(page.getByRole('tab', { name: 'Hotel – Pull' })).toBeVisible();
+	await page.getByRole('link', { name: 'Edit routines' }).click();
+	await page.waitForURL('/exercise-splits');
+});
+
+test('old links to a routine library open My routines', async ({ page }) => {
+	await page.goto('/exercise-splits/abc123');
+	await page.waitForURL('/exercise-splits');
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('My routines');
 });

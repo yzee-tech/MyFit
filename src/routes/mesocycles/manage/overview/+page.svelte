@@ -9,43 +9,25 @@
 	import { mesocycleRunes } from '../mesocycleRunes.svelte';
 	import { trpc } from '$lib/trpc/client';
 	import { invalidate, goto } from '$app/navigation';
-	import type { FullExerciseSplit } from '../../../exercise-splits/manage/exerciseSplitRunes.svelte';
-	import type { Prisma } from '@prisma/client';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { TRPCClientError } from '@trpc/client';
 
 	let { data } = $props();
 
-	type SetChangeWithoutId = Prisma.MesocycleCyclicSetChangeCreateWithoutMesocycleInput;
 	let savingMesocycle = $state(false);
 	let startImmediately = $state(false);
 
-	function getSplitWithoutExercises() {
-		const exerciseSplit = mesocycleRunes.selectedExerciseSplit as FullExerciseSplit;
-		const includedRoutineIndexes = mesocycleRunes.getIncludedRoutineIndexes();
-		const exerciseSplitWithoutExercises = {
-			...exerciseSplit,
-			exerciseSplitDays: includedRoutineIndexes.map((routineIdx, dayIndex) => {
-				const { exercises, id, exerciseSplitId, ...rest } = exerciseSplit.exerciseSplitDays[routineIdx];
-				return { ...rest, dayIndex };
-			})
-		};
-		return exerciseSplitWithoutExercises;
-	}
-
 	async function createOrEditMesocycle() {
 		savingMesocycle = true;
-		const mesocycleCyclicSetChanges = mesocycleRunes.mesocycleCyclicSetChanges.map((setChange) => {
-			const { startVolume, inSplit, ...rest } = setChange;
-			return rest;
-		});
-
+		const mesocycleCyclicSetChanges = $state.snapshot(mesocycleRunes.mesocycleCyclicSetChanges);
+		const mesocycle = $state.snapshot(mesocycleRunes.mesocycle);
 		try {
-			let response;
-			if (mesocycleRunes.editingMesocycleId)
-				response = await editMesocycle(mesocycleRunes.editingMesocycleId, mesocycleCyclicSetChanges);
-			else response = await createMesocycle(mesocycleCyclicSetChanges);
-
+			const response = mesocycleRunes.editingMesocycleId
+				? await trpc().mesocycles.editById.mutate({
+						id: mesocycleRunes.editingMesocycleId,
+						mesocycleData: { mesocycle, mesocycleCyclicSetChanges }
+					})
+				: await trpc().mesocycles.create.mutate({ mesocycle, mesocycleCyclicSetChanges, startImmediately });
 			toast.success(response.message);
 			await invalidate('mesocycles:all');
 			await goto('/mesocycles');
@@ -53,34 +35,7 @@
 		} catch (error) {
 			if (error instanceof TRPCClientError) toast.error(error.message);
 		}
-
 		savingMesocycle = false;
-	}
-
-	async function editMesocycle(id: string, mesocycleCyclicSetChanges: SetChangeWithoutId[]) {
-		return await trpc().mesocycles.editById.mutate({
-			id,
-			mesocycleData: {
-				mesocycle: mesocycleRunes.mesocycle,
-				mesocycleCyclicSetChanges
-			}
-		});
-	}
-
-	async function createMesocycle(mesocycleCyclicSetChanges: SetChangeWithoutId[]) {
-		const exerciseSplitWithoutExercises = getSplitWithoutExercises();
-		return await trpc().mesocycles.create.mutate({
-			mesocycle: {
-				...mesocycleRunes.mesocycle,
-				exerciseSplitId: exerciseSplitWithoutExercises.id
-			},
-			mesocycleCyclicSetChanges,
-			mesocycleExerciseTemplates: mesocycleRunes
-				.getIncludedRoutineIndexes()
-				.map((routineIdx) => mesocycleRunes.mesocycleExerciseTemplates[routineIdx]),
-			exerciseSplit: exerciseSplitWithoutExercises,
-			startImmediately
-		});
 	}
 </script>
 
@@ -112,17 +67,17 @@
 	</Card.Root>
 {/if}
 
-{#if mesocycleRunes.editingMesocycleId === null && mesocycleRunes.selectedExerciseSplit}
-	{@const includedRoutineIndexes = mesocycleRunes.getIncludedRoutineIndexes()}
-	<Card.Root class="my-2 p-4">
-		<p class="mb-1 text-sm font-medium">
-			{includedRoutineIndexes.length} routines from {mesocycleRunes.selectedExerciseSplit.name}
-		</p>
-		<p class="text-sm text-muted-foreground">
-			{includedRoutineIndexes
-				.map((idx) => mesocycleRunes.selectedExerciseSplit!.exerciseSplitDays[idx].name)
-				.join(', ')}
-		</p>
+{#if mesocycleRunes.editingMesocycleId === null}
+	<Card.Root class="my-2 p-4" data-testid="block-uses-my-routines">
+		{#await data.myRoutineNames then names}
+			<p class="mb-1 text-sm font-medium">
+				Uses My routines{names.length > 0 ? ` (${names.length} ${names.length === 1 ? 'routine' : 'routines'})` : ''}
+			</p>
+			<p class="text-sm text-muted-foreground">
+				{names.length > 0 ? names.join(', ') : 'No routines yet: create them in My routines. Blank workouts work too.'}
+			</p>
+		{/await}
+		<p class="mt-1 text-sm text-muted-foreground">Edits to My routines show up in this mesocycle straight away.</p>
 	</Card.Root>
 {/if}
 

@@ -1,9 +1,8 @@
 <script lang="ts">
 	import H2 from '$lib/components/ui/typography/H2.svelte';
-	import { exerciseSplitRunes } from './exerciseSplitRunes.svelte';
 
 	const { children } = $props();
 </script>
 
-<H2>{exerciseSplitRunes.editingExerciseSplitId ? 'Edit' : 'New'} routine library</H2>
+<H2>Edit My routines</H2>
 {@render children()}

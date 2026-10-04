@@ -12,6 +12,7 @@
 	import { toast } from 'svelte-sonner';
 	import { exerciseSplitRunes } from '../manage/exerciseSplitRunes.svelte';
 	import { goto } from '$app/navigation';
+	import { trpc } from '$lib/trpc/client';
 
 	let splitFile = $state<File>();
 
@@ -33,7 +34,10 @@
 				});
 			});
 
-			exerciseSplitRunes.loadExerciseSplit(splitData);
+			// The file's routines go after My routines, in the editor: nothing is saved until Save
+			const myRoutines = await trpc().exerciseSplits.mine.query();
+			exerciseSplitRunes.loadMyRoutines(myRoutines?.exerciseSplitDays ?? []);
+			exerciseSplitRunes.appendRoutines(exerciseSplitDays);
 			goto('/exercise-splits/manage/structure');
 		} catch (error) {
 			if (error instanceof Error) {
@@ -43,11 +47,11 @@
 	}
 </script>
 
-<H2>Exercise splits</H2>
-<H3>Import</H3>
+<H2>Import</H2>
+<H3>Add routines from a file to My routines</H3>
 
 <div class="grid w-full items-center gap-1.5">
-	<Label for="picture">Exercise split JSON file</Label>
+	<Label for="picture">Routines JSON file (exported from MyFit)</Label>
 	<Input
 		id="picture"
 		type="file"

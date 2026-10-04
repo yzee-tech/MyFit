@@ -27,7 +27,7 @@
 	let deleteConfirmDrawerOpen = $state(false);
 	let callingDeleteEndpoint = $state(false);
 
-	// Keep a workout (e.g. a blank one with a trainer) as a routine library
+	// Keep a workout (e.g. a blank one with a trainer) as a routine in My routines
 	let saveAsRoutineOpen = $state(false);
 	let savingAsRoutine = $state(false);
 	let routineName = $state('');
@@ -46,13 +46,12 @@
 		e.preventDefault();
 		savingAsRoutine = true;
 		try {
-			const { id, message } = await trpc().exerciseSplits.createFromWorkout.mutate({
+			const { message } = await trpc().exerciseSplits.createFromWorkout.mutate({
 				workoutId: workout.id,
 				name: routineName
 			});
-			toast.success(message);
+			toast.success(message, { action: { label: 'My routines', onClick: () => goto('/exercise-splits') } });
 			saveAsRoutineOpen = false;
-			await goto(`/exercise-splits/${id}`);
 		} catch (error) {
 			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to save as routine');
 		}
@@ -184,7 +183,7 @@
 
 <ResponsiveDialog title="Save as routine" bind:open={saveAsRoutineOpen}>
 	{#snippet description()}
-		Makes a new routine library with this workout's exercises, in order, with the sets you did. You can edit it
+		Adds a routine to My routines with this workout's exercises, in order, with the sets you did. You can edit it
 		afterwards like any other.
 	{/snippet}
 	<form class="mt-2 flex flex-col gap-3" onsubmit={saveAsRoutine}>

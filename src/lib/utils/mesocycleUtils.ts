@@ -77,7 +77,7 @@ export function groupWorkoutsBySplitDayName(
 	const groupedObject = Object.groupBy(workoutsOfMesocycle, ({ splitDayIndex }) => splitDayIndex);
 
 	return Object.entries(groupedObject).map(([splitDayIndex, workoutsOfMesocycle]) => ({
-		splitDayName: splitDays[Number(splitDayIndex)].name,
+		splitDayName: splitDays.find((splitDay) => splitDay.dayIndex === Number(splitDayIndex))?.name ?? '',
 		workouts: (workoutsOfMesocycle ?? []).map((wm) => wm.workout)
 	}));
 }

@@ -10,7 +10,7 @@
 		{ text: 'Exercises', href: '/exercises' },
 		{ text: 'Exercise stats', href: '/exercise-stats' },
 		null,
-		{ text: 'Routine libraries', href: '/exercise-splits' },
+		{ text: 'My routines', href: '/exercise-splits' },
 		{ text: 'Mesocycles', href: '/mesocycles' },
 		{ text: 'Workouts', href: '/workouts' },
 		null,

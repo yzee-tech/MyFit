@@ -8,7 +8,11 @@ export const users = t.router({
 	getEntityCounts: t.procedure.query(async ({ ctx }) => {
 		const queryResult = await prisma.user.findUnique({
 			where: { id: ctx.userId },
-			select: { _count: { select: { exerciseSplits: true, mesocycles: true, workouts: true } } }
+			select: {
+				_count: { select: { mesocycles: true, workouts: true } },
+				// My routines can exist with nothing in it yet: what counts is a routine
+				exerciseSplit: { select: { _count: { select: { exerciseSplitDays: true } } } }
+			}
 		});
 		if (!queryResult) {
 			return null;
@@ -18,7 +22,11 @@ export const users = t.router({
 			where: { userId: ctx.userId, startDate: { not: null } }
 		});
 
-		const entityCounts = { ...queryResult._count, startedMesocycles };
+		const entityCounts = {
+			...queryResult._count,
+			routines: queryResult.exerciseSplit?._count.exerciseSplitDays ?? 0,
+			startedMesocycles
+		};
 		return entityCounts;
 	}),
 

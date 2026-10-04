@@ -13,8 +13,8 @@
 	const taskList = $derived([
 		{ task: 'Login', completion: entityCounts !== null, link: '/' },
 		{
-			task: 'Create an exercise split',
-			completion: Number(entityCounts?.exerciseSplits) > 0,
+			task: 'Create your routines',
+			completion: Number(entityCounts?.routines) > 0,
 			link: '/exercise-splits'
 		},
 		{ task: 'Create a mesocycle', completion: Number(entityCounts?.mesocycles) > 0, link: '/mesocycles' },

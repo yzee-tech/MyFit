@@ -1,5 +1,6 @@
 import type { SplitExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { Prisma } from '@prisma/client';
+import { uniqueRoutineName } from '$lib/utils/routineNames';
 
 export type FullExerciseSplit = Prisma.ExerciseSplitGetPayload<{
 	include: { exerciseSplitDays: { include: { exercises: true } } };
@@ -14,16 +15,35 @@ export type FullExerciseSplitWithoutIdsOrIndex = Omit<
 	})[];
 };
 
+/** A routine coming into the editor: from My routines, a template or an import */
+export type RoutineToLoad = {
+	name: string;
+	isRestDay?: boolean;
+	weightUnit?: Prisma.ExerciseSplitDayCreateWithoutExerciseSplitInput['weightUnit'];
+	exercises: SplitExerciseTemplateWithoutIdsOrIndex[];
+};
+
 type ExerciseSplitDayWithoutIds = Omit<Prisma.ExerciseSplitDayCreateWithoutExerciseSplitInput, 'dayIndex'> & {
 	/** The routine's name before this edit (unset for a new routine), to find it in the current block */
 	previousName?: string;
 };
 
+/** A routine's exercises as the editor holds them: without database ids, which a save never takes */
+function withoutIds(exercises: RoutineToLoad['exercises']): SplitExerciseTemplateWithoutIdsOrIndex[] {
+	return exercises.map((exercise) => {
+		const { id, exerciseSplitDayId, exerciseIndex, ...rest } = exercise as typeof exercise & {
+			id?: string;
+			exerciseSplitDayId?: string;
+			exerciseIndex?: number;
+		};
+		return structuredClone(rest);
+	});
+}
+
+/** The editor for My routines: the person's routines, with any unsaved changes */
 export function createExerciseSplitRunes() {
-	let splitName = $state('');
 	let splitDays: ExerciseSplitDayWithoutIds[] = $state([{ name: '', isRestDay: false, weightUnit: 'KG' }]);
 	let splitExercises: SplitExerciseTemplateWithoutIdsOrIndex[][] = $state([]);
-	let editingExerciseSplitId: string | null = $state(null);
 
 	let selectedSplitDayIndex: number = $state(0);
 	let editingExercise: SplitExerciseTemplateWithoutIdsOrIndex | undefined = $state(undefined);
@@ -31,7 +51,7 @@ export function createExerciseSplitRunes() {
 
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('exerciseSplitRunes');
-		if (savedState) ({ splitName, splitDays, splitExercises, editingExerciseSplitId } = JSON.parse(savedState));
+		if (savedState) ({ splitDays, splitExercises } = JSON.parse(savedState));
 	}
 
 	function addSplitDay() {
@@ -114,15 +134,10 @@ export function createExerciseSplitRunes() {
 	}
 
 	function saveStoresToLocalStorage() {
-		localStorage.setItem(
-			'exerciseSplitRunes',
-			JSON.stringify({ splitName, splitDays, splitExercises, editingExerciseSplitId })
-		);
+		localStorage.setItem('exerciseSplitRunes', JSON.stringify({ splitDays, splitExercises }));
 	}
 
 	function resetStores() {
-		editingExerciseSplitId = null;
-		splitName = '';
 		splitDays = [{ name: '', isRestDay: false, weightUnit: 'KG' }];
 		splitExercises = [];
 		selectedSplitDayIndex = 0;
@@ -131,31 +146,49 @@ export function createExerciseSplitRunes() {
 		saveStoresToLocalStorage();
 	}
 
-	function loadExerciseSplit(exerciseSplit: FullExerciseSplitWithoutIdsOrIndex, editingId?: string) {
-		editingExerciseSplitId = editingId ?? null;
-		splitName = exerciseSplit.name;
-		// Rest days belonged to the old fixed rotation; a routine library only has routines
-		const routines = exerciseSplit.exerciseSplitDays.filter((splitDay) => !splitDay.isRestDay);
+	/** Starts editing My routines as saved (none yet: one empty routine to fill in) */
+	function loadMyRoutines(routines: RoutineToLoad[]) {
 		splitDays = routines.map((splitDay) => ({
 			name: splitDay.name,
 			isRestDay: false,
 			weightUnit: splitDay.weightUnit ?? 'KG',
-			...(editingId && { previousName: splitDay.name })
+			previousName: splitDay.name
 		}));
-		splitExercises = routines.map((splitDay) => splitDay.exercises);
+		splitExercises = routines.map((splitDay) => withoutIds(splitDay.exercises));
+		if (splitDays.length === 0) {
+			splitDays = [{ name: '', isRestDay: false, weightUnit: 'KG' }];
+			splitExercises = [[]];
+		}
 		selectedSplitDayIndex = 0;
 		editingExercise = undefined;
 		copiedExercises = undefined;
 		saveStoresToLocalStorage();
 	}
 
+	/**
+	 * Adds routines (from a template or an import) after the ones being edited. A name already taken
+	 * gets "(2)", "(3)"... The list itself keeps its name
+	 */
+	function appendRoutines(routines: RoutineToLoad[]) {
+		// An untouched empty routine (a list with nothing in it yet) makes way
+		if (splitDays.length === 1 && !splitDays[0].name.trim() && (splitExercises[0]?.length ?? 0) === 0) {
+			splitDays = [];
+			splitExercises = [];
+		}
+		// Rest days belonged to the old fixed rotation: only routines come in
+		for (const routine of routines.filter((splitDay) => !splitDay.isRestDay)) {
+			const name = uniqueRoutineName(
+				routine.name,
+				splitDays.map((splitDay) => splitDay.name)
+			);
+			splitDays.push({ name, isRestDay: false, weightUnit: routine.weightUnit ?? 'KG' });
+			splitExercises.push(withoutIds(routine.exercises));
+		}
+		selectedSplitDayIndex = 0;
+		saveStoresToLocalStorage();
+	}
+
 	return {
-		get splitName() {
-			return splitName;
-		},
-		set splitName(name) {
-			splitName = name;
-		},
 		get splitDays() {
 			return splitDays;
 		},
@@ -177,12 +210,6 @@ export function createExerciseSplitRunes() {
 		get copiedExercises() {
 			return copiedExercises;
 		},
-		get editingExerciseSplitId() {
-			return editingExerciseSplitId;
-		},
-		set editingExerciseSplitId(id) {
-			editingExerciseSplitId = id;
-		},
 		addSplitDay,
 		removeSplitDay,
 		validateSplitStructure,
@@ -197,7 +224,8 @@ export function createExerciseSplitRunes() {
 		swapExercises,
 		saveStoresToLocalStorage,
 		resetStores,
-		loadExerciseSplit
+		loadMyRoutines,
+		appendRoutines
 	};
 }
 

@@ -59,12 +59,16 @@
 
 	let { ...props }: PropsType = $props();
 
-	/** In a block or workout (not a routine library), where an exercise has overrides */
+	/** Has progression overrides: every exercise does, in My routines, a block or a workout */
 	function isBlockExercise(
 		exercise: Partial<FullExerciseTemplate>
 	): exercise is Partial<MesocycleExerciseTemplateWithoutIdsOrIndex & { isUserExercise?: boolean }> {
-		return props.context !== 'exerciseSplit';
+		return exercise !== null;
 	}
+
+	// The block's settings, which an exercise follows unless it overrides them (My routines has none:
+	// a new block's defaults apply)
+	let blockDefaults = $derived('mesocycle' in props ? props.mesocycle : undefined);
 
 	// The weights a gym has; none means standard steps (2.5 kg / 5 lb)
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
@@ -117,8 +121,8 @@
 		name: '',
 		setType: 'Straight',
 		bodyweightFraction: null,
-		...(props.context === 'exerciseSplit' && { sets: DEFAULT_SETS }),
-		...(props.context !== 'exerciseSplit' && structuredClone(extraMesocycleProps))
+		...structuredClone(extraMesocycleProps),
+		...(props.context === 'exerciseSplit' && { sets: DEFAULT_SETS })
 	};
 
 	let open = $state(false);
@@ -334,9 +338,16 @@
 				{/if}
 			</div>
 			{#if props.context === 'exerciseSplit'}
-				<div class="col-span-2 flex w-full flex-col gap-1.5">
+				<div class="flex w-full flex-col gap-1.5">
 					<Label for="exercise-sets">Sets</Label>
 					<Input id="exercise-sets" max={20} min={1} required type="number" bind:value={currentExercise.sets} />
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<span class="text-sm font-medium leading-none">Progression</span>
+					<Button class="gap-2" onclick={() => (overridesSheetOpen = true)} variant="secondary">
+						<span class="pointer-events-none">Overrides</span>
+						<ChevronRight class="pointer-events-none" />
+					</Button>
 				</div>
 			{/if}
 			{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}
@@ -539,14 +550,13 @@
 	{/if}
 </ResponsiveDialog>
 
-{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}
+{#if isBlockExercise(currentExercise)}
 	<Sheet.Root closeOnOutsideClick={false} bind:open={overridesSheetOpen}>
 		<Sheet.Content class="w-10/12 overflow-y-auto px-4">
 			<Sheet.Header>
 				<Sheet.Title>Overrides</Sheet.Title>
 				<Sheet.Description>
-					Exercise progressions are based on the mesocycle by default, you can override (customize) them here for each
-					exercise
+					Progression follows the block’s settings by default. Change them here for this exercise in this routine
 				</Sheet.Description>
 			</Sheet.Header>
 			<form class="mt-8 grid h-fit gap-x-2 gap-y-4" onsubmit={submitOverrides}>
@@ -587,7 +597,7 @@
 					<Input
 						id="exercise-override-overload-percentage-value"
 						disabled={currentExercise.overloadPercentage === null}
-						placeholder={props.mesocycle?.startOverloadPercentage.toString()}
+						placeholder={(blockDefaults?.startOverloadPercentage ?? 2.5).toString()}
 						required
 						step={0.1}
 						type="number"
@@ -602,7 +612,7 @@
 							checked={currentExercise.forceRIRMatching !== null}
 							onCheckedChange={(c) => {
 								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
-									currentExercise.forceRIRMatching = c ? props.mesocycle?.forceRIRMatching : null;
+									currentExercise.forceRIRMatching = c ? (blockDefaults?.forceRIRMatching ?? true) : null;
 							}}
 						/>
 					</div>
@@ -611,7 +621,7 @@
 							<Switch
 								id="exercise-override-force-RIR-matching-value"
 								name="exercise-override-force-RIR-matching-value"
-								checked={currentExercise.forceRIRMatching ?? props.mesocycle?.forceRIRMatching}
+								checked={currentExercise.forceRIRMatching ?? blockDefaults?.forceRIRMatching ?? true}
 								disabled={currentExercise.forceRIRMatching === null}
 								onCheckedChange={(c) => {
 									if (isBlockExercise(currentExercise)) currentExercise.forceRIRMatching = c;
@@ -628,7 +638,7 @@
 							checked={currentExercise.lastSetToFailure !== null}
 							onCheckedChange={(c) => {
 								if (c !== 'indeterminate' && isBlockExercise(currentExercise))
-									currentExercise.lastSetToFailure = c ? props.mesocycle?.lastSetToFailure : null;
+									currentExercise.lastSetToFailure = c ? (blockDefaults?.lastSetToFailure ?? true) : null;
 							}}
 						/>
 					</div>
@@ -637,7 +647,7 @@
 							<Switch
 								id="exercise-override-last-set-to-failure-value"
 								name="exercise-override-last-set-to-failure-value"
-								checked={currentExercise.lastSetToFailure ?? props.mesocycle?.lastSetToFailure}
+								checked={currentExercise.lastSetToFailure ?? blockDefaults?.lastSetToFailure ?? true}
 								disabled={currentExercise.lastSetToFailure === null}
 								onCheckedChange={(c) => {
 									if (isBlockExercise(currentExercise)) currentExercise.lastSetToFailure = c;

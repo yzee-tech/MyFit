@@ -425,9 +425,8 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await expect(page.getByRole('main')).toContainText(
 		'Pull APush ALegs APull BPush BLegs B Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
-	// The routine library it came from changed the same way
+	// My routines changed the same way
 	await page.goto('/exercise-splits');
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
 	await expect(page.getByRole('main')).toContainText(
 		'Pull A 1 exercise Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
@@ -500,6 +499,11 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	userData
 }) => {
 	await createSplitAndMesoForTest(page);
+	// "Ask each time" in My routines, and so in the block that follows it
+	await prisma.exerciseSplitDay.updateMany({
+		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
+		data: { weightUnit: 'ASK' }
+	});
 	await prisma.mesocycleExerciseSplitDay.updateMany({
 		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
 		data: { weightUnit: 'ASK' }
@@ -673,8 +677,13 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Delete Building DBs' }).click();
 	await expect(page.getByTestId('weight-set-Building DBs')).toHaveCount(0);
-	const unlinked = await prisma.mesocycleExerciseTemplate.findUniqueOrThrow({ where: { id: curls.id } });
+	// In My routines, and in the block that follows it
+	const unlinked = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
+		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	});
 	expect(unlinked.weightSetId).toBeNull();
+	const unlinkedInMyRoutines = await prisma.exerciseTemplate.findFirstOrThrow({ where: { id: libraryCurls.id } });
+	expect(unlinkedInMyRoutines.weightSetId).toBeNull();
 });
 
 test('weight sets: ask-each-time routine picks the gym’s weights at the start, routine stays unlinked', async ({
@@ -682,6 +691,10 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	userData
 }) => {
 	await createSplitAndMesoForTest(page);
+	await prisma.exerciseSplitDay.updateMany({
+		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
+		data: { weightUnit: 'ASK' }
+	});
 	await prisma.mesocycleExerciseSplitDay.updateMany({
 		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
 		data: { weightUnit: 'ASK' }
@@ -804,7 +817,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await expect(page.getByRole('main')).toContainText('Level');
 });
 
-test('save a blank workout as a routine library', async ({ page, userData }) => {
+test('save a blank workout as a routine: added to My routines, a taken name gets “(2)”', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell rows', 'Face pulls']);
 
 	await page.goto('/workouts');
@@ -836,26 +849,40 @@ test('save a blank workout as a routine library', async ({ page, userData }) => 
 	await expect(page.getByLabel('Name')).toBeVisible();
 	await page.getByLabel('Name').fill('Hotel full body');
 	await page.getByRole('button', { name: 'Save routine' }).click();
-	await page.waitForURL(/\/exercise-splits\/\w+$/);
-	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Hotel full body');
+	await expect(page.getByRole('status').filter({ hasText: 'Added to My routines as “Hotel full body”' })).toBeVisible();
 
-	const library = await prisma.exerciseSplit.findFirstOrThrow({
-		where: { userId: userData.userId },
-		include: { exerciseSplitDays: { include: { exercises: { orderBy: { exerciseIndex: 'asc' } } } } }
-	});
-	expect(library.exerciseSplitDays).toHaveLength(1);
-	expect(library.exerciseSplitDays[0].name).toEqual('Hotel full body');
-	expect(library.exerciseSplitDays[0].exercises.map((ex) => [ex.name, ex.sets])).toEqual([
+	const myRoutines = () =>
+		prisma.exerciseSplit.findMany({
+			where: { userId: userData.userId },
+			include: {
+				exerciseSplitDays: {
+					orderBy: { dayIndex: 'asc' },
+					include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
+				}
+			}
+		});
+	let lists = await myRoutines();
+	expect(lists.map((list) => list.name)).toEqual(['My routines']);
+	expect(lists[0].exerciseSplitDays.map((routine) => routine.name)).toEqual(['Hotel full body']);
+	expect(lists[0].exerciseSplitDays[0].exercises.map((ex) => [ex.name, ex.sets])).toEqual([
 		['Barbell rows', 2],
 		['Face pulls', 3]
 	]);
-	expect(library.exerciseSplitDays[0].exercises.every((ex) => ex.exerciseId !== null)).toBe(true);
+	expect(lists[0].exerciseSplitDays[0].exercises.every((ex) => ex.exerciseId !== null)).toBe(true);
 
-	// Also on any workout's page
+	// Also on any workout's page; the same name again goes into the same list as "(2)"
 	const workout = await prisma.workout.findFirstOrThrow({ where: { userId: userData.userId } });
 	await page.goto(`/workouts/${workout.id}`);
 	await page.getByLabel('workout-options').click();
-	await expect(page.getByRole('menuitem', { name: 'Save as routine' })).toBeVisible();
+	await page.getByRole('menuitem', { name: 'Save as routine' }).click();
+	await page.getByLabel('Name').fill('Hotel full body');
+	await page.getByRole('button', { name: 'Save routine' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Added to My routines as “Hotel full body (2)”' })
+	).toBeVisible();
+	lists = await myRoutines();
+	expect(lists).toHaveLength(1);
+	expect(lists[0].exerciseSplitDays.map((routine) => routine.name)).toEqual(['Hotel full body', 'Hotel full body (2)']);
 });
 
 /** Fills a set's numbers by exercise name and set number (1-based); load left out when not given */
@@ -1082,12 +1109,12 @@ test('add and remove sets; the routine prompt: closing it saves nothing, Update 
 	expect(library.map((ex) => [ex.name, ex.sets])).toEqual(expected);
 });
 
-test('Just this workout leaves the routine; a block without its library updates the block only', async ({
+test('Just this workout leaves the routine; Update routine changes My routines and the block follows', async ({
 	page,
 	userData
 }) => {
 	await createSplitAndMesoForTest(page);
-	const logPullA = async (answer: 'Just this workout' | 'Update routine (this block only)') => {
+	const logPullA = async (answer: 'Just this workout' | 'Update routine') => {
 		await page.getByLabel('create-workout').click();
 		await page.getByPlaceholder('Type here').fill('100');
 		await pickRoutine(page, 'Pull A');
@@ -1103,13 +1130,16 @@ test('Just this workout leaves the routine; a block without its library updates 
 			where: { name: 'Pull-ups', mesocycleExerciseSplitDay: { name: 'Pull A', mesocycle: { userId: userData.userId } } }
 		})) === 1;
 
-	await logPullA('Just this workout');
-	expect(await blockHasPullUps()).toBe(true);
+	const myRoutinesHasPullUps = async () =>
+		(await prisma.exerciseTemplate.count({
+			where: { name: 'Pull-ups', exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } }
+		})) === 1;
 
-	// The library is gone: only the block can change, and the question says so
-	await prisma.exerciseSplit.deleteMany({ where: { userId: userData.userId } });
-	await logPullA('Update routine (this block only)');
-	expect(await blockHasPullUps()).toBe(false);
+	await logPullA('Just this workout');
+	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([true, true]);
+
+	await logPullA('Update routine');
+	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([false, false]);
 });
 
 test('a workout in progress: back to setup continues it; switching routine asks; banner to continue or discard', async ({

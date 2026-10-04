@@ -2,8 +2,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Switch } from '$lib/components/ui/switch';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -12,7 +10,6 @@
 	import DeleteIcon from 'virtual:icons/lucide/trash';
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	import EditIcon from 'virtual:icons/lucide/pencil';
-	import ExtractIcon from 'virtual:icons/lucide/pickaxe';
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { trpc } from '$lib/trpc/client';
@@ -25,11 +22,8 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 	let deleteConfirmDrawerOpen = $state(false);
-	let extractSplitConfirmDrawerOpen = $state(false);
-	let extractedExerciseSplitName = $state('');
 	let callingDeleteEndpoint = $state(false);
 	let callingPatchEndpoint = $state(false);
-	let callingCreateExerciseSplitEndpoint = $state(false);
 
 	function loadMesocycle(mode: 'edit' | 'clone') {
 		if (mode === 'edit') {
@@ -40,26 +34,18 @@
 		goto(`/mesocycles/manage/basics`);
 	}
 
-	function getMesocycleWithoutIds() {
-		const { exerciseSplit, mesocycleCyclicSetChanges, mesocycleExerciseSplitDays, ...mesocycleData } = mesocycle;
-
-		const { id, userId, exerciseSplitId, workoutsOfMesocycle, ...mesocycleDataWithoutIds } = mesocycleData;
-		const mesocycleWithoutIds: FullMesocycleWithoutIds = {
-			...mesocycleDataWithoutIds,
-			mesocycleCyclicSetChanges: mesocycleCyclicSetChanges.map((setChange) => {
-				const { id, mesocycleId, ...rest } = setChange;
-				return rest;
-			}),
-			mesocycleExerciseSplitDays: mesocycleExerciseSplitDays.map((splitDay) => {
-				const { id, mesocycleSplitDayExercises: exercisesWithId, ...rest } = splitDay;
-				const mesocycleSplitDayExercises = exercisesWithId.map((exercise) => {
-					const { id, ...rest } = exercise;
-					return rest;
-				});
-				return { mesocycleSplitDayExercises, ...rest };
-			})
+	/** The block's own settings, to edit or clone: its routines are My routines */
+	function getMesocycleWithoutIds(): FullMesocycleWithoutIds {
+		return {
+			name: mesocycle.name,
+			weeklyRIR: mesocycle.weeklyRIR,
+			startDate: mesocycle.startDate,
+			endDate: mesocycle.endDate,
+			startOverloadPercentage: mesocycle.startOverloadPercentage,
+			lastSetToFailure: mesocycle.lastSetToFailure,
+			forceRIRMatching: mesocycle.forceRIRMatching,
+			mesocycleCyclicSetChanges: mesocycle.mesocycleCyclicSetChanges.map(({ id, mesocycleId, ...rest }) => rest)
 		};
-		return mesocycleWithoutIds;
 	}
 
 	async function progressMesocycle() {
@@ -92,48 +78,6 @@
 		}
 		callingDeleteEndpoint = false;
 	}
-
-	function convertMesocycleSplitDayExerciseToExerciseSplitDayExercise(
-		exercise: NonNullable<
-			RouterOutputs['mesocycles']['findById']
-		>['mesocycleExerciseSplitDays'][number]['mesocycleSplitDayExercises'][number]
-	) {
-		const {
-			sets,
-			mesocycleExerciseSplitDayId,
-			overloadPercentage,
-			lastSetToFailure,
-			forceRIRMatching,
-			minimumWeightChange,
-			weightUnit, // a library's exercises follow their routine's unit
-			...rest
-		} = exercise;
-		return rest;
-	}
-
-	async function extractExerciseSplit(e: SubmitEvent) {
-		e.preventDefault();
-
-		callingCreateExerciseSplitEndpoint = true;
-		const response = await trpc().exerciseSplits.create.mutate({
-			splitName: extractedExerciseSplitName,
-			splitDays: mesocycle.mesocycleExerciseSplitDays.map((splitDay, dayIndex) => ({
-				name: splitDay.name,
-				isRestDay: splitDay.isRestDay,
-				weightUnit: splitDay.weightUnit,
-				dayIndex
-			})),
-			splitExercises: mesocycle.mesocycleExerciseSplitDays.map((splitDay) =>
-				splitDay.mesocycleSplitDayExercises.map((exercise) =>
-					convertMesocycleSplitDayExerciseToExerciseSplitDayExercise(exercise)
-				)
-			)
-		});
-		callingCreateExerciseSplitEndpoint = false;
-
-		toast.success(response.message);
-		extractSplitConfirmDrawerOpen = false;
-	}
 </script>
 
 <Card.Root>
@@ -151,9 +95,6 @@
 						</DropdownMenu.Item>
 						<DropdownMenu.Item class="gap-2" onclick={() => loadMesocycle('clone')}>
 							<CloneIcon /> Clone
-						</DropdownMenu.Item>
-						<DropdownMenu.Item class="gap-2" onclick={() => (extractSplitConfirmDrawerOpen = true)}>
-							<ExtractIcon /> Extract split
 						</DropdownMenu.Item>
 						<DropdownMenu.Item class="gap-2 text-red-500" on:click={() => (deleteConfirmDrawerOpen = true)}>
 							<DeleteIcon /> Delete
@@ -199,13 +140,11 @@
 			</div>
 		</div>
 		<div class="flex flex-col">
-			<span class="text-sm text-muted-foreground">Start exercise template</span>
-			{#if mesocycle.exerciseSplit}
-				<a class="font-semibold underline" href="/exercise-splits/{mesocycle.exerciseSplit.id}">
-					{mesocycle.exerciseSplit.name}
-				</a>
+			<span class="text-sm text-muted-foreground">Routines</span>
+			{#if mesocycle.endDate}
+				<span class="font-semibold">As they were during this mesocycle</span>
 			{:else}
-				<span class="font-semibold text-red-500">Deleted</span>
+				<a class="font-semibold underline" href="/exercise-splits">My routines</a>
 			{/if}
 		</div>
 		<div class="flex flex-col">
@@ -257,23 +196,4 @@
 			Yes, delete
 		{/if}
 	</Button>
-</ResponsiveDialog>
-
-<ResponsiveDialog title="Extract split?" bind:open={extractSplitConfirmDrawerOpen}>
-	{#snippet description()}
-		Extract the mesocycle's exercise split into an independent exercise split
-	{/snippet}
-	<form class="contents" onsubmit={extractExerciseSplit}>
-		<div class="flex w-full max-w-sm flex-col gap-1.5">
-			<Label for="extracted-split-name">Exercise split name</Label>
-			<Input id="extracted-split-name" placeholder="Type here" required bind:value={extractedExerciseSplitName} />
-		</div>
-		<Button class="gap-2" disabled={callingCreateExerciseSplitEndpoint} type="submit">
-			{#if callingCreateExerciseSplitEndpoint}
-				<LoaderCircle class="animate-spin" />
-			{:else}
-				Yes, extract
-			{/if}
-		</Button>
-	</form>
 </ResponsiveDialog>

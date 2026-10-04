@@ -17,6 +17,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Pull A',
 			dayIndex: 0,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -127,6 +128,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Push A',
 			dayIndex: 1,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -237,6 +239,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Legs A',
 			dayIndex: 2,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -347,6 +350,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Pull B',
 			dayIndex: 3,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -457,6 +461,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Push B',
 			dayIndex: 4,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -567,6 +572,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: 'Legs B',
 			dayIndex: 5,
 			isRestDay: false,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: [
@@ -677,6 +683,7 @@ export const testMesocycle: ActiveMesocycleWithProgressionData = {
 			name: '',
 			dayIndex: 6,
 			isRestDay: true,
+			hidden: false,
 			weightUnit: 'KG',
 			mesocycleId: 'cm25sw3zk000w14ycgmmnfk8o',
 			mesocycleSplitDayExercises: []

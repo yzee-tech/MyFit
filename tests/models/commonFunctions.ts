@@ -49,14 +49,16 @@ export async function pickExercise(page: Page, name: string) {
 	await page.getByRole('option', { name, exact: true }).click();
 }
 
-export async function createTemplateExerciseSplit(page: Page) {
-	await page.getByLabel('exercise-split-new-options').click();
-	await page.getByRole('menuitem', { name: 'Use template' }).click();
-	await page.getByRole('button', { name: 'Pull Push Legs 6 routines' }).click();
+/** Adds a template's routines to My routines (from the My routines page) */
+export async function createTemplateExerciseSplit(page: Page, template = 'Pull Push Legs 6 routines') {
+	await page.getByLabel('my-routines-options').click();
+	await page.getByRole('menuitem', { name: 'Add from a template' }).click();
+	await page.getByRole('button', { name: template }).click();
+	await page.waitForURL('/exercise-splits/manage/structure');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/exercise-splits/manage/exercises');
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library created' })).toBeVisible({
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({
 		timeout: 10000
 	});
 	await page.waitForURL('/exercise-splits');
@@ -64,6 +66,7 @@ export async function createTemplateExerciseSplit(page: Page) {
 
 export async function createMesocycle(page: Page, options?: { exerciseSplitCreated: boolean }) {
 	if (!options?.exerciseSplitCreated) {
+		await page.goto('/exercise-splits');
 		await createTemplateExerciseSplit(page);
 	}
 	await page.goto('/mesocycles');
@@ -71,11 +74,9 @@ export async function createMesocycle(page: Page, options?: { exerciseSplitCreat
 	await page.getByLabel('Mesocycle name').click();
 	await page.getByLabel('Mesocycle name').fill('MyMeso');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByText('Pick one').click();
-	await page.getByRole('option', { name: 'Pull Push Legs' }).click();
+	await page.waitForURL(/\/mesocycles\/manage\/progression/);
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/mesocycles\/manage\/volume/);
-	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/mesocycles\/manage\/overview/);
 	await page.getByLabel('Start immediately').click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle created successfully' })).toBeVisible({
@@ -95,7 +96,7 @@ export async function pickRoutine(page: Page, routineName: string) {
  */
 export async function saveWorkout(
 	page: Page,
-	routine?: { changes: string[]; answer: 'Update routine' | 'Update routine (this block only)' | 'Just this workout' }
+	routine?: { changes: string[]; answer: 'Update routine' | 'Just this workout' }
 ) {
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	if (routine) {

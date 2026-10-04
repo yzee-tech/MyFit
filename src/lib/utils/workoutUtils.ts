@@ -722,7 +722,8 @@ export function progressiveOverloadMagic(
 	if (mode === 'deload') currentCycleRIR = DELOAD_RIR;
 	else if (mode === 'welcomeBack') currentCycleRIR = Math.min(weekRIR + 1, DELOAD_RIR);
 	const easySession = mode !== 'normal';
-	const todaysSplitDay = mesocycleExerciseSplitDays[splitDayIndex];
+	// Workouts point at a routine by its position (dayIndex), not its place in the list
+	const todaysSplitDay = mesocycleExerciseSplitDays.find((splitDay) => splitDay.dayIndex === splitDayIndex)!;
 	const workoutExercises = todaysSplitDay.mesocycleSplitDayExercises.map((fullExercise) => {
 		const { mesocycleExerciseSplitDayId, ...exercise } = fullExercise;
 		return createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise);
