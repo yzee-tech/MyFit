@@ -20,6 +20,8 @@ model Workout {
   note               String?
   /// Done in a deload week: not used as the baseline for progression
   isDeload           Boolean             @default(false)
+  /// The routine it was done from, by its name at the time (history only); none for a blank workout
+  routineName        String?
 }
 
 model WorkoutExercise {

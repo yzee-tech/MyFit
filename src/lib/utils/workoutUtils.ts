@@ -226,6 +226,17 @@ export function createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
 
 /** Marks a deload week in a block's weekly RIR plan */
 export const DELOAD_WEEK = -1;
+
+/**
+ * Progression settings for a workout outside a block (a routine from My routines, or an exercise
+ * added to a blank workout): a steady effort, no deload weeks
+ */
+export const NO_BLOCK_PROGRESSION = {
+	weeklyRIR: [2],
+	startOverloadPercentage: 2.5,
+	lastSetToFailure: false,
+	forceRIRMatching: false
+} as const;
 /** Effort of a deload week: stop well short of failure */
 export const DELOAD_RIR = 4;
 

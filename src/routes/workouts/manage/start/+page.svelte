@@ -55,9 +55,10 @@
 	const shouldShowQuote =
 		data.userSettings.motivationalQuotesEnabled && data.userSettings.quotesDisplayModes.includes('PRE_WORKOUT');
 
-	let useActiveMesocycle = $state(false);
+	// A routine (the active block's, or with no block one of My routines) rather than a blank workout
+	let useRoutine = $state(false);
 	let workoutData = $state<TodaysWorkoutData | 'loading'>('loading');
-	let selectedRoutineIndex: number | null = $state(null);
+	let selectedRoutineName: string | null = $state(null);
 	// Bodyweight is typed in the home unit and kept in kg
 	const homeWeightUnit: WeightUnit = $page.data.homeWeightUnit ?? 'KG';
 	const toHomeUnit = (kg: number | null | undefined) =>
@@ -77,24 +78,26 @@
 			workoutRunes.workoutData !== null &&
 			workoutRunes.workoutExercises !== null
 	);
-	let inProgressRoutineIndex = $derived(workoutRunes.workoutData?.workoutOfMesocycle?.splitDayIndex ?? null);
-	let inProgressName = $derived(workoutRunes.workoutData?.workoutOfMesocycle?.splitDayName ?? 'the blank workout');
+	let inProgressRoutineName = $derived(
+		workoutRunes.workoutData?.routineName ?? workoutRunes.workoutData?.workoutOfMesocycle?.splitDayName ?? null
+	);
+	let inProgressName = $derived(inProgressRoutineName ?? 'the blank workout');
 	let finishingBlock = $state(false);
 	let takeItEasy = $state(true);
 
 	let activeBlock = $derived(workoutData === 'loading' ? undefined : workoutData.activeBlock);
-	let selectedRoutine = $derived(
-		activeBlock?.routines.find((routine) => routine.splitDayIndex === selectedRoutineIndex)
+	// The block's routines, else (no block) My routines
+	let routines: RoutineOption[] = $derived(
+		workoutData === 'loading' ? [] : (workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [])
 	);
-	let sameAsInProgress = $derived(
-		(useActiveMesocycle && activeBlock ? selectedRoutineIndex : null) === inProgressRoutineIndex
-	);
-	let switchToName = $derived(useActiveMesocycle && selectedRoutine ? selectedRoutine.name : 'a blank workout');
+	let selectedRoutine = $derived(routines.find((routine) => routine.name === selectedRoutineName));
+	let sameAsInProgress = $derived((useRoutine ? selectedRoutineName : null) === inProgressRoutineName);
+	let switchToName = $derived(useRoutine && selectedRoutine ? selectedRoutine.name : 'a blank workout');
 	let deloadWeek = $derived(
 		activeBlock ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, activeBlock.weekNumber) : false
 	);
 	let welcomeBack = $derived(workoutData === 'loading' ? undefined : workoutData.welcomeBack);
-	let canStart = $derived(userBodyweight !== null && (!useActiveMesocycle || selectedRoutine !== undefined));
+	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
 	$effect(() => {
 		data.workoutData.then((data) => {
@@ -102,24 +105,35 @@
 			else workoutData = workoutRunes.workoutData as TodaysWorkoutData;
 
 			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
-			if (workoutData.activeBlock !== undefined) useActiveMesocycle = true;
+			const options = workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [];
+			if (workoutData.activeBlock !== undefined || options.length > 0) useRoutine = true;
 			// Back from a workout in progress: it stays picked
 			if (inProgress) {
-				useActiveMesocycle = inProgressRoutineIndex !== null && workoutData.activeBlock !== undefined;
-				selectedRoutineIndex = inProgressRoutineIndex;
+				useRoutine = options.some((routine) => routine.name === inProgressRoutineName);
+				selectedRoutineName = useRoutine ? inProgressRoutineName : null;
 			}
 		});
 	});
 
 	function buildWorkoutData(): TodaysWorkoutData | null {
 		if (workoutData === 'loading') return null;
-		const { activeBlock, ...rest } = workoutData;
-		if (!useActiveMesocycle || !activeBlock || !selectedRoutine) {
-			return { ...rest, workoutExercises: [], workoutOfMesocycle: undefined };
+		const { activeBlock, myRoutines, ...rest } = workoutData;
+		if (!useRoutine || !selectedRoutine) {
+			return { ...rest, workoutExercises: [], workoutOfMesocycle: undefined, routineName: null };
+		}
+		// No block: a routine of My routines, and the workout isn't part of any block
+		if (!activeBlock || selectedRoutine.splitDayIndex === undefined) {
+			return {
+				...rest,
+				workoutExercises: selectedRoutine.workoutExercises,
+				workoutOfMesocycle: undefined,
+				routineName: selectedRoutine.name
+			};
 		}
 		return {
 			...rest,
 			workoutExercises: selectedRoutine.workoutExercises,
+			routineName: selectedRoutine.name,
 			workoutOfMesocycle: {
 				mesocycle: activeBlock.mesocycle,
 				cycleNumber: activeBlock.weekNumber,
@@ -153,27 +167,31 @@
 		const newWorkoutData = buildWorkoutData();
 		if (newWorkoutData === null) return;
 		newWorkoutData.userBodyweight = userBodyweightKg;
-		const askForUnit = useActiveMesocycle && selectedRoutine?.weightUnit === 'ASK';
-		newWorkoutData.sessionWeightUnit = askForUnit || !useActiveMesocycle ? sessionWeightUnit : undefined;
-		newWorkoutData.sessionWeightSetId = askForUnit || !useActiveMesocycle ? sessionWeightSet?.id : undefined;
+		const askForUnit = useRoutine && selectedRoutine?.weightUnit === 'ASK';
+		newWorkoutData.sessionWeightUnit = askForUnit || !useRoutine ? sessionWeightUnit : undefined;
+		newWorkoutData.sessionWeightSetId = askForUnit || !useRoutine ? sessionWeightSet?.id : undefined;
 
 		if (mode === 'overwrite') {
+			// A new workout starts now. Resuming one (keepCurrent) never moves its start
+			newWorkoutData.startedAt = new Date();
 			workoutRunes.workoutData = newWorkoutData;
 			workoutRunes.workoutExercises = null;
 			workoutRunes.previousWorkoutData = null;
+			workoutRunes.lastActivityAt = null;
 		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
 		workoutRunes.saveStoresToLocalStorage();
 
-		const workoutOfMesocycle = workoutRunes.workoutData.workoutOfMesocycle;
+		const { workoutOfMesocycle, routineName } = workoutRunes.workoutData;
+		const fromRoutine = workoutOfMesocycle !== undefined || Boolean(routineName);
 		let exercisesLink = `./exercises?userBodyweight=${userBodyweightKg}`;
-		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
+		if (workoutOfMesocycle) exercisesLink += `&useActiveMesocycle&splitDayIndex=${workoutOfMesocycle.splitDayIndex}`;
+		else if (routineName) exercisesLink += `&routine=${encodeURIComponent(routineName)}`;
 		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
-		if (workoutOfMesocycle) exercisesLink += `&splitDayIndex=${workoutOfMesocycle.splitDayIndex}`;
-		if (workoutOfMesocycle && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
-		if (workoutOfMesocycle && workoutRunes.workoutData.sessionWeightUnit) {
+		if (fromRoutine && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
+		if (fromRoutine && workoutRunes.workoutData.sessionWeightUnit) {
 			exercisesLink += `&sessionUnit=${workoutRunes.workoutData.sessionWeightUnit}`;
 		}
-		if (workoutOfMesocycle && workoutRunes.workoutData.sessionWeightSetId) {
+		if (fromRoutine && workoutRunes.workoutData.sessionWeightSetId) {
 			exercisesLink += `&sessionWeightSetId=${workoutRunes.workoutData.sessionWeightSetId}`;
 		}
 		goto(exercisesLink);
@@ -236,8 +254,12 @@
 			Your workout ({inProgressName}) is still going. Change your bodyweight here if needed, then continue.
 		</p>
 	{/if}
-	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined}
-		<p class="mb-1 px-1 text-sm text-muted-foreground">No active block: you'll pick exercises as you go.</p>
+	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined && routines.length === 0}
+		<p class="mb-1 px-1 text-sm text-muted-foreground">
+			No routines yet: you'll pick exercises as you go. Create routines in <a class="underline" href="/exercise-splits"
+				>My routines</a
+			>.
+		</p>
 	{/if}
 	<form
 		class="mb-1 flex w-full flex-col gap-1.5 rounded-lg border bg-card p-4"
@@ -276,7 +298,7 @@
 			</div>
 		{/if}
 	</form>
-	{#if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null && deloadWeek}
+	{#if useRoutine && activeBlock && workoutRunes.editingWorkoutId === null && deloadWeek}
 		<Card.Root class="mb-1">
 			<Card.Header>
 				<Card.Title>Deload week</Card.Title>
@@ -286,7 +308,7 @@
 				</Card.Description>
 			</Card.Header>
 		</Card.Root>
-	{:else if useActiveMesocycle && activeBlock && workoutRunes.editingWorkoutId === null && welcomeBack}
+	{:else if useRoutine && (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null && welcomeBack}
 		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
 			<div class="flex flex-col gap-1">
 				<Label for="take-it-easy">Welcome back: take it easy today</Label>
@@ -297,33 +319,35 @@
 			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />
 		</div>
 	{/if}
-	{#if activeBlock && workoutRunes.editingWorkoutId === null}
+	{#if (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null}
 		<div class="mb-1 flex items-baseline justify-between px-1">
 			<span class="font-semibold">Pick a routine</span>
-			<span class="text-sm text-muted-foreground">
-				Week {Math.min(activeBlock.weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
-					activeBlock.mesocycle.weeklyRIR,
-					activeBlock.weekNumber
-				)}
-			</span>
+			{#if activeBlock}
+				<span class="text-sm text-muted-foreground">
+					Week {Math.min(activeBlock.weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
+						activeBlock.mesocycle.weeklyRIR,
+						activeBlock.weekNumber
+					)}
+				</span>
+			{/if}
 		</div>
-		{#if activeBlock.routines.length === 0}
+		{#if routines.length === 0}
 			<p class="mb-1 px-1 text-sm text-muted-foreground">
 				No routines yet: create them in <a class="underline" href="/exercise-splits">My routines</a>, or do a blank
 				workout.
 			</p>
 		{/if}
 		<div class="mb-1 flex flex-col gap-1" role="radiogroup" aria-label="Routine">
-			{#each activeBlock.routines as routine (routine.splitDayIndex)}
-				{@const selected = useActiveMesocycle && routine.splitDayIndex === selectedRoutineIndex}
+			{#each routines as routine (routine.name)}
+				{@const selected = useRoutine && routine.name === selectedRoutineName}
 				<button
 					class={cn('flex flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors', {
 						'border-primary ring-1 ring-primary': selected
 					})}
 					aria-checked={selected}
 					onclick={() => {
-						selectedRoutineIndex = routine.splitDayIndex;
-						useActiveMesocycle = true;
+						selectedRoutineName = routine.name;
+						useRoutine = true;
 					}}
 					role="radio"
 					type="button"
@@ -341,12 +365,12 @@
 			{/each}
 			<button
 				class={cn('flex flex-col gap-1 rounded-lg border border-dashed bg-card p-4 text-left transition-colors', {
-					'border-solid border-primary ring-1 ring-primary': !useActiveMesocycle
+					'border-solid border-primary ring-1 ring-primary': !useRoutine
 				})}
-				aria-checked={!useActiveMesocycle}
+				aria-checked={!useRoutine}
 				onclick={() => {
-					useActiveMesocycle = false;
-					selectedRoutineIndex = null;
+					useRoutine = false;
+					selectedRoutineName = null;
 				}}
 				role="radio"
 				type="button"
@@ -356,7 +380,7 @@
 			</button>
 		</div>
 	{/if}
-	{#if workoutRunes.editingWorkoutId === null && (!useActiveMesocycle || selectedRoutine?.weightUnit === 'ASK')}
+	{#if workoutRunes.editingWorkoutId === null && (!useRoutine || selectedRoutine?.weightUnit === 'ASK')}
 		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
 			<span class="text-sm font-medium" id="session-unit-label">This gym uses</span>
 			<ToggleGroup.Root
@@ -399,7 +423,7 @@
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>
 		{#if $navigating}
 			<LoaderCircle class="animate-spin" />
-		{:else if useActiveMesocycle && selectedRoutine === undefined && workoutRunes.editingWorkoutId === null}
+		{:else if useRoutine && selectedRoutine === undefined && workoutRunes.editingWorkoutId === null}
 			Pick a routine
 		{:else if inProgress && sameAsInProgress}
 			Continue workout

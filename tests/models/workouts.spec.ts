@@ -1,6 +1,13 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createExercises, createMesocycle, pickExercise, pickRoutine, saveWorkout } from './commonFunctions';
+import {
+	createExercises,
+	createMesocycle,
+	createTemplateExerciseSplit,
+	pickExercise,
+	pickRoutine,
+	saveWorkout
+} from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -226,7 +233,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
@@ -334,7 +341,7 @@ test('delete a workout', async ({ page }) => {
 	await page.getByLabel('create-workout').click();
 	await expect(page.getByRole('main')).toContainText('Pull A Done today');
 	await page.getByRole('link', { name: 'Workouts' }).click();
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
@@ -366,7 +373,7 @@ test('edit a workout', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await saveWorkout(page, { changes: ['Removed: Barbell rows'], answer: 'Just this workout' });
 
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByPlaceholder('Type here').fill('95');
@@ -377,7 +384,7 @@ test('edit a workout', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Mesocycle MyMeso Pull A User bodyweight 95 kg Targeted muscle groups Lats'
 	);
@@ -532,7 +539,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
 
 	// History shows what was lifted
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('Reps Load (lb) RIR 1 12 90');
 
@@ -593,7 +600,7 @@ test('home unit in lb: bodyweight shown and entered in lb', async ({ page, userD
 	expect(saved.userBodyweight).toBeCloseTo(99.79, 1);
 	expect(saved.workoutExercises[0].weightUnit).toEqual('KG');
 	expect(saved.workoutExercises[0].sets[0].load).toBeCloseTo(10);
-	await page.getByRole('link', { name: `${getTodaysDateString()} Pull A` }).click();
+	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await expect(page.getByRole('tabpanel')).toContainText('User bodyweight 220 lb');
 });
 
@@ -895,7 +902,9 @@ async function expectSetsFitPhone(page: Page) {
 	expect(overflow).toBeLessThanOrEqual(0);
 	const boxes = page.getByRole('checkbox');
 	expect(await boxes.count()).toBeGreaterThan(0);
-	for (const box of await boxes.all()) {
+	// The tick boxes, and the remove buttons after them (where shown)
+	const removeButtons = page.locator('[data-testid$="-remove"]:visible');
+	for (const box of [...(await boxes.all()), ...(await removeButtons.all())]) {
 		const rect = await box.boundingBox();
 		expect(rect).not.toBeNull();
 		expect(rect!.x).toBeGreaterThanOrEqual(0);
@@ -1176,4 +1185,199 @@ test('a workout in progress: back to setup continues it; switching routine asks;
 	await page.getByRole('button', { name: 'Yes, discard' }).click();
 	await page.waitForURL('/workouts');
 	await expect(page.getByTestId('workout-in-progress')).toHaveCount(0);
+});
+
+/** The workout in progress as this device keeps it */
+async function savedWorkoutState(page: Page) {
+	return page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes') ?? 'null'));
+}
+
+/** Changes the workout in progress kept on this device */
+async function changeSavedWorkoutState(page: Page, change: { startedAt?: Date; lastActivityAt?: Date }) {
+	await page.evaluate(
+		({ startedAt, lastActivityAt }) => {
+			const state = JSON.parse(localStorage.getItem('workoutRunes')!);
+			if (startedAt) state.workoutData.startedAt = startedAt;
+			if (lastActivityAt) state.lastActivityAt = lastActivityAt;
+			localStorage.setItem('workoutRunes', JSON.stringify(state));
+		},
+		{ startedAt: change.startedAt?.toISOString(), lastActivityAt: change.lastActivityAt?.toISOString() }
+	);
+}
+
+test('no mesocycle: pick a routine from My routines, suggestions from last time, saved with its name', async ({
+	page,
+	userData
+}) => {
+	await page.goto('/exercise-splits');
+	await createTemplateExerciseSplit(page);
+	// Rows done before, outside any routine
+	const rows = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } }
+	});
+	const twoDaysAgo = new Date(Date.now() - 2 * 86400000);
+	await prisma.workout.create({
+		data: {
+			userId: userData.userId,
+			userBodyweight: 100,
+			startedAt: twoDaysAgo,
+			endedAt: twoDaysAgo,
+			workoutExercises: {
+				create: [
+					{
+						exerciseIndex: 0,
+						exerciseId: rows.id,
+						name: rows.name,
+						targetMuscleGroup: rows.targetMuscleGroup,
+						setType: 'Straight',
+						repRangeStart: 10,
+						repRangeEnd: 15,
+						sets: { create: [{ setIndex: 0, reps: 12, load: 40, RIR: 2, skipped: false }] }
+					}
+				]
+			}
+		}
+	});
+
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	// My routines and a blank workout; no week, as there's no mesocycle
+	await expect(page.getByRole('radio', { name: /^Pull A/ })).toBeVisible();
+	await expect(page.getByRole('radio', { name: /^Blank workout/ })).toBeVisible();
+	await expect(page.getByRole('main')).not.toContainText('Week 1');
+	await expect(page.getByRole('radio', { name: /^Pull A/ })).toContainText('Not done yet');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('workout-routine-name')).toHaveText('Pull A');
+	// Suggested from last time
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^\d/);
+
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('button', { name: 'Skip and continue' }).click();
+	await page.waitForURL(/\/workouts\/manage\/overview/);
+	await saveWorkout(page);
+	const saved = await prisma.workout.findFirstOrThrow({
+		where: { userId: userData.userId, routineName: { not: null } },
+		include: { workoutOfMesocycle: true }
+	});
+	expect([saved.routineName, saved.workoutOfMesocycle]).toEqual(['Pull A', null]);
+
+	// The list shows the routine and the length; the routine was done today
+	await expect(page.getByRole('link', { name: /Pull A/ })).toContainText(/\d+ min/);
+	await page.getByLabel('create-workout').click();
+	await expect(page.getByRole('radio', { name: /^Pull A/ })).toContainText('Done today');
+});
+
+test('workout in progress: shown on every screen, resuming keeps its start, a nudge after 2 hours, it ends at the last tick', async ({
+	page,
+	userData
+}) => {
+	await page.goto('/exercise-splits');
+	await createTemplateExerciseSplit(page);
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	// Not on the workout's own pages
+	await expect(page.getByTestId('workout-in-progress')).toHaveCount(0);
+	const { startedAt } = (await savedWorkoutState(page)).workoutData;
+
+	for (const path of ['/exercise-splits', '/exercises', '/settings']) {
+		await page.goto(path);
+		await expect(page.getByTestId('workout-in-progress')).toContainText('Pull A · started');
+	}
+
+	// Back to setup and Continue: the same workout, the same start
+	await page.goto('/workouts/manage/start');
+	await page.getByRole('button', { name: 'Continue workout' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	expect((await savedWorkoutState(page)).workoutData.startedAt).toEqual(startedAt);
+
+	// Ticked a set an hour ago; started 2.5 hours ago and never saved
+	await fillSet(page, 'Barbell rows', 1, { reps: '12', load: '40', RIR: '2' });
+	await setBox(page, 'Barbell rows', 1).click();
+	const lastTick = new Date(Date.now() - 60 * 60000);
+	await changeSavedWorkoutState(page, { startedAt: new Date(Date.now() - 150 * 60000), lastActivityAt: lastTick });
+	await page.goto('/settings');
+	await expect(page.getByTestId('workout-in-progress-nudge')).toHaveText(
+		'Pull A was started 2 h 30 min ago. Finish or discard it?'
+	);
+	// Finishing: the sets not done are skipped (after asking), then it's saved
+	await page.getByRole('button', { name: 'Finish now' }).click();
+	await expect(page.getByRole('dialog')).toContainText('11 sets not done');
+	await page.getByRole('button', { name: 'Skip and continue' }).click();
+	await page.waitForURL(/\/workouts\/manage\/overview/);
+	await saveWorkout(page);
+
+	// It ended at the last ticked set, not when it was saved
+	const saved = await prisma.workout.findFirstOrThrow({ where: { userId: userData.userId } });
+	expect(Math.abs(saved.endedAt.getTime() - lastTick.getTime())).toBeLessThan(2000);
+});
+
+test('set row: the remove button is after the tick, hidden on a ticked set, off for the last one, and Undo brings a set back', async ({
+	page
+}) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	const remove = (exercise: string, set: number) => page.getByTestId(`${exercise}-set-${set}-remove`);
+	const tickBox = (await setBox(page, 'Barbell rows', 1).boundingBox())!;
+	const removeBox = (await remove('Barbell rows', 1).boundingBox())!;
+	expect(removeBox.x).toBeGreaterThan(tickBox.x + tickBox.width - 1);
+
+	// Removed with a note about a missing number; Undo puts it back, numbers and note too
+	await fillSet(page, 'Barbell rows', 3, { reps: '10', RIR: '1' });
+	await setBox(page, 'Barbell rows', 3).click();
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
+	await remove('Barbell rows', 3).click();
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveCount(0);
+	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
+	await page.getByRole('status').filter({ hasText: 'Set 3 removed' }).getByRole('button', { name: 'Undo' }).click();
+	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveValue('10');
+	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
+
+	// A ticked set is done: no remove button until it's unticked
+	await fillSet(page, 'Barbell rows', 1, { reps: '12', load: '40', RIR: '2' });
+	await setBox(page, 'Barbell rows', 1).click();
+	await expect(remove('Barbell rows', 1)).toBeHidden();
+	await setBox(page, 'Barbell rows', 1).click();
+	await expect(remove('Barbell rows', 1)).toBeVisible();
+
+	// The last set can't be removed
+	await remove('Face pulls', 3).click();
+	await remove('Face pulls', 2).click();
+	await expect(remove('Face pulls', 1)).toBeDisabled();
+	await expectSetsFitPhone(page);
+});
+
+test('workout length on the list and the workout page; over 3 hours, “check times?” opens Edit', async ({
+	page,
+	userData
+}) => {
+	const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60000);
+	const workout = (startMinutesAgo: number, endMinutesAgo: number) =>
+		prisma.workout.create({
+			data: { userId: userData.userId, userBodyweight: 100, startedAt: at(startMinutesAgo), endedAt: at(endMinutesAgo) }
+		});
+	const normal = await workout(26 * 60 + 68, 26 * 60);
+	const tooLong = await workout(5 * 60, 60);
+
+	await page.goto('/workouts');
+	await expect(page.getByTestId('workout-length')).toHaveText(['4 h', '1 h 8 min']);
+
+	await page.goto(`/workouts/${normal.id}`);
+	await expect(page.getByTestId('workout-length')).toHaveText('1 h 8 min');
+	await expect(page.getByTestId('check-workout-times')).toHaveCount(0);
+
+	await page.goto(`/workouts/${tooLong.id}`);
+	await expect(page.getByTestId('workout-length')).toHaveText('4 h');
+	await page.getByTestId('check-workout-times').click();
+	await page.waitForURL('/workouts/manage/start');
+	await expect(page.locator('#end-date')).toBeVisible();
 });

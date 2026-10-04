@@ -24,6 +24,8 @@ function createWorkoutRunes() {
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
 	/** This workout's reps-only exercises by name, with their rep cap (null for none) */
 	let repsOnly: Record<string, number | null> = $state({});
+	/** When a set was last ticked: a new workout ends there, not when it's saved */
+	let lastActivityAt: string | null = $state(null);
 
 	let editingExerciseIndex: number | undefined = $state();
 	let editingExercise: MesocycleExerciseTemplateWithoutIdsOrIndex | undefined = $state();
@@ -35,13 +37,20 @@ function createWorkoutRunes() {
 
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('workoutRunes');
-		if (savedState) ({ workoutData, workoutExercises, previousWorkoutData, repsOnly = {} } = JSON.parse(savedState));
+		if (savedState)
+			({
+				workoutData,
+				workoutExercises,
+				previousWorkoutData,
+				repsOnly = {},
+				lastActivityAt = null
+			} = JSON.parse(savedState));
 	}
 
 	function saveStoresToLocalStorage() {
 		localStorage.setItem(
 			'workoutRunes',
-			JSON.stringify({ workoutData, workoutExercises, editingWorkoutId, previousWorkoutData, repsOnly })
+			JSON.stringify({ workoutData, workoutExercises, editingWorkoutId, previousWorkoutData, repsOnly, lastActivityAt })
 		);
 	}
 
@@ -51,6 +60,13 @@ function createWorkoutRunes() {
 		editingWorkoutId = null;
 		previousWorkoutData = null;
 		repsOnly = {};
+		lastActivityAt = null;
+		saveStoresToLocalStorage();
+	}
+
+	/** A set (or mini-set) was just ticked */
+	function markActivity() {
+		lastActivityAt = new Date().toISOString();
 		saveStoresToLocalStorage();
 	}
 
@@ -215,6 +231,7 @@ function createWorkoutRunes() {
 	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {
 		editingWorkoutId = workout.id;
 		repsOnly = {};
+		lastActivityAt = null;
 		loadRepsOnly(workout.workoutExercises.map((ex) => ex.name));
 		workoutData = {
 			startedAt: workout.startedAt,
@@ -222,7 +239,8 @@ function createWorkoutRunes() {
 			userBodyweight: workout.userBodyweight,
 			workoutExercises: [],
 			note: workout.note,
-			homeWeightUnit
+			homeWeightUnit,
+			routineName: workout.routineName
 		};
 		// Saved loads are in kg; show them in the unit each exercise was done in
 		workoutExercises = workout.workoutExercises.map((ex) => {
@@ -246,6 +264,13 @@ function createWorkoutRunes() {
 	}
 
 	return {
+		get lastActivityAt() {
+			return lastActivityAt;
+		},
+		set lastActivityAt(value) {
+			lastActivityAt = value;
+		},
+		markActivity,
 		get workoutData() {
 			return workoutData;
 		},

@@ -48,7 +48,15 @@
 		const userBodyweight = workoutRunes.workoutData.userBodyweight;
 
 		const createData: RouterInputs['workouts']['create'] = {
-			workoutData: { ...workoutRunes.workoutData, userBodyweight, note: workoutRunes.workoutData.note ?? undefined },
+			workoutData: {
+				startedAt: workoutRunes.workoutData.startedAt,
+				// A new workout ends at its last ticked set (none: when it's saved). An edit sends its own
+				endedAt: workoutRunes.lastActivityAt ?? undefined,
+				workoutOfMesocycle: workoutRunes.workoutData.workoutOfMesocycle,
+				routineName: workoutRunes.workoutData.routineName ?? null,
+				userBodyweight,
+				note: workoutRunes.workoutData.note ?? undefined
+			},
 			workoutExercises: exercisesInKg.map((ex, idx) => {
 				const { sets, ...exercise } = ex;
 				return { ...exercise, exerciseIndex: idx };
@@ -132,8 +140,9 @@
 			return;
 		}
 
-		// A new workout from a block: ask first if it changed the routine
-		if (workoutRunes.editingWorkoutId === null && createData.workoutData.workoutOfMesocycle) {
+		// A new workout from a routine (block or My routines) may have changed it: ask before saving
+		const fromRoutine = createData.workoutData.workoutOfMesocycle || createData.workoutData.routineName;
+		if (workoutRunes.editingWorkoutId === null && fromRoutine) {
 			try {
 				const preview = await trpc().workouts.previewRoutineChanges.mutate(createData);
 				if (preview && preview.changes.length > 0) {
@@ -160,8 +169,8 @@
 			if (workoutRunes.editingWorkoutId === null) {
 				const created = await trpc().workouts.create.mutate(createData);
 				message = created.message;
-				if (!createData.workoutData.workoutOfMesocycle && createData.workoutExercises.length > 0)
-					blankWorkoutId = created.workoutId;
+				const blank = !createData.workoutData.workoutOfMesocycle && !createData.workoutData.routineName;
+				if (blank && createData.workoutExercises.length > 0) blankWorkoutId = created.workoutId;
 			} else {
 				message = (
 					await trpc().workouts.editById.mutate({

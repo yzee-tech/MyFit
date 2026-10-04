@@ -1,5 +1,5 @@
 <script lang="ts">
-	import WorkoutInProgressBanner from '$lib/components/workouts/WorkoutInProgressBanner.svelte';
+	import { formatWorkoutLength } from '$lib/utils/workoutLength';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
@@ -105,7 +105,6 @@
 </script>
 
 <H2>Workouts</H2>
-<WorkoutInProgressBanner />
 
 <div class="flex grow flex-col gap-2">
 	<div class="flex gap-1">
@@ -128,11 +127,16 @@
 				href="/workouts/{workout.id}"
 				variant="outline"
 			>
-				<span class="mr-auto text-lg font-semibold">
-					{workout.startedAt.toLocaleDateString(undefined, {
-						day: '2-digit',
-						month: 'long'
-					})}
+				<span class="mr-auto flex items-baseline gap-2">
+					<span class="text-lg font-semibold">
+						{workout.startedAt.toLocaleDateString(undefined, {
+							day: '2-digit',
+							month: 'long'
+						})}
+					</span>
+					<span class="text-sm text-muted-foreground" data-testid="workout-length">
+						{formatWorkoutLength(workout.startedAt, workout.endedAt)}
+					</span>
 				</span>
 				{#if workout.note}
 					<StickyNoteIcon class="text-muted-foreground" />
@@ -144,6 +148,8 @@
 						{splitDayName === '' ? 'Rest' : splitDayName}
 						{workoutOfMesocycle.workoutStatus === 'Skipped' ? '(skipped)' : ''}
 					</span>
+				{:else if workout.routineName}
+					<span class="truncate text-right text-muted-foreground">{workout.routineName}</span>
 				{/if}
 			</Button>
 		{/each}

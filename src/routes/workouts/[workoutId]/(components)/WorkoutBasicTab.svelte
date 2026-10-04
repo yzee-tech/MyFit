@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatWorkoutLength, LONG_WORKOUT_MINUTES, workoutMinutes } from '$lib/utils/workoutLength';
 	import { formatWeight } from '$lib/utils/weightUnits';
 	import { page } from '$app/stores';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -56,12 +57,6 @@
 			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to save as routine');
 		}
 		savingAsRoutine = false;
-	}
-
-	function getMinuteDifference(date1: Date, date2: Date): number {
-		const msInMinute = 60 * 1000;
-		const diffInMs = Math.abs(date1.getTime() - date2.getTime());
-		return Math.floor(diffInMs / msInMinute);
 	}
 
 	const targetedMuscleGroups = new Set(
@@ -124,7 +119,13 @@
 			})}
 			to
 			{workout.endedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-			({getMinuteDifference(workout.endedAt, workout.startedAt)} minutes)
+			· <span data-testid="workout-length">{formatWorkoutLength(workout.startedAt, workout.endedAt)}</span>
+			{#if workoutMinutes(workout.startedAt, workout.endedAt) > LONG_WORKOUT_MINUTES}
+				<!-- Most likely not saved straight away -->
+				<button class="ml-1 underline" data-testid="check-workout-times" onclick={editWorkout} type="button">
+					check times?
+				</button>
+			{/if}
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="space-y-3">
@@ -142,7 +143,12 @@
 					</Badge>
 				</div>
 			{:else}
-				<span class="font-semibold">No mesocycle</span>
+				<div class="flex items-center justify-between">
+					<span class="font-semibold">No mesocycle</span>
+					{#if workout.routineName}
+						<Badge class="whitespace-nowrap" variant="secondary">{workout.routineName}</Badge>
+					{/if}
+				</div>
 			{/if}
 		</div>
 		<div class="flex flex-col">

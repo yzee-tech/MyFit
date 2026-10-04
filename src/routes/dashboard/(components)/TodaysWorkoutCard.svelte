@@ -64,16 +64,22 @@
 				</Button>
 			</Card.Footer>
 		{:else}
+			{@const routineCount = todaysWorkoutData.myRoutines?.length ?? 0}
 			<Card.Header>
-				<Card.Title>No workout found</Card.Title>
-				<Card.Description>No active mesocycle</Card.Description>
+				<Card.Title>No mesocycle running</Card.Title>
+				<Card.Description>
+					{routineCount > 0
+						? `${routineCount} ${routineCount === 1 ? 'routine' : 'routines'} in My routines`
+						: 'No routines yet'}
+				</Card.Description>
 			</Card.Header>
 			<Card.Content class="h-20 text-sm leading-snug">
-				You can log workouts even without a mesocycle, you'll miss out on automatic progression and mesocycle statistics
+				Pick one of My routines or do a blank workout: suggestions follow your past workouts. A mesocycle adds a weekly
+				effort plan and deloads.
 			</Card.Content>
 			<Card.Footer class="flex flex-col items-end gap-2">
-				<Button href="/workouts/manage/start" variant="secondary">Start a workout without mesocycle</Button>
-				<Button href="/mesocycles">Go to mesocycles</Button>
+				<Button href="/workouts/manage/start">Start workout</Button>
+				<Button href="/mesocycles" variant="secondary">Go to mesocycles</Button>
 			</Card.Footer>
 		{/if}
 	{/await}

@@ -8,6 +8,7 @@
 	import MobileLayout from './(components)/layout/MobileLayout.svelte';
 	import UpdateDataLossDialog from './(components)/layout/UpdateDataLossDialog.svelte';
 	import TermsOfServiceDialog from '$lib/components/TermsOfServiceDialog.svelte';
+	import WorkoutInProgressBanner from '$lib/components/workouts/WorkoutInProgressBanner.svelte';
 
 	import { overrideItemIdKeyNameBeforeInitialisingDndZones } from 'svelte-dnd-action';
 	overrideItemIdKeyNameBeforeInitialisingDndZones('name');
@@ -36,7 +37,7 @@
 <TermsOfServiceDialog />
 
 {#if isMobile === true}
-	<MobileLayout>{@render children()}</MobileLayout>
+	<MobileLayout><WorkoutInProgressBanner />{@render children()}</MobileLayout>
 {:else if isMobile === false}
-	<DesktopLayout>{@render children()}</DesktopLayout>
+	<DesktopLayout><WorkoutInProgressBanner />{@render children()}</DesktopLayout>
 {/if}
