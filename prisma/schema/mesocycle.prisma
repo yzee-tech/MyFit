@@ -3,6 +3,7 @@ model Mesocycle {
   name                       String
   user                       User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId                     String
+  /// The routine list this block's routines follow; only blocks not yet finished have one
   exerciseSplit              ExerciseSplit?              @relation(fields: [exerciseSplitId], references: [id])
   exerciseSplitId            String?
   /// Target RIR of each week of the block, in order; -1 marks a deload week
@@ -34,6 +35,8 @@ model MesocycleExerciseSplitDay {
   dayIndex                   Int
   isRestDay                  Boolean
   weightUnit                 RoutineWeightUnit           @default(KG)
+  /// No longer in My routines. Kept, not deleted: workouts point at a routine by its position (dayIndex)
+  hidden                     Boolean                     @default(false)
   mesocycle                  Mesocycle                   @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
   mesocycleId                String
   mesocycleSplitDayExercises MesocycleExerciseTemplate[]
