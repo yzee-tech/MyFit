@@ -1,97 +1,95 @@
 <script lang="ts">
-	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { Badge } from '$lib/components/ui/badge/index.js';
-	import Button from '$lib/components/ui/button/button.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Input } from '$lib/components/ui/input';
-	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import { trpc } from '$lib/trpc/client';
-	import type { RouterOutputs } from '$lib/trpc/router.js';
-	import type { InfiniteEvent } from 'svelte-infinite-loading';
-	import AddIcon from 'virtual:icons/lucide/plus';
-	import SearchIcon from 'virtual:icons/lucide/search';
-	import DefaultInfiniteLoader from '../../lib/components/DefaultInfiniteLoader.svelte';
-	import { exerciseSplitRunes } from './manage/exerciseSplitRunes.svelte.js';
+	import type { RouterOutputs } from '$lib/trpc/router';
+	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
+	import { onMount } from 'svelte';
+	import EditIcon from 'virtual:icons/lucide/pencil';
+	import FileUpIcon from 'virtual:icons/lucide/file-up';
+	import MenuIcon from 'virtual:icons/lucide/menu';
+	import ExerciseSplitSkeleton from './(components)/ExerciseSplitSkeleton.svelte';
+	import ExercisesTableComponent from './(components)/ExercisesTableComponent.svelte';
+	import { exerciseSplitRunes } from './manage/exerciseSplitRunes.svelte';
 
-	let exerciseSplits: RouterOutputs['exerciseSplits']['load'] = $state([]);
-	let searchString = $state($page.url.searchParams.get('search') ?? '');
+	type MyRoutines = RouterOutputs['exerciseSplits']['mine'];
+	let myRoutines = $state<MyRoutines | 'loading'>('loading');
+	let routines = $derived(myRoutines === 'loading' ? [] : (myRoutines?.exerciseSplitDays ?? []));
 
-	function updateSearchParam(e: Event) {
-		e.preventDefault();
-		const url = new URL($page.url);
-		if (searchString === (url.searchParams.get('search') ?? '')) return;
+	onMount(async () => {
+		myRoutines = await trpc().exerciseSplits.mine.query();
+	});
 
-		if (searchString) url.searchParams.set('search', searchString);
-		else url.searchParams.delete('search');
-
-		exerciseSplits = [];
-		goto(url);
-	}
-
-	async function loadMore(infiniteEvent: InfiniteEvent) {
-		const lastExerciseSplit = exerciseSplits.at(-1);
-
-		const newExerciseSplits = await trpc().exerciseSplits.load.query({
-			cursorId: lastExerciseSplit?.id,
-			searchString
-		});
-
-		if (newExerciseSplits.length === 0) {
-			infiniteEvent.detail.complete();
-			return;
-		}
-
-		infiniteEvent.detail.loaded();
-		exerciseSplits.push(...newExerciseSplits);
-		if (newExerciseSplits.length < 10) infiniteEvent.detail.complete();
-	}
-
-	function createNewExerciseSplit() {
-		if (exerciseSplitRunes.editingExerciseSplitId !== null) exerciseSplitRunes.resetStores();
+	/** Opens the editor with My routines as saved */
+	function editRoutines() {
+		exerciseSplitRunes.loadMyRoutines(routines);
 		goto('/exercise-splits/manage/structure');
+	}
+
+	function exportRoutines() {
+		const exported = {
+			name: 'My routines',
+			exerciseSplitDays: routines.map(({ id, exerciseSplitId, exercises, ...routine }) => ({
+				...routine,
+				exercises: exercises.map(({ id, exerciseSplitDayId, ...exercise }) => exercise)
+			}))
+		};
+		const blob = new Blob([JSON.stringify(exported)], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = 'My routines.json';
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
 	}
 </script>
 
-<H2>Routine libraries</H2>
-
-<div class="flex grow flex-col gap-2">
-	<div class="flex gap-1">
-		<form class="contents" onsubmit={updateSearchParam}>
-			<Input id="search-exercise-splits" placeholder="Search" type="search" bind:value={searchString} />
-			<Button aria-label="search" type="submit" variant="secondary">
-				<SearchIcon />
+{#if myRoutines === 'loading'}
+	<ExerciseSplitSkeleton />
+{:else}
+	<div class="mb-4 flex items-end justify-between gap-2 border-b pb-2">
+		<div class="flex min-w-0 flex-col">
+			<h2 class="truncate text-3xl font-semibold tracking-tight">My routines</h2>
+			<span class="text-sm text-muted-foreground" data-testid="my-routines-count">
+				{routines.length > 0 ? formatRoutineCount(routines) : 'No routines yet'}
+			</span>
+		</div>
+		<div class="flex shrink-0 items-center gap-1">
+			<Button class="gap-2" onclick={editRoutines}>
+				<EditIcon />
+				{routines.length > 0 ? 'Edit' : 'Create'}
 			</Button>
-		</form>
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger asChild let:builder>
-				<Button aria-label="exercise-split-new-options" builders={[builder]}><AddIcon /></Button>
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content align="end">
-				<DropdownMenu.Group>
-					<DropdownMenu.Item onclick={createNewExerciseSplit}>Start from scratch</DropdownMenu.Item>
-					<DropdownMenu.Item href="/exercise-splits/templates">Use template</DropdownMenu.Item>
-					<DropdownMenu.Item href="/exercise-splits/import">Import</DropdownMenu.Item>
-				</DropdownMenu.Group>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger asChild let:builder>
+					<Button aria-label="my-routines-options" builders={[builder]} size="icon" variant="outline">
+						<MenuIcon />
+					</Button>
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end">
+					<DropdownMenu.Group>
+						<DropdownMenu.Item href="/exercise-splits/templates">Add from a template</DropdownMenu.Item>
+						<DropdownMenu.Item href="/exercise-splits/import">Import</DropdownMenu.Item>
+						<DropdownMenu.Item class="gap-2" disabled={routines.length === 0} onclick={exportRoutines}>
+							<FileUpIcon /> Export
+						</DropdownMenu.Item>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		</div>
 	</div>
-	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
-		{#each exerciseSplits as exerciseSplit}
-			<Button
-				class="flex h-12 items-center justify-between rounded-md border bg-card p-2"
-				href="/exercise-splits/{exerciseSplit.id}"
-				variant="outline"
-			>
-				<span class="truncate text-lg font-semibold">{exerciseSplit.name}</span>
-				<Badge>{formatRoutineCount(exerciseSplit.exerciseSplitDays)}</Badge>
-			</Button>
-		{/each}
-		<DefaultInfiniteLoader
-			{loadMore}
-			identifier={$page.url.searchParams.get('search')}
-			entityPlural="routine libraries"
-		/>
-	</div>
-</div>
+	{#if routines.length > 0}
+		<p class="mb-2 text-sm text-muted-foreground">
+			You pick one of these each time you train. Your current block always uses them as they are here.
+		</p>
+		<div class="flex grow flex-col">
+			<ExercisesTableComponent exerciseSplitDays={routines} />
+		</div>
+	{:else}
+		<div class="muted-text-box">
+			Create a routine for each workout you do, for example "Hotel gym – Upper". You can also start from a template.
+		</div>
+	{/if}
+{/if}

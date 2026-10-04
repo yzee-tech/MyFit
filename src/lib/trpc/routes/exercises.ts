@@ -5,9 +5,15 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { updateExerciseEverywhere } from '$lib/server/exercises';
+import {
+	findActiveBlockId,
+	relinkExerciseInBlocks,
+	syncBlockFromRoutines,
+	withRoutinesTransaction
+} from '$lib/server/blockCache';
 import { commonExercisePerMuscleGroup } from '$lib/common/commonExercises';
 import { MuscleGroupSchema } from '$lib/zodSchemas';
-import type { ChangeType, PrismaPromise, SetType } from '@prisma/client';
+import type { ChangeType, Prisma, SetType } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
@@ -70,9 +76,9 @@ const routineSettingsSelect = {
 	topRepRangeEnd: true
 } as const;
 
-/** Each exercise's routine settings from its most recent use: a workout, else a block, else a library */
+/** Each exercise's routine settings from its most recent use: a workout, else a block, else My routines */
 async function getRoutineSettings(userId: string, exerciseIds: string[]) {
-	const [fromWorkouts, fromBlocks, fromLibraries] = await Promise.all([
+	const [fromWorkouts, fromBlocks, fromMyRoutines] = await Promise.all([
 		prisma.workoutExercise.findMany({
 			where: { exerciseId: { in: exerciseIds }, workout: { userId } },
 			distinct: ['exerciseId'],
@@ -91,7 +97,7 @@ async function getRoutineSettings(userId: string, exerciseIds: string[]) {
 		})
 	]);
 	const settings = new Map<string, RoutineSettings>();
-	for (const { exerciseId, ...rest } of [...fromLibraries, ...fromBlocks, ...fromWorkouts]) {
+	for (const { exerciseId, ...rest } of [...fromMyRoutines, ...fromBlocks, ...fromWorkouts]) {
 		if (exerciseId) settings.set(exerciseId, rest);
 	}
 	return settings;
@@ -119,48 +125,35 @@ function builtInRoutineSettings(name: string): RoutineSettings | undefined {
  * one, with all the sets in the order they were done (the first entry's, then the next one's).
  * Levels and weights aren't combined, as their loads mean different things.
  */
-async function combineWorkoutDuplicates(exerciseIds: string[]): Promise<PrismaPromise<unknown>[]> {
-	const entries = await prisma.workoutExercise.findMany({
+async function combineWorkoutDuplicates(tx: Prisma.TransactionClient, exerciseIds: string[]) {
+	const entries = await tx.workoutExercise.findMany({
 		where: { exerciseId: { in: exerciseIds } },
 		select: { id: true, workoutId: true, exerciseIndex: true, weightUnit: true, _count: { select: { sets: true } } },
 		orderBy: [{ workoutId: 'asc' }, { exerciseIndex: 'asc' }]
 	});
 	const byWorkout = new Map<string, typeof entries>();
 	for (const entry of entries) byWorkout.set(entry.workoutId, [...(byWorkout.get(entry.workoutId) ?? []), entry]);
-	const queries: PrismaPromise<unknown>[] = [];
 	for (const workoutEntries of byWorkout.values()) {
 		if (workoutEntries.length < 2) continue;
 		const [kept, ...others] = workoutEntries;
 		const combined = others.filter((other) => isLevelUnit(other.weightUnit) === isLevelUnit(kept.weightUnit));
 		let setCount = kept._count.sets;
 		for (const other of combined) {
-			queries.push(
-				prisma.workoutExerciseSet.updateMany({
-					where: { workoutExerciseId: other.id },
-					data: { workoutExerciseId: kept.id, setIndex: { increment: setCount } }
-				})
-			);
+			await tx.workoutExerciseSet.updateMany({
+				where: { workoutExerciseId: other.id },
+				data: { workoutExerciseId: kept.id, setIndex: { increment: setCount } }
+			});
 			setCount += other._count.sets;
 		}
 		// Later exercises move up into the gap, last one removed first so the positions stay right
 		for (const other of [...combined].reverse()) {
-			queries.push(
-				prisma.workoutExercise.delete({ where: { id: other.id } }),
-				prisma.workoutExercise.updateMany({
-					where: { workoutId: other.workoutId, exerciseIndex: { gt: other.exerciseIndex } },
-					data: { exerciseIndex: { decrement: 1 } }
-				})
-			);
+			await tx.workoutExercise.delete({ where: { id: other.id } });
+			await tx.workoutExercise.updateMany({
+				where: { workoutId: other.workoutId, exerciseIndex: { gt: other.exerciseIndex } },
+				data: { exerciseIndex: { decrement: 1 } }
+			});
 		}
 	}
-	return queries;
-}
-
-function getActiveBlock(userId: string) {
-	return prisma.mesocycle.findFirst({
-		where: { userId, startDate: { not: null }, endDate: null },
-		select: { id: true, name: true }
-	});
 }
 
 async function findOwnExercise(userId: string, id: string) {
@@ -190,21 +183,13 @@ function mostCommon(values: number[]): number | undefined {
 export const exercises = t.router({
 	/** Every exercise, with where it's used */
 	list: t.procedure.query(async ({ ctx }) => {
-		const activeBlock = await getActiveBlock(ctx.userId);
-		const [allExercises, inLibraries, inBlock, inWorkouts, lastDone] = await Promise.all([
+		const [allExercises, inRoutines, inWorkouts, lastDone] = await Promise.all([
 			prisma.exercise.findMany({ where: { userId: ctx.userId }, orderBy: { name: 'asc' } }),
 			prisma.exerciseTemplate.groupBy({
 				by: ['exerciseId'],
 				where: { exerciseSplitDay: { exerciseSplit: { userId: ctx.userId } } },
 				_count: true
 			}),
-			activeBlock
-				? prisma.mesocycleExerciseTemplate.groupBy({
-						by: ['exerciseId'],
-						where: { mesocycleExerciseSplitDay: { mesocycleId: activeBlock.id } },
-						_count: true
-					})
-				: [],
 			prisma.workoutExercise.groupBy({
 				by: ['exerciseId'],
 				where: { workout: { userId: ctx.userId } },
@@ -221,7 +206,7 @@ export const exercises = t.router({
 			rows.find((row) => row.exerciseId === id)?._count ?? 0;
 		return allExercises.map((exercise) => ({
 			...exercise,
-			routineCount: count(inLibraries, exercise.id) + count(inBlock, exercise.id),
+			routineCount: count(inRoutines, exercise.id),
 			workoutCount: count(inWorkouts, exercise.id),
 			lastDoneAt: lastDone.find((row) => row.exerciseId === exercise.id)?.workout.startedAt ?? null
 		}));
@@ -246,20 +231,12 @@ export const exercises = t.router({
 	/** One exercise: its details, the routines using it and its history */
 	get: t.procedure.input(z.string().cuid2()).query(async ({ ctx, input }) => {
 		const exercise = await findOwnExercise(ctx.userId, input);
-		const activeBlock = await getActiveBlock(ctx.userId);
-		const [libraryEntries, blockEntries, workoutCount, lastDone] = await Promise.all([
+		const [routineEntries, workoutCount, lastDone] = await Promise.all([
 			prisma.exerciseTemplate.findMany({
-				where: { exerciseId: exercise.id },
-				include: { exerciseSplitDay: { include: { exerciseSplit: { select: { id: true, name: true } } } } },
+				where: { exerciseId: exercise.id, exerciseSplitDay: { exerciseSplit: { userId: ctx.userId } } },
+				include: { exerciseSplitDay: { select: { name: true } } },
 				orderBy: { exerciseSplitDay: { dayIndex: 'asc' } }
 			}),
-			activeBlock
-				? prisma.mesocycleExerciseTemplate.findMany({
-						where: { exerciseId: exercise.id, mesocycleExerciseSplitDay: { mesocycleId: activeBlock.id } },
-						include: { mesocycleExerciseSplitDay: { select: { name: true, dayIndex: true } } },
-						orderBy: { mesocycleExerciseSplitDay: { dayIndex: 'asc' } }
-					})
-				: [],
 			prisma.workoutExercise.count({ where: { exerciseId: exercise.id } }),
 			prisma.workoutExercise.findFirst({
 				where: { exerciseId: exercise.id },
@@ -269,21 +246,10 @@ export const exercises = t.router({
 		]);
 		return {
 			exercise,
-			activeBlock,
-			libraryEntries: libraryEntries.map((entry) => ({
+			routineEntries: routineEntries.map((entry) => ({
 				id: entry.id,
-				libraryId: entry.exerciseSplitDay.exerciseSplit.id,
-				libraryName: entry.exerciseSplitDay.exerciseSplit.name,
 				routineName: entry.exerciseSplitDay.name,
 				sets: routineSetCount(entry.sets),
-				setType: entry.setType,
-				repRangeStart: entry.repRangeStart,
-				repRangeEnd: entry.repRangeEnd
-			})),
-			blockEntries: blockEntries.map((entry) => ({
-				id: entry.id,
-				routineName: entry.mesocycleExerciseSplitDay.name,
-				sets: entry.sets,
 				setType: entry.setType,
 				repRangeStart: entry.repRangeStart,
 				repRangeEnd: entry.repRangeEnd
@@ -293,55 +259,18 @@ export const exercises = t.router({
 		};
 	}),
 
-	/** Routines an exercise can be added to: every library's, and the current block's */
+	/** Routines an exercise can be added to: My routines */
 	routineTargets: t.procedure.query(async ({ ctx }) => {
-		const [libraries, activeBlock] = await Promise.all([
-			prisma.exerciseSplit.findMany({
-				where: { userId: ctx.userId },
-				orderBy: { name: 'asc' },
-				select: {
-					id: true,
-					name: true,
-					exerciseSplitDays: {
-						where: { isRestDay: false },
-						orderBy: { dayIndex: 'asc' },
-						select: { id: true, name: true, exercises: { select: { exerciseId: true } } }
-					}
-				}
-			}),
-			prisma.mesocycle.findFirst({
-				where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-				select: {
-					id: true,
-					name: true,
-					mesocycleExerciseSplitDays: {
-						where: { isRestDay: false },
-						orderBy: { dayIndex: 'asc' },
-						select: { id: true, name: true, mesocycleSplitDayExercises: { select: { exerciseId: true } } }
-					}
-				}
-			})
-		]);
-		return {
-			libraries: libraries.map((library) => ({
-				id: library.id,
-				name: library.name,
-				routines: library.exerciseSplitDays.map((day) => ({
-					id: day.id,
-					name: day.name,
-					exerciseIds: day.exercises.map((ex) => ex.exerciseId)
-				}))
-			})),
-			activeBlock: activeBlock && {
-				id: activeBlock.id,
-				name: activeBlock.name,
-				routines: activeBlock.mesocycleExerciseSplitDays.map((day) => ({
-					id: day.id,
-					name: day.name,
-					exerciseIds: day.mesocycleSplitDayExercises.map((ex) => ex.exerciseId)
-				}))
-			}
-		};
+		const routines = await prisma.exerciseSplitDay.findMany({
+			where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
+			orderBy: { dayIndex: 'asc' },
+			select: { id: true, name: true, exercises: { select: { exerciseId: true } } }
+		});
+		return routines.map((routine) => ({
+			id: routine.id,
+			name: routine.name,
+			exerciseIds: routine.exercises.map((ex) => ex.exerciseId)
+		}));
 	}),
 
 	create: t.procedure.input(exerciseDetailsInput).mutation(async ({ ctx, input }) => {
@@ -357,22 +286,16 @@ export const exercises = t.router({
 			if (input.details.name !== exercise.name) await assertNameFree(ctx.userId, input.details.name, exercise.id);
 			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
 			const { note, repsOnly, maxReps, ...shared } = input.details;
-			await prisma.$transaction([
-				...updateExerciseEverywhere(exercise.id, shared),
-				prisma.exercise.update({ where: { id: exercise.id }, data: { note, repsOnly, maxReps } })
-			]);
+			await withRoutinesTransaction(async (tx) => {
+				await updateExerciseEverywhere(tx, ctx.userId, exercise.id, shared);
+				await tx.exercise.update({ where: { id: exercise.id }, data: { note, repsOnly, maxReps } });
+			});
 			return { message: 'Exercise saved' };
 		}),
 
-	/** Adds an exercise to the end of routines, with settings from its most recent use */
+	/** Adds an exercise to the end of routines in My routines, with settings from its most recent use */
 	addToRoutines: t.procedure
-		.input(
-			z.strictObject({
-				exerciseId: z.string().cuid2(),
-				libraryRoutineIds: z.array(z.string().cuid2()),
-				blockRoutineIds: z.array(z.string().cuid2())
-			})
-		)
+		.input(z.strictObject({ exerciseId: z.string().cuid2(), routineIds: z.array(z.string().cuid2()) }))
 		.mutation(async ({ ctx, input }) => {
 			const exercise = await findOwnExercise(ctx.userId, input.exerciseId);
 			const settings = (await getRoutineSettings(ctx.userId, [exercise.id])).get(exercise.id) ??
@@ -386,88 +309,71 @@ export const exercises = t.router({
 				...settings
 			};
 
-			const [libraryRoutines, blockRoutines] = await Promise.all([
-				prisma.exerciseSplitDay.findMany({
-					where: { id: { in: input.libraryRoutineIds }, exerciseSplit: { userId: ctx.userId } },
+			const added = await withRoutinesTransaction(async (tx) => {
+				const routines = await tx.exerciseSplitDay.findMany({
+					where: { id: { in: input.routineIds }, exerciseSplit: { userId: ctx.userId } },
 					include: { exercises: { select: { exerciseId: true, exerciseIndex: true, sets: true } } }
-				}),
-				prisma.mesocycleExerciseSplitDay.findMany({
-					where: {
-						id: { in: input.blockRoutineIds },
-						mesocycle: { userId: ctx.userId, startDate: { not: null }, endDate: null }
-					},
-					include: { mesocycleSplitDayExercises: { select: { exerciseId: true, exerciseIndex: true, sets: true } } }
-				})
-			]);
-			if (
-				libraryRoutines.length !== input.libraryRoutineIds.length ||
-				blockRoutines.length !== input.blockRoutineIds.length
-			) {
-				throw new TRPCError({ code: 'NOT_FOUND', message: 'Routine not found' });
-			}
-
-			const queries: PrismaPromise<unknown>[] = [];
-			for (const routine of libraryRoutines) {
-				if (routine.exercises.some((ex) => ex.exerciseId === exercise.id)) continue;
-				const exerciseIndex = Math.max(-1, ...routine.exercises.map((ex) => ex.exerciseIndex)) + 1;
-				const sets = mostCommon(routine.exercises.map((ex) => routineSetCount(ex.sets))) ?? DEFAULT_SETS;
-				queries.push(
-					prisma.exerciseTemplate.create({
+				});
+				if (routines.length !== input.routineIds.length) {
+					throw new TRPCError({ code: 'NOT_FOUND', message: 'Routine not found' });
+				}
+				let count = 0;
+				for (const routine of routines) {
+					if (routine.exercises.some((ex) => ex.exerciseId === exercise.id)) continue;
+					const exerciseIndex = Math.max(-1, ...routine.exercises.map((ex) => ex.exerciseIndex)) + 1;
+					const sets = mostCommon(routine.exercises.map((ex) => routineSetCount(ex.sets))) ?? DEFAULT_SETS;
+					await tx.exerciseTemplate.create({
 						data: { ...details, exerciseIndex, sets, exerciseSplitDayId: routine.id }
-					})
-				);
-			}
-			for (const routine of blockRoutines) {
-				const existing = routine.mesocycleSplitDayExercises;
-				if (existing.some((ex) => ex.exerciseId === exercise.id)) continue;
-				const exerciseIndex = Math.max(-1, ...existing.map((ex) => ex.exerciseIndex)) + 1;
-				const sets = mostCommon(existing.map((ex) => ex.sets)) ?? DEFAULT_SETS;
-				queries.push(
-					prisma.mesocycleExerciseTemplate.create({
-						data: { ...details, exerciseIndex, sets, mesocycleExerciseSplitDayId: routine.id }
-					})
-				);
-			}
-			await prisma.$transaction(queries);
-			return { added: queries.length };
+					});
+					count++;
+				}
+				await syncBlockFromRoutines(tx, ctx.userId);
+				return count;
+			});
+			return { added };
 		}),
 
 	removeFromRoutines: t.procedure
-		.input(
-			z.strictObject({
-				exerciseId: z.string().cuid2(),
-				libraryEntryIds: z.array(z.string().cuid2()),
-				blockEntryIds: z.array(z.string().cuid2())
-			})
-		)
+		.input(z.strictObject({ exerciseId: z.string().cuid2(), entryIds: z.array(z.string().cuid2()) }))
 		.mutation(async ({ ctx, input }) => {
 			const exercise = await findOwnExercise(ctx.userId, input.exerciseId);
-			const [fromLibraries, fromBlocks] = await prisma.$transaction([
-				prisma.exerciseTemplate.deleteMany({ where: { id: { in: input.libraryEntryIds }, exerciseId: exercise.id } }),
-				prisma.mesocycleExerciseTemplate.deleteMany({
-					where: { id: { in: input.blockEntryIds }, exerciseId: exercise.id }
-				})
-			]);
-			return { removed: fromLibraries.count + fromBlocks.count };
+			const removed = await withRoutinesTransaction(async (tx) => {
+				const { count } = await tx.exerciseTemplate.deleteMany({
+					where: {
+						id: { in: input.entryIds },
+						exerciseId: exercise.id,
+						exerciseSplitDay: { exerciseSplit: { userId: ctx.userId } }
+					}
+				});
+				await syncBlockFromRoutines(tx, ctx.userId);
+				return count;
+			});
+			return { removed };
 		}),
 
 	/**
-	 * Removes an exercise from every routine. With workouts it's archived, so they keep it; without
-	 * any, it's gone completely.
+	 * Removes an exercise from My routines. With workouts it's archived, so they keep it; without
+	 * any, it's gone completely. Finished blocks keep their entry for it, without the link.
 	 */
 	delete: t.procedure.input(z.string().cuid2()).mutation(async ({ ctx, input }) => {
 		const exercise = await findOwnExercise(ctx.userId, input);
 		const workoutCount = await prisma.workoutExercise.count({ where: { exerciseId: exercise.id } });
-		if (workoutCount === 0) {
-			await prisma.exercise.delete({ where: { id: exercise.id } });
-			return { archived: false };
-		}
-		await prisma.$transaction([
-			prisma.exerciseTemplate.deleteMany({ where: { exerciseId: exercise.id } }),
-			prisma.mesocycleExerciseTemplate.deleteMany({ where: { exerciseId: exercise.id } }),
-			prisma.exercise.update({ where: { id: exercise.id }, data: { archived: true } })
-		]);
-		return { archived: true };
+		await withRoutinesTransaction(async (tx) => {
+			await tx.exerciseTemplate.deleteMany({ where: { exerciseId: exercise.id } });
+			await syncBlockFromRoutines(tx, ctx.userId);
+			if (workoutCount === 0) {
+				// Other blocks keep their entry; the active one no longer has it after the sync
+				await relinkExerciseInBlocks(
+					tx,
+					{ kind: 'unlink', exerciseId: exercise.id },
+					{ activeBlockId: await findActiveBlockId(tx, ctx.userId) }
+				);
+				await tx.exercise.delete({ where: { id: exercise.id } });
+			} else {
+				await tx.exercise.update({ where: { id: exercise.id }, data: { archived: true } });
+			}
+		});
+		return { archived: workoutCount > 0 };
 	}),
 
 	/**
@@ -492,53 +398,33 @@ export const exercises = t.router({
 				bodyweightFraction: into.bodyweightFraction
 			};
 
-			// A routine that already has both keeps just the one merged into
-			const [fromLibrary, intoLibrary, fromBlock, intoBlock] = await Promise.all([
-				prisma.exerciseTemplate.findMany({
-					where: { exerciseId: from.id },
-					select: { id: true, exerciseSplitDayId: true }
-				}),
-				prisma.exerciseTemplate.findMany({ where: { exerciseId: into.id }, select: { exerciseSplitDayId: true } }),
-				prisma.mesocycleExerciseTemplate.findMany({
-					where: { exerciseId: from.id },
-					select: { id: true, mesocycleExerciseSplitDayId: true }
-				}),
-				prisma.mesocycleExerciseTemplate.findMany({
-					where: { exerciseId: into.id },
-					select: { mesocycleExerciseSplitDayId: true }
-				})
-			]);
-			const libraryDaysWithInto = new Set(intoLibrary.map((entry) => entry.exerciseSplitDayId));
-			const blockDaysWithInto = new Set(intoBlock.map((entry) => entry.mesocycleExerciseSplitDayId));
-			const [libraryDuplicates, libraryMoves] = [
-				fromLibrary.filter((entry) => libraryDaysWithInto.has(entry.exerciseSplitDayId)),
-				fromLibrary.filter((entry) => !libraryDaysWithInto.has(entry.exerciseSplitDayId))
-			];
-			const [blockDuplicates, blockMoves] = [
-				fromBlock.filter((entry) => blockDaysWithInto.has(entry.mesocycleExerciseSplitDayId)),
-				fromBlock.filter((entry) => !blockDaysWithInto.has(entry.mesocycleExerciseSplitDayId))
-			];
+			await withRoutinesTransaction(async (tx) => {
+				// A routine in My routines that already has both keeps just the one merged into
+				const [fromEntries, intoEntries] = await Promise.all([
+					tx.exerciseTemplate.findMany({
+						where: { exerciseId: from.id },
+						select: { id: true, exerciseSplitDayId: true }
+					}),
+					tx.exerciseTemplate.findMany({ where: { exerciseId: into.id }, select: { exerciseSplitDayId: true } })
+				]);
+				const routinesWithInto = new Set(intoEntries.map((entry) => entry.exerciseSplitDayId));
+				const duplicates = fromEntries.filter((entry) => routinesWithInto.has(entry.exerciseSplitDayId));
+				const moves = fromEntries.filter((entry) => !routinesWithInto.has(entry.exerciseSplitDayId));
 
-			const combineQueries = await combineWorkoutDuplicates([from.id, into.id]);
-
-			await prisma.$transaction([
-				...combineQueries,
-				prisma.exerciseTemplate.deleteMany({ where: { id: { in: libraryDuplicates.map((entry) => entry.id) } } }),
-				prisma.exerciseTemplate.updateMany({
-					where: { id: { in: libraryMoves.map((entry) => entry.id) } },
-					data: details
-				}),
-				prisma.mesocycleExerciseTemplate.deleteMany({
-					where: { id: { in: blockDuplicates.map((entry) => entry.id) } }
-				}),
-				prisma.mesocycleExerciseTemplate.updateMany({
-					where: { id: { in: blockMoves.map((entry) => entry.id) } },
-					data: details
-				}),
-				prisma.workoutExercise.updateMany({ where: { exerciseId: from.id }, data: details }),
-				prisma.exercise.update({ where: { id: into.id }, data: { archived: false } }),
-				prisma.exercise.delete({ where: { id: from.id } })
-			]);
+				await combineWorkoutDuplicates(tx, [from.id, into.id]);
+				await tx.exerciseTemplate.deleteMany({ where: { id: { in: duplicates.map((entry) => entry.id) } } });
+				await tx.exerciseTemplate.updateMany({ where: { id: { in: moves.map((entry) => entry.id) } }, data: details });
+				await tx.workoutExercise.updateMany({ where: { exerciseId: from.id }, data: details });
+				// Other blocks' entries point at the exercise merged into; the active block follows My routines
+				await relinkExerciseInBlocks(
+					tx,
+					{ kind: 'merge', fromId: from.id, into: details },
+					{ activeBlockId: await findActiveBlockId(tx, ctx.userId) }
+				);
+				await syncBlockFromRoutines(tx, ctx.userId);
+				await tx.exercise.update({ where: { id: into.id }, data: { archived: false } });
+				await tx.exercise.delete({ where: { id: from.id } });
+			});
 			return { message: `Merged ${from.name} into ${into.name}` };
 		})
 });

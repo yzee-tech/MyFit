@@ -14,16 +14,16 @@ generator zod {
 }
 
 model User {
-  id             String          @id @default(cuid()) /// @zod.string.cuid2()
+  id             String         @id @default(cuid()) /// @zod.string.cuid2()
   name           String?
-  email          String          @unique
+  email          String         @unique
   emailVerified  DateTime?
   image          String?
   accounts       Account[]
   sessions       Session[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  exerciseSplits ExerciseSplit[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  exerciseSplit  ExerciseSplit?
   mesocycles     Mesocycle[]
   workouts       Workout[]
   migratedFromV2 Boolean?

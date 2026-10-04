@@ -308,7 +308,10 @@
 			</span>
 		</div>
 		{#if activeBlock.routines.length === 0}
-			<p class="mb-1 px-1 text-sm text-muted-foreground">This block has no routines yet.</p>
+			<p class="mb-1 px-1 text-sm text-muted-foreground">
+				No routines yet: create them in <a class="underline" href="/exercise-splits">My routines</a>, or do a blank
+				workout.
+			</p>
 		{/if}
 		<div class="mb-1 flex flex-col gap-1" role="radiogroup" aria-label="Routine">
 			{#each activeBlock.routines as routine (routine.splitDayIndex)}

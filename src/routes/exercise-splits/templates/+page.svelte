@@ -10,20 +10,24 @@
 	import { exerciseSplitTemplates } from '$lib/common/exerciseSplitTemplates';
 	import { exerciseSplitRunes, type FullExerciseSplitWithoutIdsOrIndex } from '../manage/exerciseSplitRunes.svelte';
 	import { goto } from '$app/navigation';
+	import { trpc } from '$lib/trpc/client';
 
-	function templateExerciseSplit(exerciseSplit: FullExerciseSplitWithoutIdsOrIndex) {
-		exerciseSplitRunes.loadExerciseSplit(exerciseSplit);
+	/** The template's routines go after My routines, in the editor: nothing is saved until Save */
+	async function addTemplate(exerciseSplit: FullExerciseSplitWithoutIdsOrIndex) {
+		const myRoutines = await trpc().exerciseSplits.mine.query();
+		exerciseSplitRunes.loadMyRoutines(myRoutines?.exerciseSplitDays ?? []);
+		exerciseSplitRunes.appendRoutines(exerciseSplit.exerciseSplitDays);
 		goto('/exercise-splits/manage/structure');
 	}
 </script>
 
-<H2>Routine library templates</H2>
-<H3>Templates</H3>
+<H2>Templates</H2>
+<H3>Add a template’s routines to My routines</H3>
 
 {#each exerciseSplitTemplates as { description, exerciseSplit }}
 	<Button
 		class="mb-1 flex h-fit flex-col rounded-md border bg-card p-2"
-		onclick={() => templateExerciseSplit(exerciseSplit)}
+		onclick={() => addTemplate(exerciseSplit)}
 		variant="outline"
 	>
 		<div class="pointer-events-none flex w-full items-center justify-between">

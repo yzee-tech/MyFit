@@ -26,7 +26,7 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	await page.goto('/exercise-splits');
 	await createMesocycle(page);
 
-	// Cable lateral raises is in two routines of the library, and in the block made from it
+	// Cable lateral raises is in two routines of My routines, and in the block that follows them
 	const exercise = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Cable lateral raises' } },
 		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true }
@@ -47,9 +47,7 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 
 	// Routines show it, but can't change it
 	await page.goto('/exercise-splits');
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('tab', { name: 'Push A' }).click();
 	await page.getByLabel('Cable lateral raises options').click();
@@ -166,29 +164,34 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 	await expect(page.getByRole('main')).toContainText('Chest press – Hotel');
 	await expect(page.getByRole('main')).toContainText('Not in a routine yet');
 
-	// Add it to the current block and to the library, each at Push A
+	// Add it to Push A and Pull B in My routines: the current block follows
 	await page.getByRole('button', { name: 'Add to routine' }).click();
-	await page.getByLabel('Current block Push A').click();
-	await page.getByLabel('Pull Push Legs Push A').click();
+	await page.getByLabel('My routines Push A').click();
+	await page.getByLabel('My routines Pull B').click();
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Added to 2 routines' })).toBeVisible();
-	await expect(page.getByRole('main')).toContainText('Pull Push Legs › Push A');
-	await expect(page.getByRole('main')).toContainText('Current block MyMeso › Push A');
+	await expect(page.getByRole('main')).toContainText('My routines › Push A');
+	await expect(page.getByRole('main')).toContainText('My routines › Pull B');
 
 	const exercise = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Chest press – Hotel' } },
 		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true }
 	});
-	expect(exercise.exerciseTemplates).toHaveLength(1);
-	expect(exercise.mesocycleExerciseTemplates).toHaveLength(1);
+	expect(exercise.exerciseTemplates).toHaveLength(2);
+	expect(exercise.mesocycleExerciseTemplates).toHaveLength(2);
 	expect(exercise.mesocycleExerciseTemplates[0].sets).toBeGreaterThan(0);
 
-	// Remove it from the library routine only
+	// Remove it from Pull B: gone from the block's Pull B too
 	await page.getByRole('button', { name: 'Remove from routines' }).click();
-	await page.getByLabel('Remove from Pull Push Legs Push A').click();
+	await page.getByLabel('Remove from My routines Pull B').click();
 	await page.getByRole('button', { name: 'Remove', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Removed from 1 routine' })).toBeVisible();
-	await expect(page.getByRole('main')).not.toContainText('Pull Push Legs › Push A');
+	await expect(page.getByRole('main')).not.toContainText('My routines › Pull B');
+	expect(
+		await prisma.mesocycleExerciseTemplate.count({
+			where: { exerciseId: exercise.id, mesocycleExerciseSplitDay: { name: 'Pull B' } }
+		})
+	).toEqual(0);
 
 	// Never done, so deleting removes it completely
 	await page.getByLabel('exercise-options').click();
@@ -561,9 +564,7 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await createExercises(userData.userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs' }]);
 
 	// Edit face pulls in the library: 4 sets and a routine note first
-	await page.getByRole('link', { name: 'Pull Push Legs 6 routines' }).click();
-	await page.getByLabel('exercise-split-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Edit' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/exercise-splits/manage/exercises');
 	await page.getByRole('tab', { name: 'Pull A' }).click();
@@ -583,9 +584,12 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await expect(page.locator('#exercise-note')).toHaveValue('seat on 4');
 	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/manage/exercises');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
-	await expect(page.getByRole('main')).toContainText('Pull-ups');
+	await expect(page.getByRole('main')).toContainText('Sit-ups');
+	await expect(page.getByRole('main')).not.toContainText('Face pulls');
 	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Routine library saved' })).toBeVisible({ timeout: 10000 });
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	// The editor goes back to My routines once saved (an earlier save's message may still show)
+	await page.waitForURL('/exercise-splits');
 
 	const pullA = await prisma.exerciseSplitDay.findFirstOrThrow({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },

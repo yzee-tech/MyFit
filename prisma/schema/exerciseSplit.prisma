@@ -1,8 +1,9 @@
+/// A person's routines ("My routines"): one list per person, the one place routines are edited
 model ExerciseSplit {
   id                String             @id @default(cuid()) /// @zod.string.cuid2()
   name              String
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId            String
+  userId            String             @unique
   exerciseSplitDays ExerciseSplitDay[]
   usedByMesocycles  Mesocycle[]
 }
@@ -19,26 +20,33 @@ model ExerciseSplitDay {
 }
 
 model ExerciseTemplate {
-  id                 String           @id @default(cuid()) /// @zod.string.cuid2()
-  name               String
-  exerciseIndex      Int
-  targetMuscleGroup  MuscleGroup
-  customMuscleGroup  String?
-  bodyweightFraction Float?
+  id                  String           @id @default(cuid()) /// @zod.string.cuid2()
+  name                String
+  exerciseIndex       Int
+  targetMuscleGroup   MuscleGroup
+  customMuscleGroup   String?
+  bodyweightFraction  Float?
   /// Sets a new block starts this exercise with; none means the block asks
-  sets               Int?
-  setType            SetType
-  repRangeStart      Int
-  repRangeEnd        Int
-  changeType         ChangeType?
-  changeAmount       Float?
-  note               String?
-  exerciseSplitDay   ExerciseSplitDay @relation(fields: [exerciseSplitDayId], references: [id], onDelete: Cascade)
-  exerciseSplitDayId String
-  topRepRangeStart   Int?
-  topRepRangeEnd     Int?
+  sets                Int?
+  setType             SetType
+  repRangeStart       Int
+  repRangeEnd         Int
+  changeType          ChangeType?
+  changeAmount        Float?
+  note                String?
+  exerciseSplitDay    ExerciseSplitDay @relation(fields: [exerciseSplitDayId], references: [id], onDelete: Cascade)
+  exerciseSplitDayId  String
+  topRepRangeStart    Int?
+  topRepRangeEnd      Int?
   /// Weights available for this exercise (a WeightSet id); none means standard steps
-  weightSetId        String?
-  exercise           Exercise?        @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  exerciseId         String?
+  weightSetId         String?
+  exercise            Exercise?        @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exerciseId          String?
+  /// Progression overrides: none means the block's setting
+  overloadPercentage  Float?
+  lastSetToFailure    Boolean?
+  forceRIRMatching    Boolean?
+  minimumWeightChange Float?
+  /// Unit chosen for this exercise when it differs from the routine's (e.g. lb machines at a kg gym)
+  weightUnit          WeightUnit?
 }

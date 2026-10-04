@@ -5,7 +5,13 @@
  */
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
-import type { MuscleGroup, PrismaPromise } from '@prisma/client';
+import type { MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
+import {
+	findActiveBlockId,
+	relinkExerciseInBlocks,
+	syncBlockFromRoutines,
+	withRoutinesTransaction
+} from './blockCache';
 
 /** The details that belong to the exercise itself, not to a routine or a workout */
 export type ExerciseDetails = {
@@ -31,17 +37,25 @@ function detailsOf(item: ExerciseDetails) {
 	};
 }
 
-/** Queries that give an exercise new details and copy them to every routine and workout using it */
-export function updateExerciseEverywhere(
+/**
+ * Gives an exercise new details and copies them to My routines, past workouts and blocks' copies
+ * (the active block's by syncing it from My routines)
+ */
+export async function updateExerciseEverywhere(
+	tx: Prisma.TransactionClient,
+	userId: string,
 	exerciseId: string,
 	data: Partial<Omit<ResolvedExercise, 'id'>>
-): PrismaPromise<unknown>[] {
-	return [
-		prisma.exercise.update({ where: { id: exerciseId }, data }),
-		prisma.exerciseTemplate.updateMany({ where: { exerciseId }, data }),
-		prisma.mesocycleExerciseTemplate.updateMany({ where: { exerciseId }, data }),
-		prisma.workoutExercise.updateMany({ where: { exerciseId }, data })
-	];
+) {
+	await tx.exercise.update({ where: { id: exerciseId }, data });
+	await tx.exerciseTemplate.updateMany({ where: { exerciseId }, data });
+	await tx.workoutExercise.updateMany({ where: { exerciseId }, data });
+	await relinkExerciseInBlocks(
+		tx,
+		{ kind: 'details', exerciseId, data },
+		{ activeBlockId: await findActiveBlockId(tx, userId) }
+	);
+	await syncBlockFromRoutines(tx, userId);
 }
 
 /**
@@ -49,17 +63,18 @@ export function updateExerciseEverywhere(
  * import brings its own exercises). Existing exercises keep their details: those change only on
  * the Exercises page. `restore`: putting a deleted exercise back into a routine brings it back.
  *
- * Returns the exercises by name, and queries to run with the save.
+ * Returns the exercises by name, and queries to run with the save (or, for a save in an interactive
+ * transaction, the ids of exercises to bring back).
  */
 export async function resolveExercises(
 	userId: string,
 	items: ExerciseDetails[],
 	{ restore }: { restore: boolean }
-): Promise<{ byName: Map<string, ResolvedExercise>; syncQueries: PrismaPromise<unknown>[] }> {
+): Promise<{ byName: Map<string, ResolvedExercise>; syncQueries: PrismaPromise<unknown>[]; restoreIds: string[] }> {
 	const firstByName = new Map<string, ExerciseDetails>();
 	items.forEach((item) => firstByName.set(item.name, firstByName.get(item.name) ?? item));
 	const names = [...firstByName.keys()];
-	if (names.length === 0) return { byName: new Map(), syncQueries: [] };
+	if (names.length === 0) return { byName: new Map(), syncQueries: [], restoreIds: [] };
 
 	const select = {
 		id: true,
@@ -79,15 +94,13 @@ export async function resolveExercises(
 		exercises = await prisma.exercise.findMany({ where: { userId, name: { in: names } }, select });
 	}
 
-	const syncQueries: PrismaPromise<unknown>[] = [];
+	const restoreIds = restore ? exercises.filter((exercise) => exercise.archived).map((exercise) => exercise.id) : [];
+	const syncQueries: PrismaPromise<unknown>[] = restoreIds.map((id) =>
+		prisma.exercise.update({ where: { id }, data: { archived: false } })
+	);
 	const byName = new Map<string, ResolvedExercise>();
-	for (const { archived, ...exercise } of exercises) {
-		if (archived && restore) {
-			syncQueries.push(prisma.exercise.update({ where: { id: exercise.id }, data: { archived: false } }));
-		}
-		byName.set(exercise.name, exercise);
-	}
-	return { byName, syncQueries };
+	for (const { archived, ...exercise } of exercises) byName.set(exercise.name, exercise);
+	return { byName, syncQueries, restoreIds };
 }
 
 /**
@@ -117,6 +130,6 @@ export async function renameExercise(userId: string, oldName: string, newName: s
 	if (trimmed === oldName) return exercise;
 	const clash = await prisma.exercise.findUnique({ where: { userId_name: { userId, name: trimmed } } });
 	if (clash) throw new TRPCError({ code: 'CONFLICT', message: `An exercise called ${trimmed} already exists` });
-	await prisma.$transaction(updateExerciseEverywhere(exercise.id, { name: trimmed }));
+	await withRoutinesTransaction((tx) => updateExerciseEverywhere(tx, userId, exercise.id, { name: trimmed }));
 	return exercise;
 }

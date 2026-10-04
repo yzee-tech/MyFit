@@ -1,177 +1,43 @@
+/**
+ * My routines: each person's one list of routines (an ExerciseSplit), the one place routines are
+ * edited. The active block follows it: every change here syncs the block in the same transaction.
+ */
 import { prisma } from '$lib/prisma';
 import { z } from 'zod';
 import { t } from '$lib/trpc/t';
-import {
-	ExerciseSplitDayCreateWithoutExerciseSplitInputSchema,
-	ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema
-} from '$lib/zodSchemas';
-import type { ExerciseSplitDay, Prisma, PrismaPromise } from '@prisma/client';
+import { ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema } from '$lib/zodSchemas';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
-import { linkToExercise, resolveExercises, type ResolvedExercise } from '$lib/server/exercises';
-import { routineSetCount } from '$lib/utils/routineSets';
+import { linkToExercise, resolveExercises } from '$lib/server/exercises';
+import {
+	ensureMyRoutines,
+	syncBlockFromRoutines,
+	uniqueRoutineName,
+	withRoutinesTransaction
+} from '$lib/server/blockCache';
 
-const zodExerciseSplitInput = z.strictObject({
-	splitName: z.string(),
-	splitDays: z.array(ExerciseSplitDayCreateWithoutExerciseSplitInputSchema),
-	splitExercises: z.array(z.array(ignoreExerciseLink(ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema)))
+const zodSaveRoutinesInput = z.strictObject({
+	routines: z.array(
+		z.strictObject({
+			name: z.string().trim().min(1).max(100),
+			weightUnit: z.enum(['KG', 'LB', 'ASK']),
+			/** The routine's name before this edit; unset for a new one. The block keeps its place */
+			previousName: z.string().optional()
+		})
+	),
+	/** Each routine's exercises, in order */
+	routineExercises: z.array(z.array(ignoreExerciseLink(ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema)))
 });
 
-/** The active block, if it can take this library's edits: made from it, or its link was lost by older edits */
-async function findActiveBlockForLibrary(userId: string, exerciseSplitId: string) {
-	return prisma.mesocycle.findFirst({
-		where: {
-			userId,
-			startDate: { not: null },
-			endDate: null,
-			OR: [{ exerciseSplitId }, { exerciseSplitId: null }]
-		},
-		select: { id: true, name: true }
-	});
-}
-
-type LibraryExercise = z.infer<typeof ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema>;
-
-/**
- * Copies a library's routines into a block: a routine found in the block (by its name before the
- * edit, else its name) gets the library's exercises, keeping each exercise's sets (unless changed
- * in the library) and overrides;
- * a new routine is added at the end. Positions don't change, so workouts stay with their
- * routine. Routines only in the block stay as they are.
- */
-async function updateBlockFromLibrary(
-	userId: string,
-	mesocycleId: string,
-	exerciseSplitId: string,
-	routines: { name: string; weightUnit: 'KG' | 'LB' | 'ASK'; previousName: string | null }[],
-	routineExercises: LibraryExercise[][],
-	exercisesByName: Map<string, ResolvedExercise>,
-	/** Per routine: set counts changed in this library edit, by exercise name */
-	changedSets: Map<string, number>[]
-): Promise<PrismaPromise<unknown>[]> {
-	const block = await prisma.mesocycle.findFirst({
-		where: { id: mesocycleId, userId, startDate: { not: null }, endDate: null },
-		include: { mesocycleExerciseSplitDays: { include: { mesocycleSplitDayExercises: true } } }
-	});
-	if (!block) throw new TRPCError({ code: 'NOT_FOUND', message: 'Current block not found' });
-
-	const blockRoutines = block.mesocycleExerciseSplitDays;
-
-	const queries: PrismaPromise<unknown>[] = [
-		prisma.mesocycle.update({ where: { id: block.id }, data: { exerciseSplitId } })
-	];
-	const matched = new Set<string>();
-	let nextDayIndex = Math.max(-1, ...blockRoutines.map((routine) => routine.dayIndex)) + 1;
-
-	routines.forEach((routine, routineIdx) => {
-		const findUnmatched = (name: string | null) =>
-			blockRoutines.find((blockRoutine) => blockRoutine.name === name && !matched.has(blockRoutine.id));
-		const target = findUnmatched(routine.previousName) ?? findUnmatched(routine.name);
-		if (target) matched.add(target.id);
-
-		const oldExercises = target?.mesocycleSplitDayExercises ?? [];
-		const splitDayId = target?.id ?? createId();
-		const exercises = routineExercises[routineIdx].map(({ id, ...exercise }, exerciseIndex) => {
-			const old = oldExercises.find((ex) => ex.name === exercise.name);
-			return {
-				...linkToExercise(exercise, exercisesByName),
-				exerciseIndex,
-				mesocycleExerciseSplitDayId: splitDayId,
-				// A set count changed in the library wins; otherwise the block keeps its own
-				sets: changedSets[routineIdx]?.get(exercise.name) ?? old?.sets ?? routineSetCount(exercise.sets),
-				overloadPercentage: old?.overloadPercentage ?? null,
-				lastSetToFailure: old?.lastSetToFailure ?? null,
-				forceRIRMatching: old?.forceRIRMatching ?? null,
-				minimumWeightChange: old?.minimumWeightChange ?? null,
-				weightUnit: old?.weightUnit ?? null
-			};
-		});
-
-		if (target) {
-			queries.push(
-				prisma.mesocycleExerciseSplitDay.update({
-					where: { id: target.id },
-					data: { name: routine.name, weightUnit: routine.weightUnit }
-				}),
-				prisma.mesocycleExerciseTemplate.deleteMany({ where: { mesocycleExerciseSplitDayId: target.id } })
-			);
-		} else {
-			queries.push(
-				prisma.mesocycleExerciseSplitDay.create({
-					data: {
-						id: splitDayId,
-						name: routine.name,
-						dayIndex: nextDayIndex++,
-						isRestDay: false,
-						weightUnit: routine.weightUnit,
-						mesocycleId: block.id
-					}
-				})
-			);
-		}
-		queries.push(prisma.mesocycleExerciseTemplate.createMany({ data: exercises }));
-	});
-	return queries;
-}
-
-/**
- * The library's exercises, as they are: their details change only on the Exercises page. A
- * template or an import creates the exercises it needs.
- */
-function resolveLibraryExercises(input: z.infer<typeof zodExerciseSplitInput>, userId: string) {
-	return resolveExercises(userId, input.splitExercises.flat(), { restore: true });
-}
-
-const createOrEditExerciseSplit = async (
-	input: z.infer<typeof zodExerciseSplitInput>,
-	userId: string,
-	editingId?: string,
-	extraQueries: PrismaPromise<unknown>[] = [],
-	resolved?: Awaited<ReturnType<typeof resolveLibraryExercises>>
-) => {
-	const exerciseSplitId = editingId ?? createId();
-	const { byName, syncQueries } = resolved ?? (await resolveLibraryExercises(input, userId));
-
-	const exerciseSplitDays: ExerciseSplitDay[] = input.splitDays.map((splitDay) => ({
-		...splitDay,
-		weightUnit: splitDay.weightUnit ?? 'KG',
-		id: createId(),
-		exerciseSplitId
-	}));
-
-	const exerciseTemplates: Prisma.ExerciseTemplateUncheckedCreateInput[] = input.splitExercises.flatMap(
-		(dayExercises, dayNumber) =>
-			dayExercises.map((exercise) => ({
-				...linkToExercise(exercise, byName),
-				id: createId(),
-				exerciseSplitDayId: exerciseSplitDays[dayNumber].id
-			}))
-	);
-
-	// An edit replaces the routines but keeps the library itself, so blocks made from it stay linked
-	const saveLibraryQueries: PrismaPromise<unknown>[] = editingId
-		? [
-				prisma.exerciseSplit.update({ where: { id: editingId, userId }, data: { name: input.splitName } }),
-				prisma.exerciseSplitDay.deleteMany({ where: { exerciseSplitId: editingId } })
-			]
-		: [prisma.exerciseSplit.create({ data: { id: exerciseSplitId, name: input.splitName, userId } })];
-
-	await prisma.$transaction([
-		...saveLibraryQueries,
-		prisma.exerciseSplitDay.createMany({ data: exerciseSplitDays }),
-		prisma.exerciseTemplate.createMany({ data: exerciseTemplates }),
-		...syncQueries,
-		...extraQueries
-	]);
-};
-
 export const exerciseSplits = t.router({
-	findById: t.procedure.input(z.string().cuid2()).query(({ input, ctx }) =>
+	/** My routines, in order (null before the first one is saved) */
+	mine: t.procedure.query(({ ctx }) =>
 		prisma.exerciseSplit.findUnique({
-			where: { id: input, userId: ctx.userId },
+			where: { userId: ctx.userId },
 			include: {
 				exerciseSplitDays: {
+					where: { isRestDay: false },
 					include: { exercises: { orderBy: { exerciseIndex: 'asc' } } },
 					orderBy: { dayIndex: 'asc' }
 				}
@@ -179,39 +45,64 @@ export const exerciseSplits = t.router({
 		})
 	),
 
-	load: t.procedure
-		.input(
-			z.strictObject({
-				cursorId: z.string().cuid2().optional(),
-				searchString: z.string().optional()
-			})
-		)
-		.query(async ({ input, ctx }) => {
-			return prisma.exerciseSplit.findMany({
-				where: { userId: ctx.userId, name: { contains: input.searchString, mode: 'insensitive' } },
-				orderBy: { id: 'desc' },
-				include: { exerciseSplitDays: { orderBy: { dayIndex: 'asc' } } },
-				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
-				skip: input.cursorId !== undefined ? 1 : 0,
-				take: 10
-			});
-		}),
+	/** Saves My routines as given, and the active block follows */
+	save: t.procedure.input(zodSaveRoutinesInput).mutation(async ({ input, ctx }) => {
+		if (input.routineExercises.length !== input.routines.length) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each routine needs its list of exercises' });
+		}
+		const names = input.routines.map((routine) => routine.name);
+		if (new Set(names).size !== names.length) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Routine names should be unique' });
+		}
 
-	loadAllNames: t.procedure.query(async ({ ctx }) => {
-		return prisma.exerciseSplit.findMany({
-			where: { userId: ctx.userId },
-			orderBy: { id: 'desc' }
+		// Exercises as they are: their details change only on the Exercises page. A template or an
+		// import creates the exercises it needs
+		const { byName, restoreIds } = await resolveExercises(ctx.userId, input.routineExercises.flat(), {
+			restore: true
 		});
-	}),
+		const renames = new Map(
+			input.routines.flatMap((routine) =>
+				routine.previousName !== undefined && routine.previousName !== routine.name
+					? [[routine.name, routine.previousName] as const]
+					: []
+			)
+		);
 
-	create: t.procedure.input(zodExerciseSplitInput).mutation(async ({ input, ctx }) => {
-		await createOrEditExerciseSplit(input, ctx.userId);
-		return { message: 'Routine library created' };
+		await withRoutinesTransaction(async (tx) => {
+			if (restoreIds.length > 0) {
+				await tx.exercise.updateMany({ where: { id: { in: restoreIds } }, data: { archived: false } });
+			}
+			const listId = await ensureMyRoutines(tx, ctx.userId);
+			await tx.exerciseSplitDay.deleteMany({ where: { exerciseSplitId: listId } });
+			for (const [dayIndex, routine] of input.routines.entries()) {
+				const routineId = createId();
+				await tx.exerciseSplitDay.create({
+					data: {
+						id: routineId,
+						name: routine.name,
+						dayIndex,
+						isRestDay: false,
+						weightUnit: routine.weightUnit,
+						exerciseSplitId: listId
+					}
+				});
+				await tx.exerciseTemplate.createMany({
+					data: input.routineExercises[dayIndex].map(({ id, ...exercise }, exerciseIndex) => ({
+						...linkToExercise(exercise, byName),
+						exerciseIndex,
+						exerciseSplitDayId: routineId
+					}))
+				});
+			}
+			await syncBlockFromRoutines(tx, ctx.userId, { renames });
+		});
+		return { message: 'My routines saved' };
 	}),
 
 	/**
-	 * A new routine library from a workout (e.g. a blank one with a trainer): one routine with its
-	 * exercises in order, each with the sets done and its set type and rep range
+	 * Adds a workout to My routines as a new routine (e.g. a blank one with a trainer): its exercises
+	 * in order, each with the sets done and its set type and rep range. A name already taken gets
+	 * "(2)", "(3)"...
 	 */
 	createFromWorkout: t.procedure
 		.input(z.strictObject({ workoutId: z.string().cuid2(), name: z.string().trim().min(1).max(100) }))
@@ -235,16 +126,30 @@ export const exerciseSplits = t.router({
 			const lbCount = massUnits.filter((unit) => unit === 'LB').length;
 			const weightUnit = lbCount > massUnits.length - lbCount ? 'LB' : 'KG';
 
-			const exerciseSplitId = createId();
-			const exerciseSplitDayId = createId();
-			await prisma.$transaction([
-				prisma.exerciseSplit.create({ data: { id: exerciseSplitId, name: input.name, userId: ctx.userId } }),
-				prisma.exerciseSplitDay.create({
-					data: { id: exerciseSplitDayId, name: input.name, dayIndex: 0, isRestDay: false, weightUnit, exerciseSplitId }
-				}),
-				prisma.exerciseTemplate.createMany({
+			const routineName = await withRoutinesTransaction(async (tx) => {
+				const listId = await ensureMyRoutines(tx, ctx.userId);
+				const existing = await tx.exerciseSplitDay.findMany({
+					where: { exerciseSplitId: listId },
+					select: { name: true, dayIndex: true }
+				});
+				const name = uniqueRoutineName(
+					input.name,
+					existing.map((routine) => routine.name)
+				);
+				const routineId = createId();
+				await tx.exerciseSplitDay.create({
+					data: {
+						id: routineId,
+						name,
+						dayIndex: Math.max(-1, ...existing.map((routine) => routine.dayIndex)) + 1,
+						isRestDay: false,
+						weightUnit,
+						exerciseSplitId: listId
+					}
+				});
+				await tx.exerciseTemplate.createMany({
 					data: workout.workoutExercises.map((ex, exerciseIndex) => ({
-						exerciseSplitDayId,
+						exerciseSplitDayId: routineId,
 						exerciseIndex,
 						exerciseId: ex.exerciseId,
 						name: ex.name,
@@ -262,83 +167,10 @@ export const exerciseSplits = t.router({
 						note: ex.note,
 						weightSetId: ex.weightSetId
 					}))
-				})
-			]);
-			return { id: exerciseSplitId, message: 'Routine library created' };
-		}),
-
-	/** The current block that saving this library can update, if any */
-	findActiveBlockForLibrary: t.procedure
-		.input(z.string().cuid2())
-		.query(({ input, ctx }) => findActiveBlockForLibrary(ctx.userId, input)),
-
-	editById: t.procedure
-		.input(
-			z.strictObject({
-				id: z.string().cuid2(),
-				splitData: zodExerciseSplitInput,
-				/** Also copy the edited routines into this block (the current one made from this library) */
-				updateBlock: z
-					.strictObject({
-						mesocycleId: z.string().cuid2(),
-						/** Each routine's name before the edit, in order; null for a new routine */
-						previousRoutineNames: z.array(z.string().nullable())
-					})
-					.optional()
-			})
-		)
-		.mutation(async ({ input, ctx }) => {
-			const library = await prisma.exerciseSplit.findFirst({ where: { id: input.id, userId: ctx.userId } });
-			if (!library) throw new TRPCError({ code: 'NOT_FOUND', message: 'Routine library not found' });
-
-			const resolved = await resolveLibraryExercises(input.splitData, ctx.userId);
-			let blockQueries: PrismaPromise<unknown>[] = [];
-			if (input.updateBlock) {
-				const routines = input.splitData.splitDays
-					.map((splitDay, idx) => ({
-						name: splitDay.name,
-						weightUnit: splitDay.weightUnit ?? 'KG',
-						previousName: input.updateBlock!.previousRoutineNames[idx] ?? null,
-						isRestDay: splitDay.isRestDay,
-						exercises: input.splitData.splitExercises[idx] ?? []
-					}))
-					.filter((routine) => !routine.isRestDay);
-				// Set counts as the library had them, to tell which ones this edit changed
-				const oldRoutines = await prisma.exerciseSplitDay.findMany({
-					where: { exerciseSplitId: input.id },
-					select: { name: true, exercises: { select: { name: true, sets: true } } }
 				});
-				const changedSets = routines.map((routine) => {
-					const oldRoutine =
-						oldRoutines.find((old) => old.name === routine.previousName) ??
-						oldRoutines.find((old) => old.name === routine.name);
-					const changed = new Map<string, number>();
-					for (const exercise of routine.exercises) {
-						if (typeof exercise.sets !== 'number') continue;
-						const oldSets = oldRoutine?.exercises.find((old) => old.name === exercise.name)?.sets;
-						if (oldSets !== exercise.sets) changed.set(exercise.name, exercise.sets);
-					}
-					return changed;
-				});
-				blockQueries = await updateBlockFromLibrary(
-					ctx.userId,
-					input.updateBlock.mesocycleId,
-					input.id,
-					routines,
-					routines.map((routine) => routine.exercises),
-					resolved.byName,
-					changedSets
-				);
-			}
-
-			await createOrEditExerciseSplit(input.splitData, ctx.userId, input.id, blockQueries, resolved);
-			return {
-				message: input.updateBlock ? 'Routine library and current block updated' : 'Routine library saved'
-			};
-		}),
-
-	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
-		await prisma.exerciseSplit.delete({ where: { userId: ctx.userId, id: input } });
-		return { message: 'Routine library deleted' };
-	})
+				await syncBlockFromRoutines(tx, ctx.userId);
+				return name;
+			});
+			return { routineName, message: `Added to My routines as “${routineName}”` };
+		})
 });

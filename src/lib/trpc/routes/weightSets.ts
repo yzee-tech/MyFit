@@ -1,5 +1,11 @@
 import { t } from '$lib/trpc/t';
 import { prisma } from '$lib/prisma';
+import {
+	findActiveBlockId,
+	relinkExerciseInBlocks,
+	syncBlockFromRoutines,
+	withRoutinesTransaction
+} from '$lib/server/blockCache';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { MAX_WEIGHTS_PER_SET, normalizeWeights } from '$lib/utils/weightSets';
@@ -42,11 +48,16 @@ export const weightSets = t.router({
 		const weightSet = await prisma.weightSet.findFirst({ where: { id: input, userId: ctx.userId } });
 		if (!weightSet) throw new TRPCError({ code: 'NOT_FOUND', message: 'Weight set not found' });
 		// Exercises linked to it go back to standard steps
-		await prisma.$transaction([
-			prisma.exerciseTemplate.updateMany({ where: { weightSetId: input }, data: { weightSetId: null } }),
-			prisma.mesocycleExerciseTemplate.updateMany({ where: { weightSetId: input }, data: { weightSetId: null } }),
-			prisma.weightSet.delete({ where: { id: input } })
-		]);
+		await withRoutinesTransaction(async (tx) => {
+			await tx.exerciseTemplate.updateMany({ where: { weightSetId: input }, data: { weightSetId: null } });
+			await relinkExerciseInBlocks(
+				tx,
+				{ kind: 'weightSetDeleted', weightSetId: input },
+				{ activeBlockId: await findActiveBlockId(tx, ctx.userId) }
+			);
+			await syncBlockFromRoutines(tx, ctx.userId);
+			await tx.weightSet.delete({ where: { id: input } });
+		});
 		return { message: 'Weight set deleted' };
 	})
 });
