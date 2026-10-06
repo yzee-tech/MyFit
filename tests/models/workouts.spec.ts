@@ -190,10 +190,10 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	for (const text of [
 		'New workout Exercises Pull A Week 1',
-		'Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Reps +/− kg (BW) RIR',
-		'Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Reps Load RIR',
-		'Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Reps Load RIR',
-		'Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Reps Load RIR',
+		'Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
+		'Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
+		'Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
+		'Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Set Previous KG Reps RIR',
 		'Discard workout Previous Next'
 	]) {
 		await expect(page.getByRole('main')).toContainText(text);
