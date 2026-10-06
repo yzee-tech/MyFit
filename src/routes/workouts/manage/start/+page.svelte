@@ -249,11 +249,6 @@
 			</Card.Footer>
 		</Card.Root>
 	{/if}
-	{#if inProgress}
-		<p class="mb-1 rounded-lg border border-primary bg-card p-3 text-sm" data-testid="setup-in-progress">
-			Your workout ({inProgressName}) is still going. Change your bodyweight here if needed, then continue.
-		</p>
-	{/if}
 	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined && routines.length === 0}
 		<p class="mb-1 px-1 text-sm text-muted-foreground">
 			No routines yet: you'll pick exercises as you go. Create routines in <a class="underline" href="/exercise-splits"
@@ -437,8 +432,5 @@
 	{#snippet description()}
 		The sets you've entered for {inProgressName} will be cleared.
 	{/snippet}
-	<div class="grid grid-cols-2 gap-1.5">
-		<Button onclick={() => (switchRoutineDialogOpen = false)} variant="secondary">Keep {inProgressName}</Button>
-		<Button onclick={() => startWorkout(true, 'overwrite')} variant="destructive">Switch</Button>
-	</div>
+	<Button onclick={() => startWorkout(true, 'overwrite')} variant="destructive">Switch</Button>
 </ResponsiveDialog>

@@ -1151,7 +1151,7 @@ test('Just this workout leaves the routine; Update routine changes My routines a
 	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([false, false]);
 });
 
-test('a workout in progress: back to setup continues it; switching routine asks; banner to continue or discard', async ({
+test('workout panel: on New workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
 	page
 }) => {
 	await createSplitAndMesoForTest(page);
@@ -1160,31 +1160,66 @@ test('a workout in progress: back to setup continues it; switching routine asks;
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await fillSet(page, 'Barbell rows', 1, { reps: '11', load: '40' });
+	const panel = page.getByTestId('workout-panel');
+	// Not on the workout's own page
+	await expect(panel).toHaveCount(0);
 
-	// Back to setup: nothing lost, and it continues the same workout
+	// Back to New workout: the panel, with the clock and the exercise being done
 	await page.getByRole('link', { name: 'Previous' }).click();
-	await expect(page.getByTestId('setup-in-progress')).toContainText('Pull A');
+	await expect(page.getByTestId('setup-in-progress')).toHaveCount(0);
+	await expect(page.getByTestId('workout-panel-clock')).toHaveText(/^\d+:\d\d$/);
+	const firstExercise = (await savedWorkoutState(page)).workoutExercises[0].name;
+	await expect(page.getByTestId('workout-panel-detail')).toHaveText(firstExercise);
+	await expect(page.getByTestId('workout-panel-dot')).toHaveAttribute('data-nudge', 'false');
+	// It's below the page, never over it: Continue stays in view and clickable
+	const continueButton = page.getByRole('button', { name: 'Continue workout' });
+	await continueButton.scrollIntoViewIfNeeded();
+	await expect(continueButton).toBeInViewport({ ratio: 1 });
+	expect((await continueButton.boundingBox())!.y + (await continueButton.boundingBox())!.height).toBeLessThanOrEqual(
+		(await panel.boundingBox())!.y
+	);
 	await page.getByPlaceholder('Type here').fill('98');
-	await page.getByRole('button', { name: 'Continue workout' }).click();
+	await continueButton.click();
 	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('11');
 
-	// Picking another routine asks first; keeping Pull A changes nothing
+	// Elsewhere in the app; tapping it goes back to the workout
+	for (const path of ['/workouts', '/dashboard', '/exercises']) {
+		await page.goto(path);
+		await expect(panel).toContainText('Workout');
+	}
+	await page.getByTestId('workout-panel-detail').click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('11');
+
+	// On a small phone: picking another routine asks first, and the dialog fits
+	await page.setViewportSize({ width: 320, height: 640 });
 	await page.getByRole('link', { name: 'Previous' }).click();
 	await pickRoutine(page, 'Push A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('dialog')).toContainText('Switch to Push A?');
 	await expect(page.getByRole('dialog')).toContainText("The sets you've entered for Pull A will be cleared.");
-	await page.getByRole('button', { name: 'Keep Pull A' }).click();
+	await expect(page.getByRole('button', { name: 'Keep Pull A' })).toHaveCount(0);
+	for (const name of ['Switch', 'Cancel']) {
+		await expect(page.getByRole('dialog').getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
+	}
+	await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	expect((await savedWorkoutState(page)).workoutData.routineName).toBe('Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Switch', exact: true }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await expect.poll(async () => (await savedWorkoutState(page)).workoutData.routineName).toBe('Push A');
 
-	// Elsewhere in the app: a banner to continue or discard
+	// The trash asks first
 	await page.goto('/workouts');
-	await expect(page.getByTestId('workout-in-progress')).toContainText('Workout in progress Pull A');
-	await page.getByTestId('workout-in-progress').getByRole('button', { name: 'Continue' }).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('11');
-	await page.getByRole('button', { name: 'Discard workout' }).click();
-	await page.getByRole('button', { name: 'Yes, discard' }).click();
-	await page.waitForURL('/workouts');
-	await expect(page.getByTestId('workout-in-progress')).toHaveCount(0);
+	await panel.getByRole('button', { name: 'Discard workout' }).click();
+	await expect(page.getByRole('dialog')).toContainText('Discard this workout?');
+	await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(panel).toBeVisible();
+	await panel.getByRole('button', { name: 'Discard workout' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Discard', exact: true }).click();
+	await expect(panel).toHaveCount(0);
+	expect((await savedWorkoutState(page)).workoutData).toBeNull();
 });
 
 /** The workout in progress as this device keeps it */
@@ -1269,7 +1304,7 @@ test('no mesocycle: pick a routine from My routines, suggestions from last time,
 	await expect(page.getByRole('radio', { name: /^Pull A/ })).toContainText('Done today');
 });
 
-test('workout in progress: shown on every screen, resuming keeps its start, a nudge after 2 hours, it ends at the last tick', async ({
+test('workout panel: shown on every screen, resuming keeps its start, a nudge after 2 hours, it ends at the last tick', async ({
 	page,
 	userData
 }) => {
@@ -1281,13 +1316,15 @@ test('workout in progress: shown on every screen, resuming keeps its start, a nu
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toBeVisible();
 	// Not on the workout's own pages
-	await expect(page.getByTestId('workout-in-progress')).toHaveCount(0);
+	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
 	const { startedAt } = (await savedWorkoutState(page)).workoutData;
+	const firstExercise = (await savedWorkoutState(page)).workoutExercises[0].name;
 
 	for (const path of ['/exercise-splits', '/exercises', '/settings']) {
 		await page.goto(path);
-		await expect(page.getByTestId('workout-in-progress')).toContainText('Pull A · started');
+		await expect(page.getByTestId('workout-panel-detail')).toHaveText(firstExercise);
 	}
 
 	// Back to setup and Continue: the same workout, the same start
@@ -1302,11 +1339,13 @@ test('workout in progress: shown on every screen, resuming keeps its start, a nu
 	const lastTick = new Date(Date.now() - 60 * 60000);
 	await changeSavedWorkoutState(page, { startedAt: new Date(Date.now() - 150 * 60000), lastActivityAt: lastTick });
 	await page.goto('/settings');
-	await expect(page.getByTestId('workout-in-progress-nudge')).toHaveText(
-		'Pull A was started 2 h 30 min ago. Finish or discard it?'
-	);
-	// Finishing: the sets not done are skipped (after asking), then it's saved
-	await page.getByRole('button', { name: 'Finish now' }).click();
+	await expect(page.getByTestId('workout-panel-detail')).toHaveText('Started 2 h 30 min ago. Finish or discard?');
+	await expect(page.getByTestId('workout-panel-dot')).toHaveAttribute('data-nudge', 'true');
+	await expect(page.getByTestId('workout-panel-clock')).toHaveText(/^2:3\d:\d\d$/);
+	// Finishing: back to the workout, then the sets not done are skipped (after asking), then it's saved
+	await page.getByRole('button', { name: 'Back to the workout' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByRole('dialog')).toContainText('11 sets not done');
 	await page.getByRole('button', { name: 'Skip and continue' }).click();
 	await page.waitForURL(/\/workouts\/manage\/overview/);
@@ -1380,4 +1419,153 @@ test('workout length on the list and the workout page; over 3 hours, “check ti
 	await page.getByTestId('check-workout-times').click();
 	await page.waitForURL('/workouts/manage/start');
 	await expect(page.locator('#end-date')).toBeVisible();
+});
+
+/** A saved workout yesterday: Barbell rows, 3 × 10 at 60 kg, bodyweight 80 kg */
+async function createPastWorkout(userId: string) {
+	const startedAt = new Date(Date.now() - 86400000);
+	return prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt,
+			endedAt: new Date(startedAt.getTime() + 3600000),
+			workoutExercises: {
+				create: [
+					{
+						exerciseIndex: 0,
+						name: 'Barbell rows',
+						targetMuscleGroup: 'Lats',
+						setType: 'Straight',
+						repRangeStart: 8,
+						repRangeEnd: 12,
+						sets: {
+							create: [0, 1, 2].map((setIndex) => ({ setIndex, reps: 10, load: 60, RIR: 2, skipped: false }))
+						}
+					}
+				]
+			}
+		}
+	});
+}
+
+/** Opens a past workout's edit, through its bodyweight step, to its exercises */
+async function editPastWorkout(page: Page, workoutId: string) {
+	await page.goto(`/workouts/${workoutId}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/start/);
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('10');
+}
+
+/** Changes set 1's reps in the edit */
+async function changeFirstSet(page: Page, reps: string) {
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill(reps);
+	await page.getByTestId('Barbell rows-set-1-action').click();
+}
+
+const savedFirstSetReps = async (workoutId: string) =>
+	(
+		await prisma.workoutExerciseSet.findFirstOrThrow({
+			where: { setIndex: 0, workoutExercise: { workoutId } }
+		})
+	).reps;
+
+test('editing a past workout, unchanged: leaving asks nothing (even kg → lb → kg), and no panel; Discard changes asks nothing more', async ({
+	page,
+	userData
+}) => {
+	// Bodyweight shown in lb, stored in kg
+	await prisma.userSettings.upsert({
+		where: { userId: userData.userId },
+		create: { userId: userData.userId, homeWeightUnit: 'LB' },
+		update: { homeWeightUnit: 'LB' }
+	});
+	try {
+		const workout = await createPastWorkout(userData.userId);
+		await editPastWorkout(page, workout.id);
+
+		// Back through the edit's own pages, then out of it: no question, the edit just ends
+		await page.goBack();
+		await page.waitForURL(/\/workouts\/manage\/start/);
+		await expect(page.getByPlaceholder('Type here')).toBeVisible();
+		await page.goBack();
+		await page.waitForURL(`/workouts/${workout.id}`);
+		await expect(page.getByRole('heading', { name: 'View workout' })).toBeVisible();
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+		await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
+
+		// Discard changes on the exercises page: cleared first, so leaving asks nothing more
+		await editPastWorkout(page, workout.id);
+		await changeFirstSet(page, '9');
+		await page.getByRole('button', { name: 'Discard changes' }).click();
+		await page.getByRole('button', { name: 'Yes, discard' }).click();
+		await page.waitForURL('/workouts');
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+		expect(await savedFirstSetReps(workout.id)).toBe(10);
+	} finally {
+		// The test user is shared with later tests
+		await prisma.userSettings.update({ where: { userId: userData.userId }, data: { homeWeightUnit: 'KG' } });
+	}
+});
+
+test('editing a past workout, changed: leaving asks to save; Keep editing stays, Discard leaves it as it was, Save saves it', async ({
+	page,
+	userData
+}) => {
+	const workout = await createPastWorkout(userData.userId);
+	await editPastWorkout(page, workout.id);
+	await changeFirstSet(page, '9');
+	// Never shown as a workout in progress
+	await page.getByRole('link', { name: 'Previous' }).click();
+	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+
+	// Keep editing: still here, the change kept and still counted
+	await page.getByRole('link', { name: 'Exercises' }).first().click();
+	await expect(page.getByRole('dialog')).toContainText('Save your changes?');
+	await page.getByRole('button', { name: 'Keep editing' }).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\/workouts\/manage\/exercises/);
+	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('9');
+
+	// Discard: on to where it was going, the workout as it was
+	await page.getByRole('link', { name: 'Exercises' }).first().click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Discard changes' }).click();
+	await page.waitForURL('/exercises');
+	expect(await savedFirstSetReps(workout.id)).toBe(10);
+	await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
+
+	// Save: saved, then on to where it was going (the phone's Back here)
+	await editPastWorkout(page, workout.id);
+	await changeFirstSet(page, '8');
+	await page.goBack();
+	await page.waitForURL(/\/workouts\/manage\/start/);
+	await expect(page.getByPlaceholder('Type here')).toBeVisible();
+	await page.goBack();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
+	await page.waitForURL(`/workouts/${workout.id}`);
+	expect(await savedFirstSetReps(workout.id)).toBe(8);
+	await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
+});
+
+test('an edit left without saving (tab closed) is cleared on the next visit, with a note', async ({
+	page,
+	userData
+}) => {
+	const workout = await createPastWorkout(userData.userId);
+	await editPastWorkout(page, workout.id);
+	await changeFirstSet(page, '9');
+	// The tab closes; the app is opened again on another page
+	await page.goto('about:blank');
+	await page.goto('/workouts');
+	await expect(page.getByText('Unsaved changes to a past workout were discarded')).toBeVisible();
+	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+	await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
+	expect(await savedFirstSetReps(workout.id)).toBe(10);
 });

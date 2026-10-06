@@ -8,7 +8,6 @@
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import { arraySum } from '$lib/utils.js';
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
@@ -62,8 +61,6 @@
 			workoutRunes.previousWorkoutData = serverData?.previousWorkoutData ?? null;
 		}
 		if (serverData?.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
-		// "Finish now" from the in-progress banner: on to saving, skipping any sets not done (after asking)
-		if ($page.url.searchParams.has('finish')) submitWorkoutExercises();
 	});
 
 	function getFormattedDate(date: string | Date) {

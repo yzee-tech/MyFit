@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { convertExerciseLoads } from '$lib/utils/workoutUtils';
 	import { goto, invalidate } from '$app/navigation';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -8,12 +7,12 @@
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterInputs } from '$lib/trpc/router';
-	import type { WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import ExerciseSplitExercisesCharts from '../../../exercise-splits/(components)/ExerciseSplitExercisesCharts.svelte';
 	import { workoutRunes } from '../workoutRunes.svelte';
+	import { buildWorkoutSaveData, saveWorkoutEdits } from '../saveWorkout';
 	import WorkoutComparisonChart from './(components)/WorkoutComparisonChart.svelte';
 	import Quotes from '$lib/components/settings/Quotes.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -30,73 +29,7 @@
 	function preProcessSetData() {
 		if (workoutRunes.workoutData === null || workoutRunes.workoutExercises === null) return;
 		savingWorkout = true;
-		// Weights are entered in each exercise's unit and saved in kg
-		const exercisesInKg = workoutRunes.workoutExercises.map((ex) => convertExerciseLoads(ex, 'toKg'));
-		const workoutExercisesSets = exercisesInKg.map((ex) => {
-			return ex.sets.map((_set, idx) => {
-				const { completed, ...set } = _set;
-				if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
-				return { ...set, setIndex: idx };
-			});
-		});
-		const workoutExercisesMiniSets = workoutExercisesSets.map((sets) => sets.map((set) => set.miniSets));
-
-		if (typeof workoutRunes.workoutData?.userBodyweight !== 'number') {
-			toast.error('Invalid user bodyweight at start page');
-			return;
-		}
-		const userBodyweight = workoutRunes.workoutData.userBodyweight;
-
-		const createData: RouterInputs['workouts']['create'] = {
-			workoutData: {
-				startedAt: workoutRunes.workoutData.startedAt,
-				// A new workout ends at its last ticked set (none: when it's saved). An edit sends its own
-				endedAt: workoutRunes.lastActivityAt ?? undefined,
-				workoutOfMesocycle: workoutRunes.workoutData.workoutOfMesocycle,
-				routineName: workoutRunes.workoutData.routineName ?? null,
-				userBodyweight,
-				note: workoutRunes.workoutData.note ?? undefined
-			},
-			workoutExercises: exercisesInKg.map((ex, idx) => {
-				const { sets, ...exercise } = ex;
-				return { ...exercise, exerciseIndex: idx };
-			}),
-			workoutExercisesSets: workoutExercisesSets.map((sets) =>
-				sets.map((set) => {
-					const { miniSets, ...rest } = set;
-					if (rest.reps === undefined || rest.load === undefined || rest.RIR === undefined) {
-						throw new Error('Rep, Load, or RIR is undefined');
-					}
-					return {
-						...rest,
-						reps: rest.reps as number,
-						load: rest.load as number,
-						RIR: rest.RIR as number
-					};
-				})
-			),
-			workoutExercisesMiniSets: workoutExercisesMiniSets.map((sets, exerciseIndex) =>
-				sets.map((miniSets, setIndex) =>
-					miniSets.map((_miniSet, miniSetIndex) => {
-						const exercises = exercisesInKg as WorkoutExerciseInProgress[];
-						const { completed, ...miniSet } = _miniSet;
-						if (exercises[exerciseIndex].sets[setIndex].skipped) [miniSet.reps, miniSet.load, miniSet.RIR] = [0, 0, 0];
-
-						if (miniSet.reps === undefined || miniSet.load === undefined || miniSet.RIR === undefined) {
-							throw new Error('Rep, Load, or RIR is undefined');
-						}
-						return {
-							...miniSet,
-							reps: miniSet.reps as number,
-							load: miniSet.load as number,
-							RIR: miniSet.RIR as number,
-							miniSetIndex
-						};
-					})
-				)
-			)
-		};
-		return createData;
+		return buildWorkoutSaveData();
 	}
 
 	// "Update routine?": asked when a block workout differs from its routine; closing it saves nothing
@@ -172,13 +105,7 @@
 				const blank = !createData.workoutData.workoutOfMesocycle && !createData.workoutData.routineName;
 				if (blank && createData.workoutExercises.length > 0) blankWorkoutId = created.workoutId;
 			} else {
-				message = (
-					await trpc().workouts.editById.mutate({
-						id: workoutRunes.editingWorkoutId,
-						endedAt: workoutRunes.workoutData?.endedAt as Date | string,
-						data: createData
-					})
-				).message;
+				message = await saveWorkoutEdits(createData);
 			}
 			if (blankWorkoutId) {
 				const workoutId = blankWorkoutId;
