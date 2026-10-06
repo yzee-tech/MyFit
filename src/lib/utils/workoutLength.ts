@@ -15,3 +15,13 @@ export function formatWorkoutLength(startedAt: Date | string, endedAt: Date | st
 	const rest = minutes % 60;
 	return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 }
+
+/** A running workout's clock, e.g. "0:52", "12:34" or "1:05:10" */
+export function formatWorkoutClock(startedAt: Date | string, now: Date | string) {
+	const seconds = Math.max(0, Math.floor((new Date(now).getTime() - new Date(startedAt).getTime()) / 1000));
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
+	const pad = (value: number) => String(value).padStart(2, '0');
+	const secondsPart = pad(seconds % 60);
+	return hours > 0 ? `${hours}:${pad(minutes)}:${secondsPart}` : `${minutes}:${secondsPart}`;
+}

@@ -26,6 +26,8 @@ function createWorkoutRunes() {
 	let repsOnly: Record<string, number | null> = $state({});
 	/** When a set was last ticked: a new workout ends there, not when it's saved */
 	let lastActivityAt: string | null = $state(null);
+	/** A past workout being edited, as loaded: leaving the edit asks to save only if it changed */
+	let editSnapshot: string | null = $state(null);
 
 	let editingExerciseIndex: number | undefined = $state();
 	let editingExercise: MesocycleExerciseTemplateWithoutIdsOrIndex | undefined = $state();
@@ -41,6 +43,8 @@ function createWorkoutRunes() {
 			({
 				workoutData,
 				workoutExercises,
+				editingWorkoutId = null,
+				editSnapshot = null,
 				previousWorkoutData,
 				repsOnly = {},
 				lastActivityAt = null
@@ -50,7 +54,15 @@ function createWorkoutRunes() {
 	function saveStoresToLocalStorage() {
 		localStorage.setItem(
 			'workoutRunes',
-			JSON.stringify({ workoutData, workoutExercises, editingWorkoutId, previousWorkoutData, repsOnly, lastActivityAt })
+			JSON.stringify({
+				workoutData,
+				workoutExercises,
+				editingWorkoutId,
+				editSnapshot,
+				previousWorkoutData,
+				repsOnly,
+				lastActivityAt
+			})
 		);
 	}
 
@@ -58,10 +70,27 @@ function createWorkoutRunes() {
 		workoutData = null;
 		workoutExercises = null;
 		editingWorkoutId = null;
+		editSnapshot = null;
 		previousWorkoutData = null;
 		repsOnly = {};
 		lastActivityAt = null;
 		saveStoresToLocalStorage();
+	}
+
+	/**
+	 * What an edit can change, to compare with the edit as loaded. Numbers are rounded to 0.01, so a
+	 * bodyweight that went kg → lb → kg on the way doesn't count as a change
+	 */
+	function editFingerprint() {
+		const { userBodyweight, note, startedAt, endedAt } = workoutData ?? {};
+		return JSON.stringify({ userBodyweight, note: note ?? null, startedAt, endedAt, workoutExercises }, (_, value) =>
+			typeof value === 'number' ? Math.round(value * 100) / 100 : value
+		);
+	}
+
+	/** Editing a past workout, and it's changed since it was loaded */
+	function hasUnsavedEdits() {
+		return editingWorkoutId !== null && editSnapshot !== null && editFingerprint() !== editSnapshot;
 	}
 
 	/** A set (or mini-set) was just ticked */
@@ -260,6 +289,7 @@ function createWorkoutRunes() {
 				})
 			};
 		});
+		editSnapshot = editFingerprint();
 		saveStoresToLocalStorage();
 	}
 
@@ -271,6 +301,7 @@ function createWorkoutRunes() {
 			lastActivityAt = value;
 		},
 		markActivity,
+		hasUnsavedEdits,
 		get workoutData() {
 			return workoutData;
 		},

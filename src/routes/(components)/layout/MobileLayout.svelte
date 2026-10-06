@@ -16,7 +16,8 @@
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 
-	let { children }: { children: Snippet } = $props();
+	/** footer: shown below the page, e.g. the workout in progress */
+	let { children, footer }: { children: Snippet; footer?: Snippet } = $props();
 	let sheetOpen = $state(false);
 </script>
 
@@ -74,3 +75,4 @@
 <main class="mx-auto flex h-px w-full max-w-2xl grow flex-col overflow-y-auto px-2 pb-2 pt-6">
 	{@render children()}
 </main>
+{@render footer?.()}

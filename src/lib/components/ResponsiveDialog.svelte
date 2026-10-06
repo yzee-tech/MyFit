@@ -14,6 +14,8 @@
 		triggerButtonAriaLabel?: string;
 		triggerButtonContent?: Snippet;
 		cancelButtonVariant?: Button['$$prop_def']['variant'];
+		/** A close button with this label on desktop too (the phone drawer always has one, "Cancel") */
+		cancelLabel?: string;
 		children?: Snippet;
 	};
 
@@ -27,6 +29,7 @@
 		triggerButtonAriaLabel = '',
 		triggerButtonContent,
 		cancelButtonVariant = 'outline',
+		cancelLabel,
 		children
 	}: PropsType = $props();
 
@@ -60,6 +63,9 @@
 			{#if children}
 				{@render children()}
 			{/if}
+			{#if cancelLabel}
+				<Button onclick={() => (open = false)} variant={cancelButtonVariant}>{cancelLabel}</Button>
+			{/if}
 		</Dialog.Content>
 	</Dialog.Root>
 {:else}
@@ -92,7 +98,7 @@
 			</div>
 			<Drawer.Footer class="my-0 shrink pt-2">
 				<Drawer.Close asChild let:builder>
-					<Button builders={[builder]} variant={cancelButtonVariant}>Cancel</Button>
+					<Button builders={[builder]} variant={cancelButtonVariant}>{cancelLabel ?? 'Cancel'}</Button>
 				</Drawer.Close>
 			</Drawer.Footer>
 		</Drawer.Content>

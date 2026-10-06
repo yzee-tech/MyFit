@@ -13,7 +13,8 @@
 	import { navigating, page } from '$app/stores';
 	import type { Snippet } from 'svelte';
 
-	let { children }: { children: Snippet } = $props();
+	/** footer: shown below the page, e.g. the workout in progress */
+	let { children, footer }: { children: Snippet; footer?: Snippet } = $props();
 </script>
 
 <header class="flex h-screen w-96 flex-col bg-muted p-10">
@@ -51,6 +52,9 @@
 		</DropdownMenu.Root>
 	{/if}
 </header>
-<main class="mx-auto flex h-screen w-full max-w-2xl flex-col overflow-y-auto px-2 pb-2 pt-6">
-	{@render children()}
-</main>
+<div class="flex h-screen w-full min-w-0 flex-col">
+	<main class="mx-auto flex h-px w-full max-w-2xl grow flex-col overflow-y-auto px-2 pb-2 pt-6">
+		{@render children()}
+	</main>
+	{@render footer?.()}
+</div>
