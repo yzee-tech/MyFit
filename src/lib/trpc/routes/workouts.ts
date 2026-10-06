@@ -698,9 +698,13 @@ export const workouts = t.router({
 				})
 			]);
 			const settings = { repsOnly: exercise.repsOnly, maxReps: exercise.maxReps };
-			if (comparablePerformances(history[exercise.name] ?? [], input.weightUnit).length === 0) {
-				return { ...settings, sets: null };
-			}
+			const lastPerformance = comparablePerformances(history[exercise.name] ?? [], input.weightUnit).at(-1);
+			if (!lastPerformance) return { ...settings, sets: null, previous: null };
+			// The last time it was done, in today's unit, for the workout's "Previous" column
+			const previous: { exercise: WorkoutExerciseWithSets; userBodyweight: number } = {
+				exercise: convertExerciseLoads({ ...lastPerformance.exercise, weightUnit: input.weightUnit }, 'toDisplay'),
+				userBodyweight: lastPerformance.oldUserBodyweight
+			};
 
 			// The current block's effort and overload settings, else steady defaults
 			const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
@@ -765,7 +769,7 @@ export const workouts = t.router({
 				weightSets,
 				repsOnlySettings([exercise])
 			);
-			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets };
+			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets, previous };
 		}),
 
 	/**

@@ -8,6 +8,7 @@ import type { RouterOutputs } from '$lib/trpc/router';
 import { trpc } from '$lib/trpc/client';
 import {
 	type WorkoutExerciseInProgress,
+	type WorkoutExerciseWithSets,
 	convertExerciseLoads,
 	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate
 } from '$lib/utils/workoutUtils';
@@ -143,6 +144,16 @@ function createWorkoutRunes() {
 		return true;
 	}
 
+	/** The last time an exercise added during the workout was done, for its "Previous" column */
+	function addPreviousExercise(exercise: WorkoutExerciseWithSets, userBodyweight: number) {
+		const others = previousWorkoutData?.exercises.filter((ex) => ex.name !== exercise.name) ?? [];
+		previousWorkoutData = {
+			exercises: [...others, exercise],
+			userBodyweight: previousWorkoutData?.userBodyweight ?? userBodyweight
+		};
+		saveStoresToLocalStorage();
+	}
+
 	/** Fills an exercise added during the workout with suggestions from the last times it was done */
 	async function suggestSetsFromLastTime(exerciseName: string) {
 		const exercise = workoutExercises?.find((ex) => ex.name === exerciseName);
@@ -165,6 +176,7 @@ function createWorkoutRunes() {
 			});
 			if (!suggested) return;
 			setRepsOnly(exerciseName, suggested);
+			if (suggested.previous) addPreviousExercise(suggested.previous.exercise, suggested.previous.userBodyweight);
 			// Only if it's still there and nothing has been entered yet
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
