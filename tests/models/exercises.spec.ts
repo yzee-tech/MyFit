@@ -355,7 +355,7 @@ test('bodyweight exercises: help as a negative load, with what it counts as; ass
 	await page.getByRole('option', { name: 'Hotel assist machine (kg)' }).click();
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
-	await expect(page.getByRole('main')).toContainText('+/− kg (BW)');
+	await expect(page.getByRole('main')).toContainText('KG (BW)');
 	await page.locator('[id="Assisted\\ pull-ups-set-1-reps"]').fill('10');
 	await page.locator('[id="Assisted\\ pull-ups-set-1-load"]').fill('-20');
 	await expect(page.getByTestId('Assisted pull-ups-set-1-counted')).toHaveText('= 80 kg · 80% of bodyweight');
