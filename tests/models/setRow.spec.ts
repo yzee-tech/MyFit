@@ -147,6 +147,10 @@ test('set row: Set | Previous | KG | Reps | RIR, last time set by set, tap to co
 	await setUpLastTime(userData.userId);
 	await startTestDay(page);
 
+	// Set numbers stand out: bold, in the main text colour
+	expect(
+		await page.getByTestId('Barbell rows-set-1-number').evaluate((el) => Number(getComputedStyle(el).fontWeight))
+	).toBeGreaterThanOrEqual(600);
 	// The load column is called by its unit
 	await expect(page.getByTestId('Barbell rows-sets')).toContainText('Set Previous KG Reps RIR');
 	await expect(page.getByTestId('Pull-ups-sets')).toContainText('Set Previous KG (BW) Reps RIR');
@@ -188,9 +192,24 @@ test('set row: Set | Previous | KG | Reps | RIR, last time set by set, tap to co
 			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 		);
 		expect(overflow).toBeLessThanOrEqual(0);
+		// The spare width goes to the boxes, not just Previous: wider than the minimums on a usual phone
+		const minimums = { load: 52, reps: 44, RIR: 36 };
 		for (const field of ['load', 'reps', 'RIR'] as const) {
 			const { width: boxWidth } = (await box(page, 'Barbell rows', 2, field).boundingBox())!;
-			expect(boxWidth).toBeGreaterThanOrEqual(36);
+			expect(boxWidth).toBeGreaterThanOrEqual(width === 390 ? minimums[field] + 6 : minimums[field] - 1);
+		}
+		const { width: previousWidth } = (await page.getByTestId('Barbell rows-set-2-previous').boundingBox())!;
+		if (width === 390) expect(previousWidth).toBeLessThan(90);
+		// Headings on the bottom line, even when "KG / (BW)" stacks
+		const bottom = async (locator: ReturnType<Page['getByText']>) => {
+			const { y, height } = (await locator.boundingBox())!;
+			return y + height;
+		};
+		const pullUps = page.getByTestId('Pull-ups-sets');
+		const loadHeaderBottom = await bottom(page.getByTestId('Pull-ups-load-header'));
+		for (const heading of ['Set', 'Previous', 'Reps', 'RIR']) {
+			const headingBottom = await bottom(pullUps.getByText(heading, { exact: true }).first());
+			expect(Math.abs(headingBottom - loadHeaderBottom)).toBeLessThanOrEqual(2);
 		}
 		for (const testId of ['Barbell rows-set-2-previous', 'Barbell rows-set-2-action', 'Barbell rows-set-2-remove']) {
 			const { x, width: w } = (await page.getByTestId(testId).boundingBox())!;

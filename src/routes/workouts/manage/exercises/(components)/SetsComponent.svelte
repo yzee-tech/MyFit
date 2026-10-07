@@ -338,25 +338,26 @@
 	}
 </script>
 
-<!-- Set | Previous | load | Reps | RIR | tick | remove. Narrow boxes leave room for last time's numbers -->
+<!-- Set | Previous | load | Reps | RIR | tick | remove. The spare width is shared: Previous gets a part, the boxes the rest -->
 <div
 	class="grid items-center gap-1 {editing
 		? 'grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.25rem_1.5rem]'
-		: 'grid-cols-[1.5rem_minmax(0,1fr)_3.25rem_2.75rem_2.25rem_2.25rem_1.5rem] md:grid-cols-[2rem_minmax(0,1fr)_5rem_4.5rem_4rem_2.25rem_2.25rem]'}"
+		: 'grid-cols-[1.5rem_minmax(3rem,0.9fr)_minmax(3.25rem,1fr)_minmax(2.75rem,0.85fr)_minmax(2.25rem,0.7fr)_2.25rem_1.5rem] md:grid-cols-[2rem_minmax(5rem,1fr)_6rem_5rem_4rem_2.25rem_2.25rem]'}"
 	data-testid="{exercise.name}-sets"
 >
-	<span class="text-center text-xs font-medium uppercase text-muted-foreground">Set</span>
+	<!-- Headings sit on the bottom line, so a stacked "KG / (BW)" lines up with the others -->
+	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Set</span>
 	{#if !editing}
-		<span class="text-xs font-medium uppercase text-muted-foreground">Previous</span>
+		<span class="self-end text-xs font-medium uppercase text-muted-foreground">Previous</span>
 	{/if}
 	<span
-		class="text-center text-xs font-medium leading-tight text-muted-foreground min-[375px]:whitespace-nowrap"
+		class="self-end text-center text-xs font-medium leading-tight text-muted-foreground min-[375px]:whitespace-nowrap"
 		data-testid="{exercise.name}-load-header"
 	>
 		{#if repsOnly}
 			<span class="sr-only">No load</span>
 		{:else if isLevels}
-			LEVEL
+			LVL
 		{:else if typeof exercise.bodyweightFraction === 'number'}
 			<!-- Unit and (BW) side by side, or stacked on a very small phone -->
 			<span class="flex flex-col items-center min-[375px]:flex-row min-[375px]:justify-center min-[375px]:gap-1">
@@ -382,8 +383,8 @@
 			{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
 		{/if}
 	</span>
-	<span class="text-center text-xs font-medium uppercase text-muted-foreground">Reps</span>
-	<span class="text-center text-xs font-medium uppercase text-muted-foreground">RIR</span>
+	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Reps</span>
+	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">RIR</span>
 	<span></span>
 	<span></span>
 	{#each exercise.sets as set, idx}
@@ -405,7 +406,7 @@
 				</div>
 			{/if}
 			<span
-				class="text-center text-sm font-medium text-muted-foreground"
+				class="text-center text-base font-semibold text-foreground"
 				data-testid="{exercise.name}-set-{idx + 1}-number"
 			>
 				{idx + 1}

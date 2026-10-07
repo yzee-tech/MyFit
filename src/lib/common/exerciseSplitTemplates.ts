@@ -1,4 +1,4 @@
-import type { FullExerciseSplitWithoutIdsOrIndex } from '../../routes/exercise-splits/manage/exerciseSplitRunes.svelte';
+import type { FullExerciseSplitWithoutIdsOrIndex } from '../../routes/exercise-splits/myRoutines';
 
 // TODO: #82
 export const exerciseSplitTemplates: {

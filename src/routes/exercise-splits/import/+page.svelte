@@ -10,9 +10,9 @@
 		ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema
 	} from '$lib/zodSchemas';
 	import { toast } from 'svelte-sonner';
-	import { exerciseSplitRunes } from '../manage/exerciseSplitRunes.svelte';
-	import { goto } from '$app/navigation';
-	import { trpc } from '$lib/trpc/client';
+	import { addedMessage, addToMyRoutines } from '../myRoutines';
+	import { goto, invalidate } from '$app/navigation';
+	import { TRPCClientError } from '@trpc/client';
 
 	let splitFile = $state<File>();
 
@@ -34,13 +34,13 @@
 				});
 			});
 
-			// The file's routines go after My routines, in the editor: nothing is saved until Save
-			const myRoutines = await trpc().exerciseSplits.mine.query();
-			exerciseSplitRunes.loadMyRoutines(myRoutines?.exerciseSplitDays ?? []);
-			exerciseSplitRunes.appendRoutines(exerciseSplitDays);
-			goto('/exercise-splits/manage/structure');
+			// The file's routines go straight into My routines, after the ones there ("(2)" for a taken name)
+			const count = await addToMyRoutines(exerciseSplitDays);
+			toast.success(addedMessage(count));
+			await invalidate('exerciseSplits:all');
+			await goto('/exercise-splits');
 		} catch (error) {
-			if (error instanceof Error) {
+			if (error instanceof TRPCClientError || error instanceof Error) {
 				toast.error(error.message);
 			}
 		}
