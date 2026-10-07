@@ -434,8 +434,9 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	);
 	// My routines changed the same way
 	await page.goto('/exercise-splits');
-	await expect(page.getByRole('main')).toContainText(
-		'Pull A 1 exercise Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
+	await page.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
+	await expect(page.getByTestId('routine-card-exercises')).toContainText(
+		'Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
 });
 
