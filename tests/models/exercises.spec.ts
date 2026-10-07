@@ -4,8 +4,10 @@ import {
 	createExercises,
 	createMesocycle,
 	createTemplateExerciseSplit,
+	editRoutine,
 	pickExercise,
 	pickRoutine,
+	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
 
@@ -46,10 +48,7 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise saved everywhere' })).toBeVisible();
 
 	// Routines show it, but can't change it
-	await page.goto('/exercise-splits');
-	await page.getByRole('button', { name: 'Edit' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('tab', { name: 'Push A' }).click();
+	await editRoutine(page, 'Push A');
 	await page.getByLabel('Cable lateral raises options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await expect(page.getByTestId('picked-exercise-details')).toContainText('Front delts');
@@ -564,10 +563,7 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await createExercises(userData.userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs' }]);
 
 	// Edit face pulls in the library: 4 sets and a routine note first
-	await page.getByRole('button', { name: 'Edit' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/exercise-splits/manage/exercises');
-	await page.getByRole('tab', { name: 'Pull A' }).click();
+	await editRoutine(page, 'Pull A');
 	await page.getByLabel('Face pulls options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.locator('#exercise-sets').fill('4');
@@ -582,14 +578,11 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await expect(page.getByLabel('Pick an exercise')).toHaveText('Sit-ups');
 	await expect(page.locator('#exercise-sets')).toHaveValue('4');
 	await expect(page.locator('#exercise-note')).toHaveValue('seat on 4');
-	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/manage/exercises');
+	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/edit');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
 	await expect(page.getByRole('main')).toContainText('Sit-ups');
 	await expect(page.getByRole('main')).not.toContainText('Face pulls');
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
-	// The editor goes back to My routines once saved (an earlier save's message may still show)
-	await page.waitForURL('/exercise-splits');
+	await saveRoutine(page);
 
 	const pullA = await prisma.exerciseSplitDay.findFirstOrThrow({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },

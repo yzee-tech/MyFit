@@ -8,16 +8,26 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { exerciseSplitTemplates } from '$lib/common/exerciseSplitTemplates';
-	import { exerciseSplitRunes, type FullExerciseSplitWithoutIdsOrIndex } from '../manage/exerciseSplitRunes.svelte';
-	import { goto } from '$app/navigation';
-	import { trpc } from '$lib/trpc/client';
+	import { addedMessage, addToMyRoutines, type FullExerciseSplitWithoutIdsOrIndex } from '../myRoutines';
+	import { goto, invalidate } from '$app/navigation';
+	import { toast } from 'svelte-sonner';
+	import { TRPCClientError } from '@trpc/client';
 
-	/** The template's routines go after My routines, in the editor: nothing is saved until Save */
+	let adding = $state(false);
+
+	/** The template's routines go straight into My routines, after the ones there ("(2)" for a taken name) */
 	async function addTemplate(exerciseSplit: FullExerciseSplitWithoutIdsOrIndex) {
-		const myRoutines = await trpc().exerciseSplits.mine.query();
-		exerciseSplitRunes.loadMyRoutines(myRoutines?.exerciseSplitDays ?? []);
-		exerciseSplitRunes.appendRoutines(exerciseSplit.exerciseSplitDays);
-		goto('/exercise-splits/manage/structure');
+		if (adding) return;
+		adding = true;
+		try {
+			const count = await addToMyRoutines(exerciseSplit.exerciseSplitDays);
+			toast.success(addedMessage(count));
+			await invalidate('exerciseSplits:all');
+			await goto('/exercise-splits');
+		} catch (error) {
+			toast.error(error instanceof TRPCClientError ? error.message : "Couldn't add the template, try again");
+		}
+		adding = false;
 	}
 </script>
 
@@ -27,6 +37,7 @@
 {#each exerciseSplitTemplates as { description, exerciseSplit }}
 	<Button
 		class="mb-1 flex h-fit flex-col rounded-md border bg-card p-2"
+		disabled={adding}
 		onclick={() => addTemplate(exerciseSplit)}
 		variant="outline"
 	>

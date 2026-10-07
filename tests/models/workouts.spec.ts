@@ -190,10 +190,10 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	for (const text of [
 		'New workout Exercises Pull A Week 1',
-		'Pull-ups kg 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
-		'Barbell rows kg 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
-		'Dumbbell bicep curls kg 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
-		'Face pulls kg 3 Straight sets of 15 to 30 reps Rear delts Set Previous KG Reps RIR',
+		'Pull-ups KG 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
+		'Barbell rows KG 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
+		'Dumbbell bicep curls KG 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
+		'Face pulls KG 3 Straight sets of 15 to 30 reps Rear delts Set Previous KG Reps RIR',
 		'Discard workout Previous Next'
 	]) {
 		await expect(page.getByRole('main')).toContainText(text);
@@ -523,7 +523,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	await expect(page.getByRole('main')).toContainText('This gym uses');
 	await page.getByLabel('Pounds').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('lb');
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
 	for (const exercise of ['Pull-ups', 'Dumbbell bicep curls', 'Face pulls']) {
 		await page.getByTestId(`${exercise}-menu-button`).click();
 		await page.getByRole('menuitem', { name: 'Delete' }).click();
@@ -549,7 +549,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	await pickRoutine(page, 'Pull A');
 	await page.getByLabel('Kilograms').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('kg');
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('KG');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
 
 	// Copying last time's sets from history (stored in kg) shows them in this exercise's unit: 90 lb = 40.82 kg
@@ -561,7 +561,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 
 	// Switch this exercise back to lb: the planned sets snap to 90 lb
 	await page.getByTestId('Barbell rows-unit-toggle').click();
-	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('lb');
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('90');
 });
 
@@ -783,7 +783,8 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Hotel machine (levels)' }).click();
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
-	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toBeVisible();
+	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toHaveText('LVL');
+	await expect(page.getByTestId('Dumbbell bicep curls-load-header')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-unit-toggle')).toHaveCount(0);
 	await expect(page.getByLabel('Set 1 level')).toBeVisible();
 

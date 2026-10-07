@@ -92,8 +92,9 @@
 			<span
 				class="mr-1 rounded bg-secondary px-1.5 text-xs font-medium text-muted-foreground"
 				data-testid="{exercise.name}-levels"
+				title="Levels"
 			>
-				levels
+				LVL
 			</span>
 		{:else if !readOnly && !reordering}
 			<button
@@ -103,7 +104,8 @@
 				onclick={toggleUnit}
 				type="button"
 			>
-				{unitLabel(exercise.weightUnit ?? 'KG')}
+				<!-- Capitals, like the load column's header -->
+				{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
 			</button>
 		{/if}
 		{#if !readOnly}

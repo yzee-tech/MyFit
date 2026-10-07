@@ -4,8 +4,11 @@ import {
 	createExercises,
 	createMesocycle,
 	createTemplateExerciseSplit,
+	deleteRoutine,
+	editRoutine,
 	pickExercise,
 	pickRoutine,
+	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
 
@@ -167,17 +170,12 @@ test('a block starts with My routines as they are when it starts', async ({ page
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	// My routines change before the block starts: 4 sets of face pulls
-	await page.goto('/exercise-splits');
-	await page.getByRole('button', { name: 'Edit' }).click();
-	await page.getByRole('button', { name: 'Next' }).click();
+	await editRoutine(page, 'Pull A');
 	await page.getByLabel('Face pulls options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.locator('#exercise-sets').fill('4');
 	await page.getByRole('button', { name: 'Edit exercise' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
-	// The editor goes back to My routines once saved (an earlier save's message may still show)
-	await page.waitForURL('/exercise-splits');
+	await saveRoutine(page);
 
 	await page.goto('/mesocycles');
 	await page.getByRole('link', { name: 'MesoName Unused' }).click();
@@ -220,22 +218,16 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await page.getByRole('link', { name: 'Edit routines' }).click();
-	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.waitForURL('/exercise-splits');
 	// Routines are edited in My routines; Legs A keeps its workout wherever it moves
-	await page.getByLabel('Delete routine 2').click();
-	await page.getByRole('button', { name: 'Delete', exact: true }).click();
-	await page.getByRole('button', { name: 'Add routine' }).click();
-	await page.getByLabel('Routine 6 name').fill('Hotel gym - Full body');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('tab', { name: 'Hotel gym - Full body' }).click();
+	await deleteRoutine(page, 'Push A');
+	await page.getByRole('link', { name: 'New routine' }).click();
+	await page.getByLabel('Name', { exact: true }).fill('Hotel gym - Full body');
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Barbell bench press');
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
-	// The editor goes back to My routines once saved (an earlier save's message may still show)
-	await page.waitForURL('/exercise-splits');
+	await saveRoutine(page);
 
 	// Legs A still shows its workout; Push A is gone; the new routine can be picked
 	await page.goto('/workouts/manage/start');

@@ -54,14 +54,37 @@ export async function createTemplateExerciseSplit(page: Page, template = 'Pull P
 	await page.getByLabel('my-routines-options').click();
 	await page.getByRole('menuitem', { name: 'Add from a template' }).click();
 	await page.getByRole('button', { name: template }).click();
-	await page.waitForURL('/exercise-splits/manage/structure');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/exercise-splits/manage/exercises');
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({
+	// Added straight to My routines
+	await expect(page.getByRole('status').filter({ hasText: /Added \d+ routines?/ })).toBeVisible({
 		timeout: 10000
 	});
 	await page.waitForURL('/exercise-splits');
+	await expect(page.getByTestId('routine-card').first()).toBeVisible();
+}
+
+/** Opens a routine of My routines in the editor (from the My routines page) */
+export async function editRoutine(page: Page, name: string) {
+	if (new URL(page.url()).pathname !== '/exercise-splits') await page.goto('/exercise-splits');
+	await page.getByLabel(`Routine ${name} options`, { exact: true }).click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/exercise-splits\/edit\?routine=/);
+	await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name);
+}
+
+/** Saves the routine being edited, and waits until it's back on My routines */
+export async function saveRoutine(page: Page) {
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	await page.waitForURL('/exercise-splits');
+}
+
+/** Deletes a routine of My routines (from the My routines page), after its warning */
+export async function deleteRoutine(page: Page, name: string) {
+	await page.getByLabel(`Routine ${name} options`, { exact: true }).click();
+	await page.getByRole('menuitem', { name: 'Delete…' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+	await expect(page.getByRole('status').filter({ hasText: `“${name}” deleted` })).toBeVisible({ timeout: 10000 });
+	await expect(page.getByTestId('routine-card-name').filter({ hasText: new RegExp(`^${name}$`) })).toHaveCount(0);
 }
 
 export async function createMesocycle(page: Page, options?: { exerciseSplitCreated: boolean }) {
