@@ -513,8 +513,17 @@
 				{/key}
 				{#if weightSets.length === 0}
 					<span class="text-xs text-muted-foreground">
-						To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set in Settings.
+						To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set.
 					</span>
+				{/if}
+				<!-- Only in My routines: the routine's edits wait on this device; elsewhere leaving would interrupt -->
+				{#if props.context === 'exerciseSplit'}
+					<a
+						class="w-fit text-xs text-primary hover:underline"
+						href="/exercise-splits/weight-sets?back={encodeURIComponent($page.url.pathname + $page.url.search)}"
+					>
+						Manage weight sets ›
+					</a>
 				{/if}
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">

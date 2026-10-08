@@ -399,3 +399,58 @@ test('adding an exercise by picking it in a new routine', async ({ page, userDat
 	expect(saved.map((routine) => [routine.name, routine.weightUnit])).toEqual([['Legs', 'KG']]);
 	expect(saved[0].exercises.map((exercise) => [exercise.name, exercise.sets])).toEqual([['Squats', 3]]);
 });
+
+test('weight sets live under My routines: from its menu, and from a routine being edited and back', async ({
+	page,
+	userData
+}) => {
+	await createTemplateExerciseSplit(page);
+
+	// From the My routines menu; back to My routines
+	await page.getByLabel('my-routines-options').click();
+	await page.getByRole('menuitem', { name: 'Weight sets' }).click();
+	await page.waitForURL('/exercise-splits/weight-sets');
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Weight sets');
+	await page.getByRole('main').getByRole('link', { name: 'My routines' }).click();
+	await page.waitForURL('/exercise-splits');
+
+	// From a routine being edited: no question about leaving, the edits wait, and a new set can be picked
+	await editRoutine(page, 'Pull A');
+	await page.getByLabel('Name', { exact: true }).fill('Hotel – Pull');
+	await page.getByLabel('Barbell rows options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('link', { name: 'Manage weight sets ›' }).click();
+	await page.waitForURL(/\/exercise-splits\/weight-sets\?back=/);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await page.getByLabel('Name').fill('Hotel DBs');
+	await page.getByLabel('Weight set in kilograms').click();
+	await page.getByLabel('From').fill('5');
+	await page.getByLabel('To', { exact: true }).fill('30');
+	await page.getByLabel('Every').fill('2.5');
+	await page.getByRole('button', { name: 'Add range' }).click();
+	await page.getByRole('button', { name: 'Save weight set' }).click();
+	await expect(page.getByTestId('weight-set-Hotel DBs')).toContainText('5–30 by 2.5 kg');
+	await page.getByRole('link', { name: 'Back to the routine' }).click();
+	await page.waitForURL(/\/exercise-splits\/edit\?routine=Pull/);
+	await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Hotel – Pull');
+	// Straight back into the exercise that was open, to pick the new set
+	await expect(page.getByLabel('Pick an exercise')).toHaveText('Barbell rows');
+	await page.getByRole('combobox', { name: 'Weights available' }).click();
+	await page.getByRole('option', { name: /Hotel DBs/ }).click();
+	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await saveRoutine(page);
+	const rows = await prisma.exerciseTemplate.findFirstOrThrow({
+		where: {
+			name: 'Barbell rows',
+			exerciseSplitDay: { name: 'Hotel – Pull', exerciseSplit: { userId: userData.userId } }
+		}
+	});
+	const hotelDBs = await prisma.weightSet.findFirstOrThrow({ where: { name: 'Hotel DBs', userId: userData.userId } });
+	expect(rows.weightSetId).toEqual(hotelDBs.id);
+
+	// Settings no longer has them
+	await page.goto('/settings');
+	await expect(page.getByRole('main')).not.toContainText('Weight sets');
+	await expect(page.getByRole('button', { name: 'Add weight set' })).toHaveCount(0);
+});

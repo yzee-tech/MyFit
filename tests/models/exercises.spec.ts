@@ -340,7 +340,7 @@ test('bodyweight exercises: help as a negative load, with what it counts as; ass
 			isAssistance: true
 		}
 	});
-	await page.goto('/settings');
+	await page.goto('/exercise-splits/weight-sets');
 	await expect(page.getByTestId('weight-set-Hotel assist machine')).toContainText('Assistance: 5–50 by 5 kg');
 
 	await page.goto('/workouts');
