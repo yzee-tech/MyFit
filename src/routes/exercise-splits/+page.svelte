@@ -138,6 +138,8 @@
 						<DropdownMenu.Item class="gap-2" disabled={routines.length === 0} onclick={exportRoutines}>
 							<FileUpIcon /> Export
 						</DropdownMenu.Item>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item href="/exercise-splits/weight-sets">Weight sets</DropdownMenu.Item>
 					</DropdownMenu.Group>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>

@@ -144,6 +144,8 @@
 	beforeNavigate((navigation) => {
 		if (!routineEditor.editing || navigation.to === null || navigation.type === 'leave') return;
 		if (navigation.to.url.pathname === '/exercise-splits/edit') return;
+		// Off to set up a weight set: the edits wait here on this device, and its page links back
+		if (navigation.to.url.pathname === '/exercise-splits/weight-sets') return;
 		if (!routineEditor.hasUnsavedChanges()) {
 			routineEditor.close();
 			return;

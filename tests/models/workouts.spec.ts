@@ -612,7 +612,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await createSplitAndMesoForTest(page);
 
 	// The building gym's dumbbells: 5–10 kg by 1, then 14 and 20
-	await page.goto('/settings');
+	await page.goto('/exercise-splits/weight-sets');
 	await page.getByRole('button', { name: 'Add weight set' }).click();
 	await page.getByLabel('Name').fill('Building DBs');
 	await page.getByLabel('Weight set in kilograms').click();
@@ -681,7 +681,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await expect(page.getByTestId('Dumbbell bicep curls-next-weight')).toContainText('more reps at 10 kg first.');
 
 	// Deleting the weight set puts the exercise back on standard steps
-	await page.goto('/settings');
+	await page.goto('/exercise-splits/weight-sets');
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Delete Building DBs' }).click();
 	await expect(page.getByTestId('weight-set-Building DBs')).toHaveCount(0);
@@ -757,7 +757,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await createSplitAndMesoForTest(page);
 
 	// The hotel's machine shows levels 1–10
-	await page.goto('/settings');
+	await page.goto('/exercise-splits/weight-sets');
 	await page.getByRole('button', { name: 'Add weight set' }).click();
 	await page.getByLabel('Name').fill('Hotel machine');
 	await page.getByLabel('Machine levels').click();
