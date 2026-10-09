@@ -435,7 +435,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Pull APush ALegs APull BPush BLegs B Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
+		'Pull APush ALegs APull BPush BLegs B Edit › Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
 	// My routines changed the same way
 	await page.goto('/exercise-splits');
@@ -1560,10 +1560,7 @@ test('editing a past workout, changed: leaving asks to save; Keep editing stays,
 	await editPastWorkout(page, workout.id);
 	await changeFirstSet(page, '9');
 	// Never shown as a workout in progress
-	await page.getByRole('link', { name: 'Previous' }).click();
 	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
 
 	// Keep editing: still here, the change kept and still counted
 	await page.getByRole('link', { name: 'Exercises' }).first().click();

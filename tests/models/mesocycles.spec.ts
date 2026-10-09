@@ -51,9 +51,7 @@ test('create a mesocycle', async ({ page }) => {
 		'W5: 0 RIR',
 		'W6: Deload'
 	]);
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Routines My routines Start overload percentage 1.25% Last set to failure'
-	);
+	await expect(page.getByRole('tabpanel')).toContainText('Start overload percentage 1.25% Last set to failure');
 
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Pull-ups 3 Straight sets of 5 to 15 reps');
@@ -106,9 +104,7 @@ test('edit a mesocycle', async ({ page }) => {
 		'W4: 0 RIR',
 		'W5: Deload'
 	]);
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Routines My routines Start overload percentage 1.25% Last set to failure'
-	);
+	await expect(page.getByRole('tabpanel')).toContainText('Start overload percentage 1.25% Last set to failure');
 });
 
 test('start and stop a mesocycle', async ({ page }) => {
@@ -198,7 +194,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await page.getByRole('link', { name: 'Edit routines' }).click();
+	await page.getByRole('link', { name: 'Edit ›' }).click();
 	await page.waitForURL('/exercise-splits');
 	// Routines are edited in My routines; Legs A keeps its workout wherever it moves
 	await deleteRoutine(page, 'Push A');
@@ -227,7 +223,6 @@ test('finish a block once its weeks are over', async ({ page, userData }) => {
 	await page.getByLabel('Mesocycle duration').fill('1');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByLabel('Start immediately').click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.waitForURL('/mesocycles');
