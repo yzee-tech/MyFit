@@ -18,6 +18,8 @@
 	import ExerciseHistorySheet from './(components)/ExerciseHistorySheet.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import WarmUpDialog from './(components)/WarmUpDialog.svelte';
+	import EditWorkoutDetails from './(components)/EditWorkoutDetails.svelte';
+	import { page } from '$app/stores';
 	import QuotesDialog from './(components)/QuotesDialog.svelte';
 
 	let { data } = $props();
@@ -118,6 +120,11 @@
 
 <H3>Exercises</H3>
 
+<!-- Editing a past workout: its date, times and bodyweight are here, not on a page of their own -->
+{#if workoutData !== null && workoutRunes.editingWorkoutId !== null}
+	<EditWorkoutDetails open={$page.url.searchParams.has('details')} />
+{/if}
+
 {#if workoutData !== null}
 	<div class="flex items-end">
 		<div class="mr-auto flex flex-col">
@@ -210,7 +217,13 @@
 	{workoutRunes.editingWorkoutId === null ? 'Discard workout' : 'Discard changes'}
 </Button>
 <div class="mt-1 grid grid-cols-2 gap-1">
-	<Button href="./start" variant="secondary">Previous</Button>
+	<!-- An edit has no start step: back to the workout (it asks first if anything changed) -->
+	<Button
+		href={workoutRunes.editingWorkoutId === null ? './start' : `/workouts/${workoutRunes.editingWorkoutId}`}
+		variant="secondary"
+	>
+		Previous
+	</Button>
 	<Button onclick={submitWorkoutExercises}>Next</Button>
 </div>
 
