@@ -140,14 +140,6 @@
 			</div>
 		</div>
 		<div class="flex flex-col">
-			<span class="text-sm text-muted-foreground">Routines</span>
-			{#if mesocycle.endDate}
-				<span class="font-semibold">As they were during this mesocycle</span>
-			{:else}
-				<a class="font-semibold underline" href="/exercise-splits">My routines</a>
-			{/if}
-		</div>
-		<div class="flex flex-col">
 			<span class="text-sm text-muted-foreground">Start overload percentage</span>
 			<span class="font-semibold capitalize">
 				{mesocycle.startOverloadPercentage}%

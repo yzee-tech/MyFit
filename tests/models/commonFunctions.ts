@@ -98,8 +98,6 @@ export async function createMesocycle(page: Page, options?: { exerciseSplitCreat
 	await page.getByLabel('Mesocycle name').fill('MyMeso');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/mesocycles\/manage\/progression/);
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/mesocycles\/manage\/overview/);
 	await page.getByLabel('Start immediately').click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle created successfully' })).toBeVisible({

@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
+	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { trpc } from '$lib/trpc/client';
+	import { TRPCClientError } from '@trpc/client';
+	import { toast } from 'svelte-sonner';
+	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -9,9 +14,32 @@
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import { mesocycleRunes } from '../mesocycleRunes.svelte';
 
-	function saveProgression() {
+	let { data } = $props();
+
+	let savingMesocycle = $state(false);
+	let startImmediately = $state(false);
+
+	// The last step: saves the new mesocycle (or the edits)
+	async function createOrEditMesocycle() {
 		mesocycleRunes.saveStoresToLocalStorage();
-		goto('./overview');
+		savingMesocycle = true;
+		const mesocycleCyclicSetChanges = $state.snapshot(mesocycleRunes.mesocycleCyclicSetChanges);
+		const mesocycle = $state.snapshot(mesocycleRunes.mesocycle);
+		try {
+			const response = mesocycleRunes.editingMesocycleId
+				? await trpc().mesocycles.editById.mutate({
+						id: mesocycleRunes.editingMesocycleId,
+						mesocycleData: { mesocycle, mesocycleCyclicSetChanges }
+					})
+				: await trpc().mesocycles.create.mutate({ mesocycle, mesocycleCyclicSetChanges, startImmediately });
+			toast.success(response.message);
+			await invalidate('mesocycles:all');
+			await goto('/mesocycles');
+			mesocycleRunes.resetStores();
+		} catch (error) {
+			if (error instanceof TRPCClientError) toast.error(error.message);
+		}
+		savingMesocycle = false;
 	}
 </script>
 
@@ -83,10 +111,40 @@
 		</Card.Root>
 	</div>
 
+	{#if mesocycleRunes.editingMesocycleId === null}
+		<Card.Root class="p-4">
+			<div class="grid grid-cols-2">
+				<div class="flex items-center">
+					<Label for="start-mesocycle-immediately">Start immediately</Label>
+				</div>
+				{#await data.activeMesocycle}
+					<Skeleton class="switch-skeleton" />
+				{:then activeMesocycle}
+					<Switch
+						id="start-mesocycle-immediately"
+						name="start-mesocycle-immediately"
+						class="place-self-end"
+						disabled={activeMesocycle !== null}
+						bind:checked={startImmediately}
+					/>
+					{#if activeMesocycle !== null}
+						<span class="col-span-2 text-sm text-muted-foreground">
+							<b>{activeMesocycle.name}</b> is already active
+						</span>
+					{/if}
+				{/await}
+			</div>
+		</Card.Root>
+	{/if}
+
 	<div class="grid grid-cols-2 gap-1">
-		<Button variant="secondary">
-			<a class="w-full" href="./basics">Previous</a>
+		<Button href="./basics" variant="secondary">Previous</Button>
+		<Button disabled={savingMesocycle} onclick={createOrEditMesocycle}>
+			{#if savingMesocycle}
+				<LoaderCircle class="animate-spin" />
+			{:else}
+				Save
+			{/if}
 		</Button>
-		<Button onclick={saveProgression}>Next</Button>
 	</div>
 </div>

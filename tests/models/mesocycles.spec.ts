@@ -35,11 +35,6 @@ test('create a mesocycle', async ({ page }) => {
 	await expect(page.getByText('Pick one')).toHaveCount(0);
 	await page.getByLabel('Take last set to failure').click();
 	await page.locator('span > .absolute').click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
-	await expect(page.getByTestId('block-uses-my-routines')).toContainText(
-		'Uses My routines (6 routines) Pull A, Push A, Legs A, Pull B, Push B, Legs B'
-	);
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle created successfully' })).toBeVisible({
@@ -56,9 +51,7 @@ test('create a mesocycle', async ({ page }) => {
 		'W5: 0 RIR',
 		'W6: Deload'
 	]);
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Routines My routines Start overload percentage 1.25% Last set to failure'
-	);
+	await expect(page.getByRole('tabpanel')).toContainText('Start overload percentage 1.25% Last set to failure');
 
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText('Pull-ups 3 Straight sets of 5 to 15 reps');
@@ -70,8 +63,6 @@ test('delete a mesocycle', async ({ page }) => {
 	await page.getByLabel('Mesocycle name').fill('MesoToDelete');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: 'MesoToDelete Unused' }).click();
 	await page.getByLabel('mesocycle-options').click();
@@ -88,8 +79,6 @@ test('edit a mesocycle', async ({ page }) => {
 	await page.getByLabel('Mesocycle name').fill('MesoName');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	await page.getByRole('link', { name: 'MesoName Unused' }).click();
@@ -100,8 +89,6 @@ test('edit a mesocycle', async ({ page }) => {
 	await page.locator('#mesocycle-force-RIR-matching').click();
 	await page.getByLabel('Take last set to failure').click();
 	await page.locator('span > .absolute').click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle edited successfully' })).toBeVisible({
 		timeout: 10000
@@ -117,9 +104,7 @@ test('edit a mesocycle', async ({ page }) => {
 		'W4: 0 RIR',
 		'W5: Deload'
 	]);
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Routines My routines Start overload percentage 1.25% Last set to failure'
-	);
+	await expect(page.getByRole('tabpanel')).toContainText('Start overload percentage 1.25% Last set to failure');
 });
 
 test('start and stop a mesocycle', async ({ page }) => {
@@ -127,8 +112,6 @@ test('start and stop a mesocycle', async ({ page }) => {
 	await page.getByLabel('Mesocycle name').fill('MesoName');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: 'MesoName Unused' }).click();
 	await page.getByRole('button', { name: 'Start mesocycle' }).click();
@@ -146,13 +129,9 @@ test('start and stop a mesocycle', async ({ page }) => {
 	await expect(page.getByRole('tabpanel')).toContainText(
 		`MesoName ${new Date().toLocaleDateString('en-US')} to ${new Date().toLocaleDateString('en-US')} Completed`
 	);
-	// A finished block keeps its routines as they were, and follows My routines no more
-	await expect(page.getByRole('tabpanel')).toContainText('Routines As they were during this mesocycle');
-	await page.getByRole('tab', { name: 'Routines' }).click();
-	await expect(page.getByTestId('mesocycle-routines-note')).toHaveText(
-		'The routines as they were during this mesocycle'
-	);
-	await expect(page.getByRole('link', { name: 'Edit routines' })).toHaveCount(0);
+	// A finished block is its workouts: no Routines tab, and it follows My routines no more
+	await expect(page.getByRole('tab', { name: 'Routines' })).toHaveCount(0);
+	await expect(page.getByRole('tab', { name: 'Workouts' })).toBeVisible();
 	expect(
 		(await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MesoName', endDate: { not: null } } })).exerciseSplitId
 	).toBeNull();
@@ -165,8 +144,6 @@ test('a block starts with My routines as they are when it starts', async ({ page
 	await page.getByLabel('Mesocycle name').fill('MesoName');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL('/mesocycles/manage/overview');
 	await page.getByRole('button', { name: 'Save' }).click();
 
 	// My routines change before the block starts: 4 sets of face pulls
@@ -217,7 +194,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await page.getByRole('link', { name: 'Edit routines' }).click();
+	await page.getByRole('link', { name: 'Edit ›' }).click();
 	await page.waitForURL('/exercise-splits');
 	// Routines are edited in My routines; Legs A keeps its workout wherever it moves
 	await deleteRoutine(page, 'Push A');
@@ -246,7 +223,6 @@ test('finish a block once its weeks are over', async ({ page, userData }) => {
 	await page.getByLabel('Mesocycle duration').fill('1');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL('/mesocycles/manage/progression');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByLabel('Start immediately').click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.waitForURL('/mesocycles');

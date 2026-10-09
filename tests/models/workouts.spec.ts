@@ -376,8 +376,13 @@ test('edit a workout', async ({ page }) => {
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByPlaceholder('Type here').fill('95');
-	await page.getByRole('button', { name: 'Next' }).click();
+	// Straight to its exercises; bodyweight, date and times are at the top
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await page.getByLabel('Edit date, time and bodyweight').click();
+	await page.getByLabel('Bodyweight (kg)').fill('95');
+	await page.getByLabel('Bodyweight (kg)').blur();
+	await page.getByRole('button', { name: 'Done' }).click();
+	await expect(page.getByTestId('edit-workout-details')).toContainText('Bodyweight 95 kg');
 	await page.getByTestId('Pull-ups-set-1-action').click();
 	await page.locator('#Pull-ups-set-1-reps').fill('7');
 	await page.getByTestId('Pull-ups-set-1-action').click();
@@ -430,7 +435,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Pull APush ALegs APull BPush BLegs B Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
+		'Pull APush ALegs APull BPush BLegs B Edit › Pull-ups 2 Straight sets of 5 to 15 reps BW Lats Custom note'
 	);
 	// My routines changed the same way
 	await page.goto('/exercise-splits');
@@ -1417,7 +1422,7 @@ test('workout length on the list and the workout page; over 3 hours, “check ti
 	await page.goto(`/workouts/${tooLong.id}`);
 	await expect(page.getByTestId('workout-length')).toHaveText('4 h');
 	await page.getByTestId('check-workout-times').click();
-	await page.waitForURL('/workouts/manage/start');
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing&details/);
 	await expect(page.getByLabel('Length (min)')).toHaveValue('240');
 });
 
@@ -1449,14 +1454,12 @@ async function createPastWorkout(userId: string) {
 	});
 }
 
-/** Opens a past workout's edit, through its bodyweight step, to its exercises */
+/** Opens a past workout's edit: its exercises */
 async function editPastWorkout(page: Page, workoutId: string) {
 	await page.goto(`/workouts/${workoutId}`);
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.waitForURL(/\/workouts\/manage\/start/);
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
 	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('10');
 }
 
@@ -1474,18 +1477,22 @@ const savedFirstSetReps = async (workoutId: string) =>
 		})
 	).reps;
 
-test('editing a past workout: its date, start time and length; a future date warns', async ({ page, userData }) => {
+test('editing a past workout: its date, start time and length on its exercises; a future date warns', async ({
+	page,
+	userData
+}) => {
 	const workout = await createPastWorkout(userData.userId);
-	await page.goto(`/workouts/${workout.id}`);
-	await page.getByLabel('workout-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.waitForURL(/\/workouts\/manage\/start/);
+	await editPastWorkout(page, workout.id);
+	// A summary, opened to edit; one field per row
+	await expect(page.getByTestId('edit-workout-summary')).toContainText('1 h');
+	await page.getByLabel('Edit date, time and bodyweight').click();
 	await expect(page.getByLabel('Length (min)')).toHaveValue('60');
 
 	await page.getByLabel('Start time').fill('09:30');
 	await page.getByLabel('Length (min)').fill('75');
 	await page.getByLabel('Length (min)').blur();
-	await expect(page.getByTestId('workout-ends-at')).toContainText('10:45');
+	await expect(page.getByTestId('workout-ended-at')).toContainText('Ended');
+	await expect(page.getByTestId('workout-ended-at')).toContainText('10:45');
 	await expect(page.getByTestId('workout-in-future')).toHaveCount(0);
 
 	// A date in the future only warns
@@ -1498,9 +1505,9 @@ test('editing a past workout: its date, start time and length; a future date war
 	await page.getByLabel('Date', { exact: true }).fill(iso(workout.startedAt));
 	await page.getByLabel('Date', { exact: true }).blur();
 	await expect(page.getByTestId('workout-in-future')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Done' }).click();
+	await expect(page.getByTestId('edit-workout-summary')).toContainText('1 h 15 min');
 
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
 	await page.getByRole('button', { name: 'Next' }).click();
 	await saveWorkout(page);
 	const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
@@ -1523,10 +1530,7 @@ test('editing a past workout, unchanged: leaving asks nothing (even kg → lb �
 		const workout = await createPastWorkout(userData.userId);
 		await editPastWorkout(page, workout.id);
 
-		// Back through the edit's own pages, then out of it: no question, the edit just ends
-		await page.goBack();
-		await page.waitForURL(/\/workouts\/manage\/start/);
-		await expect(page.getByPlaceholder('Type here')).toBeVisible();
+		// Back out of it: no question, the edit just ends
 		await page.goBack();
 		await page.waitForURL(`/workouts/${workout.id}`);
 		await expect(page.getByRole('heading', { name: 'View workout' })).toBeVisible();
@@ -1556,10 +1560,7 @@ test('editing a past workout, changed: leaving asks to save; Keep editing stays,
 	await editPastWorkout(page, workout.id);
 	await changeFirstSet(page, '9');
 	// Never shown as a workout in progress
-	await page.getByRole('link', { name: 'Previous' }).click();
 	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
 
 	// Keep editing: still here, the change kept and still counted
 	await page.getByRole('link', { name: 'Exercises' }).first().click();
@@ -1579,9 +1580,6 @@ test('editing a past workout, changed: leaving asks to save; Keep editing stays,
 	// Save: saved, then on to where it was going (the phone's Back here)
 	await editPastWorkout(page, workout.id);
 	await changeFirstSet(page, '8');
-	await page.goBack();
-	await page.waitForURL(/\/workouts\/manage\/start/);
-	await expect(page.getByPlaceholder('Type here')).toBeVisible();
 	await page.goBack();
 	await page.getByRole('dialog').getByRole('button', { name: 'Save changes' }).click();
 	await page.waitForURL(`/workouts/${workout.id}`);

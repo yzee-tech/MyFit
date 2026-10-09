@@ -1,13 +1,4 @@
-import { createContext } from '$lib/trpc/context';
-import { createCaller } from '$lib/trpc/router';
+import { redirect } from '@sveltejs/kit';
 
-export const load = async (event) => {
-	event.depends('mesocycles:active');
-	const trpc = createCaller(await createContext(event));
-	return {
-		activeMesocycle: trpc.mesocycles.findActiveMesocycle(),
-		myRoutineNames: trpc.exerciseSplits
-			.mine()
-			.then((myRoutines) => myRoutines?.exerciseSplitDays.map((routine) => routine.name) ?? [])
-	};
-};
+// The mesocycle's last step is Progression now: it saves
+export const load = () => redirect(301, '/mesocycles/manage/progression');

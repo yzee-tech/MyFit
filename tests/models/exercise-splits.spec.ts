@@ -366,10 +366,9 @@ test('the current block follows My routines: a rename, set counts, overrides, a 
 	// The block shows them read-only, without Legs B, with a way to edit My routines
 	await page.goto(`/mesocycles/${block.id}`);
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await expect(page.getByTestId('mesocycle-routines-note')).toHaveText('This mesocycle uses My routines');
 	await expect(page.getByRole('tab', { name: 'Legs B' })).toHaveCount(0);
 	await expect(page.getByRole('tab', { name: 'Hotel – Pull' })).toBeVisible();
-	await page.getByRole('link', { name: 'Edit routines' }).click();
+	await page.getByRole('link', { name: 'Edit ›' }).click();
 	await page.waitForURL('/exercise-splits');
 });
 

@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Button from '$lib/components/ui/button/button.svelte';
-	import * as Card from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import EditIcon from 'virtual:icons/lucide/pencil';
 	import ExerciseTemplateCard from '$lib/components/mesocycleAndExerciseSplit/ExerciseTemplateCard.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
 
@@ -18,22 +15,16 @@
 	let selectedRoutine = $derived(routines.find((routine) => routine.name === selectedName));
 </script>
 
-<Card.Root class="mb-2 flex items-center justify-between gap-2 p-2">
-	<span class="text-sm font-medium text-muted-foreground" data-testid="mesocycle-routines-note">
-		{mesocycle.endDate ? 'The routines as they were during this mesocycle' : 'This mesocycle uses My routines'}
-	</span>
-	{#if !mesocycle.endDate}
-		<Button class="gap-2" href="/exercise-splits" size="sm">
-			Edit routines <EditIcon />
-		</Button>
-	{/if}
-</Card.Root>
 {#if routines.length > 0}
 	<Tabs.Root class="w-full" onValueChange={(v) => v && (selectedName = v)} value={selectedName}>
 		<Tabs.List class="flex justify-start overflow-x-auto">
 			{#each routines as routine}
 				<Tabs.Trigger value={routine.name}>{routine.name}</Tabs.Trigger>
 			{/each}
+			<!-- The routines are My routines: edited there -->
+			<a class="ml-1 shrink-0 whitespace-nowrap px-2 text-sm text-primary hover:underline" href="/exercise-splits">
+				Edit ›
+			</a>
 		</Tabs.List>
 		{#if selectedRoutine}
 			<Tabs.Content class="flex flex-col gap-1" value={selectedRoutine.name}>
@@ -44,5 +35,8 @@
 		{/if}
 	</Tabs.Root>
 {:else}
-	<div class="muted-text-box">No routines yet. Create them in My routines, or train with a blank workout.</div>
+	<div class="muted-text-box">
+		No routines yet. Create them in <a class="underline" href="/exercise-splits">My routines</a>, or train with a blank
+		workout.
+	</div>
 {/if}

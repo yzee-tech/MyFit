@@ -63,9 +63,10 @@
 		workout.workoutExercises.map((ex) => ex.customMuscleGroup ?? ex.targetMuscleGroup)
 	);
 
-	async function editWorkout() {
+	/** Edits it on its list of exercises; `checkTimes` opens its date and times straight away */
+	async function editWorkout(checkTimes = false) {
 		workoutRunes.loadWorkout(workout, $page.data.homeWeightUnit);
-		await goto('/workouts/manage/start');
+		await goto(`/workouts/manage/exercises?editing${checkTimes ? '&details' : ''}`);
 	}
 
 	async function deleteWorkout() {
@@ -96,7 +97,7 @@
 				<DropdownMenu.Content align="end">
 					<DropdownMenu.Group>
 						{#if workout.workoutOfMesocycle === null || workout.workoutOfMesocycle.workoutStatus === null}
-							<DropdownMenu.Item class="gap-2" onclick={editWorkout}>
+							<DropdownMenu.Item class="gap-2" onclick={() => editWorkout()}>
 								<EditIcon /> Edit
 							</DropdownMenu.Item>
 						{/if}
@@ -122,7 +123,12 @@
 			· <span data-testid="workout-length">{formatWorkoutLength(workout.startedAt, workout.endedAt)}</span>
 			{#if workoutMinutes(workout.startedAt, workout.endedAt) > LONG_WORKOUT_MINUTES}
 				<!-- Most likely not saved straight away -->
-				<button class="ml-1 underline" data-testid="check-workout-times" onclick={editWorkout} type="button">
+				<button
+					class="ml-1 underline"
+					data-testid="check-workout-times"
+					onclick={() => editWorkout(true)}
+					type="button"
+				>
 					check times?
 				</button>
 			{/if}

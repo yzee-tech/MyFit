@@ -36,9 +36,12 @@
 	<MesocycleSkeleton />
 {:else}
 	<Tabs.Root class="flex w-full grow flex-col" bind:value={selectedTabValue}>
-		<Tabs.List class="grid grid-cols-3">
+		<!-- A finished mesocycle is what was done: its workouts, not routines -->
+		<Tabs.List class="grid {mesocycle.endDate ? 'grid-cols-2' : 'grid-cols-3'}">
 			<Tabs.Trigger value="basics">Basics</Tabs.Trigger>
-			<Tabs.Trigger value="split">Routines</Tabs.Trigger>
+			{#if !mesocycle.endDate}
+				<Tabs.Trigger value="split">Routines</Tabs.Trigger>
+			{/if}
 			<Tabs.Trigger value="workouts">Workouts</Tabs.Trigger>
 		</Tabs.List>
 		<Tabs.Content value="basics">
@@ -48,13 +51,15 @@
 				<MesocycleStats {mesocycle} />
 			{/if}
 		</Tabs.Content>
-		<Tabs.Content value="split">
-			{#if !chartMode}
-				<MesocycleSplitTab {mesocycle} />
-			{:else}
-				<MesocycleExerciseSplitStats {mesocycle} />
-			{/if}
-		</Tabs.Content>
+		{#if !mesocycle.endDate}
+			<Tabs.Content value="split">
+				{#if !chartMode}
+					<MesocycleSplitTab {mesocycle} />
+				{:else}
+					<MesocycleExerciseSplitStats {mesocycle} />
+				{/if}
+			</Tabs.Content>
+		{/if}
 		<Tabs.Content class="grow" value="workouts">
 			{#if !chartMode}
 				<MesocycleWorkoutsTab {mesocycle} />
