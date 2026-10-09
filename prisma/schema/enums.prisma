@@ -46,7 +46,8 @@ enum QuotesDisplayMode {
   BETWEEN_SETS
 }
 
-/// LEVEL: a machine that shows levels (1, 2, 3…) instead of weights; loads are the level number
+/// LEVEL: a machine that shows levels (1, 2, 3…) instead of weights; loads are the level number.
+/// Weight sets are KG or LB; a machine's levels are set on its exercise
 enum WeightUnit {
   KG
   LB

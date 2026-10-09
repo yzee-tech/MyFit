@@ -756,20 +756,19 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 }) => {
 	await createSplitAndMesoForTest(page);
 
-	// The hotel's machine shows levels 1–10
-	await page.goto('/exercise-splits/weight-sets');
-	await page.getByRole('button', { name: 'Add weight set' }).click();
-	await page.getByLabel('Name').fill('Hotel machine');
-	await page.getByLabel('Machine levels').click();
-	await expect(page.getByTestId('weight-set-levels-hint')).toBeVisible();
-	await page.getByLabel('From').fill('1');
-	await page.getByLabel('To', { exact: true }).fill('10');
-	await page.getByLabel('Every').fill('1');
-	await page.getByRole('button', { name: 'Add range' }).click();
-	await page.getByRole('button', { name: 'Save weight set' }).click();
-	await expect(page.getByTestId('weight-set-Hotel machine')).toContainText('Levels 1–10 by 1');
+	// Curls are on a machine that shows levels 1–10: set on the exercise
+	await page.goto('/exercises');
+	await page.getByRole('link', { name: /^Dumbbell bicep curls/ }).click();
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Machine with levels').click();
+	await page.getByLabel('From level').fill('1');
+	await page.getByLabel('To level').fill('10');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Exercise saved everywhere' })).toBeVisible();
+	await expect(page.getByRole('main')).toContainText('Levels 1–10');
 
-	// Curls on it (10–20 reps): all three sets at the top, on level 7
+	// Curls (10–20 reps): all three sets at the top, on level 7
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -779,15 +778,17 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 		await page.getByTestId(`${exercise}-menu-button`).click();
 		await page.getByRole('menuitem', { name: 'Delete' }).click();
 	}
-	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByLabel('Weights available').click();
-	await page.getByRole('option', { name: 'Hotel machine (levels)' }).click();
-	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-load-header')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-unit-toggle')).toHaveCount(0);
 	await expect(page.getByLabel('Set 1 level')).toBeVisible();
+
+	// Its editor shows the machine's levels instead of weight sets
+	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByTestId('exercise-machine-levels')).toHaveText('Levels 1–10 by 1 (set on the exercise)');
+	await expect(page.getByLabel('Weights available')).toHaveCount(0);
+	await page.keyboard.press('Escape');
 
 	for (const set of [1, 2, 3]) {
 		await page.locator(`[id="Dumbbell\\ bicep\\ curls-set-${set}-reps"]`).fill('20');
@@ -795,12 +796,9 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]').fill('7');
 	for (const set of [1, 2, 3]) await page.getByTestId(`Dumbbell bicep curls-set-${set}-action`).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page, {
-		changes: ['Removed: Pull-ups', 'Dumbbell bicep curls: weights available'],
-		answer: 'Update routine'
-	});
+	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Update routine' });
 
-	// Logged as level 7, not a weight; the routine keeps the machine, not a unit of its own
+	// Logged as level 7, not a weight; the routine keeps no unit or weight set of its own
 	const logged = await prisma.workoutExercise.findFirstOrThrow({
 		where: { name: 'Dumbbell bicep curls', workout: { userId: userData.userId } },
 		include: { sets: true }
@@ -811,7 +809,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
 	});
 	expect(routineCurls.weightUnit).toBeNull();
-	expect(routineCurls.weightSetId).not.toBeNull();
+	expect(routineCurls.weightSetId).toBeNull();
 
 	// Next time: level 8, back at the bottom of the range
 	await page.getByLabel('create-workout').click();

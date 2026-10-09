@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -73,6 +73,8 @@
 			)
 		) {
 			editOpen = false;
+			// Its levels (or none now) for the workout screen and routine editors
+			await invalidate('settings:userSettings');
 			await load();
 		}
 	}
@@ -192,6 +194,11 @@
 				{/if}
 				{#if exercise.repsOnly}
 					<Badge variant="outline">Reps only{exercise.maxReps ? `, max ${exercise.maxReps}` : ''}</Badge>
+				{/if}
+				{#if exercise.levelsFrom !== null && exercise.levelsTo !== null}
+					<Badge variant="outline">
+						Levels {exercise.levelsFrom}–{exercise.levelsTo}{exercise.levelStep === 0.5 ? ' by ½' : ''}
+					</Badge>
 				{/if}
 			</div>
 			{#if exercise.note}

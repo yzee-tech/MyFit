@@ -12,6 +12,15 @@
 		repsOnly: boolean;
 		/** Reps-only cap; null for none */
 		maxReps: number | null;
+		/** A machine that shows levels instead of weights; null for weights. Never with reps only */
+		levels: { from: number; to: number; step: 1 | 0.5 } | null;
+	};
+
+	/** An exercise as saved: its levels as three fields */
+	export type ExerciseFormInitial = Omit<ExerciseFormDetails, 'levels'> & {
+		levelsFrom?: number | null;
+		levelsTo?: number | null;
+		levelStep?: number | null;
 	};
 
 	/** One of the user's exercises, for "Already on your list" */
@@ -32,7 +41,7 @@
 
 	type PropsType = {
 		/** The exercise being edited; a new one when missing */
-		initial?: ExerciseFormDetails;
+		initial?: ExerciseFormInitial;
 		/** Your exercises: matches show as "Already on your list", and built-in suggestions leave them out */
 		existingExercises?: ExistingExercise[];
 		/** Tapping one of your exercises instead of making a new one */
@@ -61,6 +70,10 @@
 	let note = $state(initial?.note ?? '');
 	let repsOnly = $state(initial?.repsOnly ?? false);
 	let maxReps: number | undefined = $state(initial?.maxReps ?? undefined);
+	let hasLevels = $state(typeof initial?.levelsFrom === 'number');
+	let levelsFrom: number | undefined = $state(initial?.levelsFrom ?? 1);
+	let levelsTo: number | undefined = $state(initial?.levelsTo ?? 20);
+	let halfLevels = $state(initial?.levelStep === 0.5);
 	let saving = $state(false);
 
 	// Turning on reps only drops a bodyweight share the exercise already had
@@ -108,7 +121,12 @@
 				bodyweightFraction: !repsOnly && countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
 				note: note.trim() || null,
 				repsOnly,
-				maxReps: repsOnly && maxReps ? maxReps : null
+				maxReps: repsOnly && maxReps ? maxReps : null,
+				// Reps only and levels are one or the other
+				levels:
+					!repsOnly && hasLevels && levelsFrom !== undefined && levelsTo !== undefined
+						? { from: levelsFrom, to: levelsTo, step: halfLevels ? 0.5 : 1 }
+						: null
 			});
 		} finally {
 			saving = false;
@@ -221,6 +239,51 @@
 					weights don't change.
 				</p>
 			{/if}
+		{/if}
+	</div>
+
+	<div class="grid gap-1.5" class:hidden={repsOnly}>
+		<div class="flex items-center justify-between gap-4">
+			<div class="grid gap-0.5">
+				<Label for="exercise-form-levels">Machine with levels</Label>
+				<span class="text-xs text-muted-foreground">It shows levels (1, 2, 3…) instead of weights.</span>
+			</div>
+			<Switch id="exercise-form-levels" bind:checked={hasLevels} />
+		</div>
+		{#if hasLevels}
+			<div class="mt-1 grid grid-cols-2 gap-2">
+				<div class="grid gap-1">
+					<Label class="text-xs text-muted-foreground" for="exercise-form-levels-from">From level</Label>
+					<Input
+						id="exercise-form-levels-from"
+						max={1000}
+						min={0.5}
+						required={hasLevels && !repsOnly}
+						step={0.5}
+						type="number"
+						bind:value={levelsFrom}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label class="text-xs text-muted-foreground" for="exercise-form-levels-to">To level</Label>
+					<Input
+						id="exercise-form-levels-to"
+						max={1000}
+						min={levelsFrom ?? 0.5}
+						required={hasLevels && !repsOnly}
+						step={0.5}
+						type="number"
+						bind:value={levelsTo}
+					/>
+				</div>
+			</div>
+			<div class="flex items-center justify-between gap-4">
+				<Label class="font-normal" for="exercise-form-half-levels">Has half levels (e.g. 7.5)</Label>
+				<Switch id="exercise-form-half-levels" bind:checked={halfLevels} />
+			</div>
+			<span class="text-xs text-muted-foreground">
+				Suggestions go up a level once every set reaches the top of the rep range.
+			</span>
 		{/if}
 	</div>
 

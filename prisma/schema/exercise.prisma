@@ -13,6 +13,11 @@ model Exercise {
   repsOnly           Boolean     @default(false)
   /// Reps-only cap: suggestions stop at this many reps; none means no cap
   maxReps            Int?
+  /// A machine that shows levels instead of weights: its lowest and highest level, and the step
+  /// between them (1 or 0.5). All three or none; never with reps only
+  levelsFrom         Float?
+  levelsTo           Float?
+  levelStep          Float?
   /// Deleted but kept for the workouts that used it
   archived           Boolean     @default(false)
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)

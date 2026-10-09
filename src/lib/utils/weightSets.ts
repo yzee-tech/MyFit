@@ -12,7 +12,44 @@ export type WeightSetLike = {
 	weights: number[];
 	/** An assisted machine's settings: each weight is help, logged as a negative load */
 	isAssistance?: boolean;
+	/**
+	 * A machine's levels, made from its exercise's settings (never stored): the exercise's name. Such an
+	 * exercise always uses them, whatever weight set it's linked to
+	 */
+	levelsOf?: string;
 };
+
+/** The step between a machine's levels: whole levels, or half levels too */
+export const LEVEL_STEPS = [1, 0.5] as const;
+
+type ExerciseLevels = {
+	id: string;
+	name: string;
+	levelsFrom: number | null;
+	levelsTo: number | null;
+	levelStep: number | null;
+};
+
+/** The levels of each exercise that's a machine with levels, e.g. 1–20 by 1 */
+export function levelSetsFor(exercises: ExerciseLevels[]): WeightSetLike[] {
+	return exercises.flatMap((exercise) => {
+		const { levelsFrom, levelsTo, levelStep } = exercise;
+		if (levelsFrom === null || levelsTo === null || levelStep === null) return [];
+		const weights = expandRange(levelsFrom, levelsTo, levelStep);
+		if (weights.length === 0) return [];
+		return [{ id: `levels:${exercise.id}`, name: exercise.name, unit: 'LEVEL' as const, weights, levelsOf: exercise.name }];
+	});
+}
+
+/** An exercise's machine levels, if it has them */
+export function levelSetOf(exerciseName: string | undefined, weightSets: WeightSetLike[]): WeightSetLike | undefined {
+	return exerciseName === undefined ? undefined : weightSets.find((set) => set.levelsOf === exerciseName);
+}
+
+/** The weight sets someone picks from: a gym's weights, not a machine's levels */
+export function pickableWeightSets(weightSets: WeightSetLike[]): WeightSetLike[] {
+	return weightSets.filter((set) => set.levelsOf === undefined && set.unit !== 'LEVEL');
+}
 
 export const MAX_WEIGHTS_PER_SET = 200;
 
@@ -34,9 +71,12 @@ export function normalizeWeights(weights: number[]): number[] {
  * applies while the exercise is shown in the set's unit.
  */
 export function availableWeightsFor(
-	exercise: { weightSetId?: string | null; weightUnit?: WeightUnit | null },
+	exercise: { name?: string; weightSetId?: string | null; weightUnit?: WeightUnit | null },
 	weightSets: WeightSetLike[]
 ): number[] | null {
+	// A machine with levels always uses its own levels
+	const levels = levelSetOf(exercise.name, weightSets);
+	if (levels) return exercise.weightUnit === 'LEVEL' ? levels.weights : null;
 	if (!exercise.weightSetId) return null;
 	const weightSet = weightSets.find((set) => set.id === exercise.weightSetId);
 	if (!weightSet || weightSet.weights.length === 0) return null;

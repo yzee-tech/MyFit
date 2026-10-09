@@ -73,7 +73,7 @@ export async function editRoutine(page: Page, name: string) {
 
 /** Saves the routine being edited, and waits until it's back on My routines */
 export async function saveRoutine(page: Page) {
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
 	await page.waitForURL('/exercise-splits');
 }

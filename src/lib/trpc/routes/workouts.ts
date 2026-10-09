@@ -38,6 +38,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { createId } from '@paralleldrive/cuid2';
+import { levelSetOf, levelSetsFor, type WeightSetLike } from '$lib/utils/weightSets';
 import { z } from 'zod';
 
 type TodaysWorkoutData = {
@@ -84,6 +85,21 @@ type ActiveBlockData = {
 };
 
 /** Reps-only exercises by name, with their rep cap */
+/** A gym's weights, and each machine's levels (from its exercise) */
+async function userWeightSets(userId: string): Promise<WeightSetLike[]> {
+	const [weightSets, levelExercises] = await Promise.all([
+		prisma.weightSet.findMany({
+			where: { userId, unit: { not: 'LEVEL' } },
+			select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
+		}),
+		prisma.exercise.findMany({
+			where: { userId, levelsFrom: { not: null } },
+			select: { id: true, name: true, levelsFrom: true, levelsTo: true, levelStep: true }
+		})
+	]);
+	return [...weightSets, ...levelSetsFor(levelExercises)];
+}
+
 function repsOnlySettings(exercises: { name: string; repsOnly: boolean; maxReps: number | null }[]): RepsOnlySettings {
 	return new Map(
 		exercises.filter((exercise) => exercise.repsOnly).map((exercise) => [exercise.name, exercise.maxReps])
@@ -587,10 +603,7 @@ export const workouts = t.router({
 					todaysSplitDay.mesocycleSplitDayExercises.flatMap((exercise) => exercise.exerciseId ?? [])
 				),
 				prisma.userSettings.findUnique({ where: { userId: ctx.userId }, select: { homeWeightUnit: true } }),
-				prisma.weightSet.findMany({
-					where: { userId: ctx.userId },
-					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
-				})
+				userWeightSets(ctx.userId)
 			]);
 			const weightSetById = new Map(weightSets.map((weightSet) => [weightSet.id, weightSet]));
 			const askEachTime = todaysSplitDay.weightUnit === 'ASK';
@@ -600,15 +613,17 @@ export const workouts = t.router({
 			const sessionUnit = input.sessionUnit ?? userSettings?.homeWeightUnit ?? 'KG';
 			const sessionWeightSet = input.sessionWeightSetId ? weightSetById.get(input.sessionWeightSetId) : undefined;
 			todaysSplitDay.mesocycleSplitDayExercises.forEach((exercise) => {
+				// A machine with levels always uses its own levels
+				const levels = levelSetOf(exercise.name, weightSets);
 				const ownWeightSet = exercise.weightSetId ? weightSetById.get(exercise.weightSetId) : undefined;
 				exercise.weightUnit = resolveExerciseUnit(
 					exercise.weightUnit,
 					todaysSplitDay.weightUnit,
 					sessionUnit,
-					ownWeightSet?.unit
+					levels ? 'LEVEL' : ownWeightSet?.unit
 				);
 				// At a gym picked for this workout, its weights apply unless the exercise has its own in this unit
-				if (askEachTime && sessionWeightSet && ownWeightSet?.unit !== exercise.weightUnit) {
+				if (!levels && askEachTime && sessionWeightSet && ownWeightSet?.unit !== exercise.weightUnit) {
 					exercise.weightSetId = sessionWeightSet.id;
 				}
 			});
@@ -692,10 +707,7 @@ export const workouts = t.router({
 			const [history, block, weightSets] = await Promise.all([
 				getExerciseHistory(ctx.userId, [exercise.id]),
 				prisma.mesocycle.findFirst({ where: { userId: ctx.userId, startDate: { not: null }, endDate: null } }),
-				prisma.weightSet.findMany({
-					where: { userId: ctx.userId },
-					select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
-				})
+				userWeightSets(ctx.userId)
 			]);
 			const settings = { repsOnly: exercise.repsOnly, maxReps: exercise.maxReps };
 			const lastPerformance = comparablePerformances(history[exercise.name] ?? [], input.weightUnit).at(-1);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { invalidate } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Command from '$lib/components/ui/command';
@@ -21,8 +22,8 @@
 	import type { Mesocycle } from '@prisma/client';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import type { WeightSetLike } from '$lib/utils/weightSets';
-	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { formatWeightList, levelSetOf, pickableWeightSets, type WeightSetLike } from '$lib/utils/weightSets';
+	import { unitLabel } from '$lib/utils/weightUnits';
 	import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
 	import { toast } from 'svelte-sonner';
 	import CheckIcon from 'virtual:icons/lucide/check';
@@ -71,9 +72,8 @@
 	let blockDefaults = $derived('mesocycle' in props ? props.mesocycle : undefined);
 
 	// The weights a gym has; none means standard steps (2.5 kg / 5 lb)
-	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
-	const weightSetLabel = (weightSet: WeightSetLike) =>
-		`${weightSet.name} (${isLevelUnit(weightSet.unit) ? 'levels' : unitLabel(weightSet.unit)})`;
+	let weightSets: WeightSetLike[] = $derived(pickableWeightSets($page.data.weightSets ?? []));
+	const weightSetLabel = (weightSet: WeightSetLike) => `${weightSet.name} (${unitLabel(weightSet.unit)})`;
 	function weightSetOption(weightSetId: string | null | undefined) {
 		const weightSet = weightSets.find((set) => set.id === weightSetId);
 		return weightSet
@@ -129,6 +129,8 @@
 	let overridesSheetOpen = $state(false);
 	let mode = $derived(props.editingExercise === undefined ? 'Add' : 'Edit');
 	let currentExercise: Partial<FullExerciseTemplate> = $state(structuredClone(defaultExercise));
+	// A machine with levels uses its own, set on the Exercises page
+	let machineLevels = $derived(levelSetOf(currentExercise.name, $page.data.weightSets ?? []));
 	let selectedMuscleGroups = $state<MuscleGroup[]>([]);
 	let filterOpen = $state(false);
 
@@ -161,6 +163,8 @@
 	async function createExercise(details: ExerciseFormDetails) {
 		try {
 			const created = await trpc().exercises.create.mutate(details);
+			// A machine's levels, for this drawer and the workout screen
+			await invalidate('settings:userSettings');
 			await loadPickerExercises();
 			const picked = pickerExercises.find((exercise) => exercise.id === created.id);
 			if (picked) selectExercise(picked);
@@ -493,6 +497,12 @@
 				/>
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">
+				{#if machineLevels}
+					<span class="text-sm font-medium leading-none">Weights available</span>
+					<span class="text-sm text-muted-foreground" data-testid="exercise-machine-levels">
+						Levels {formatWeightList(machineLevels.weights)} (set on the exercise)
+					</span>
+				{:else}
 				{#key currentExercise}
 					<Select.Root
 						name="exercise-weight-set"
@@ -524,6 +534,7 @@
 					>
 						Manage weight sets ›
 					</a>
+				{/if}
 				{/if}
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">

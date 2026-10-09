@@ -7,7 +7,7 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { convertCamelCaseToNormal } from '$lib/utils';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { TRPCClientError } from '@trpc/client';
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -57,6 +57,8 @@
 			const created = await trpc().exercises.create.mutate(details);
 			toast.success('Exercise created');
 			newExerciseOpen = false;
+			// A machine's levels, for the workout screen and routine editors
+			await invalidate('settings:userSettings');
 			await goto(`/exercises/${created.id}`);
 		} catch (error) {
 			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to create exercise');
@@ -64,7 +66,15 @@
 	}
 </script>
 
-<H2>Exercises</H2>
+<H2>
+	Exercises
+	<a
+		class="shrink-0 text-sm font-normal tracking-normal text-primary hover:underline"
+		href="/exercise-splits/weight-sets?back=/exercises"
+	>
+		Weight sets ›
+	</a>
+</H2>
 
 <div class="mb-2 flex gap-2">
 	<Input aria-label="Search exercises" placeholder="Search" bind:value={search} />
