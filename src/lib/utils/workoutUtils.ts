@@ -7,20 +7,41 @@ import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, 
 import type { WeightUnit } from './prismaEnums';
 import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
 
-export function getSetVolume(set: SetDetails, userBodyweight: number, bodyweightFraction: number | null) {
-	const setVolume = (set.reps + set.RIR) * set.load + (bodyweightFraction ?? 0) * userBodyweight;
-	const miniSetsVolume = set.miniSets?.reduce((totalMiniSetVolume, miniSet) => {
-		const miniSetVolume = (miniSet.reps + miniSet.RIR) * miniSet.load + (bodyweightFraction ?? 0) * userBodyweight;
-		return miniSetVolume + totalMiniSetVolume;
-	}, 0);
-	return setVolume + (miniSetsVolume ?? 0);
+type VolumeSet = { reps: number; load: number; RIR: number; miniSets?: { reps: number; load: number; RIR: number }[] };
+
+/**
+ * Work done in a set, in kg: reps × (load + the bodyweight share), mini-sets the same way. Reps in
+ * reserve weren't done, so they don't count; help (a negative load) never makes it below 0
+ */
+export function getSetVolume(set: VolumeSet, userBodyweight: number, bodyweightFraction: number | null) {
+	const bodyweight = (bodyweightFraction ?? 0) * userBodyweight;
+	const work = (part: { reps: number; load: number }) => Math.max(0, part.reps * (part.load + bodyweight));
+	return work(set) + arraySum((set.miniSets ?? []).map(work));
 }
 
-/** Volume in kg; a machine's levels aren't weights, so they don't count towards it */
-export function getExerciseVolume(workoutExercise: WorkoutExercise, userBodyweight: number) {
+/**
+ * What a set could have done, for comparing a session's sets with each other: (reps + reps in reserve)
+ * × (load + the bodyweight share), mini-sets the same way
+ */
+function getSetCapacity(set: VolumeSet, userBodyweight: number, bodyweightFraction: number | null) {
+	const bodyweight = (bodyweightFraction ?? 0) * userBodyweight;
+	const capacity = (part: { reps: number; load: number; RIR: number }) =>
+		(part.reps + part.RIR) * (part.load + bodyweight);
+	return capacity(set) + arraySum((set.miniSets ?? []).map(capacity));
+}
+
+/** Volume in kg of the sets done (not skipped); a machine's levels aren't weights, so they count 0 */
+export function getExerciseVolume(
+	workoutExercise: Pick<WorkoutExercise, 'weightUnit' | 'bodyweightFraction'> & {
+		sets: (VolumeSet & { skipped?: boolean })[];
+	},
+	userBodyweight: number
+) {
 	if (isLevelUnit(workoutExercise.weightUnit)) return 0;
 	return arraySum(
-		workoutExercise.sets.map((set) => getSetVolume(set, userBodyweight, workoutExercise.bodyweightFraction))
+		workoutExercise.sets
+			.filter((set) => !set.skipped)
+			.map((set) => getSetVolume(set, userBodyweight, workoutExercise.bodyweightFraction))
 	);
 }
 
@@ -303,12 +324,12 @@ function generateAveragePerformanceDropOffs(performances: PreviousPerformance[])
 	for (const performance of performances) {
 		for (let i = 0; i < performance.exercise.sets.length - 1; i++) {
 			const rateOfChange =
-				getSetVolume(
+				getSetCapacity(
 					performance.exercise.sets[i],
 					performance.oldUserBodyweight,
 					performance.exercise.bodyweightFraction
 				) -
-				getSetVolume(
+				getSetCapacity(
 					performance.exercise.sets[i + 1],
 					performance.oldUserBodyweight,
 					performance.exercise.bodyweightFraction
