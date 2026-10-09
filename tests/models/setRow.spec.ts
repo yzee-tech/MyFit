@@ -321,9 +321,7 @@ test('editing a past workout: no "Previous" column and no reps hint', async ({ p
 	await page.goto(`/workouts/${workout.id}`);
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.waitForURL(/\/workouts\/manage\/start/);
-	await page.getByRole('button', { name: 'Next' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
 	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveValue('60');
 	await expect(page.getByTestId('Barbell rows-sets')).toContainText('Set KG Reps RIR');
 	await expect(page.getByTestId('Barbell rows-sets')).not.toContainText('Previous');
