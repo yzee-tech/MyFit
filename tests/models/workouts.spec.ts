@@ -1418,7 +1418,7 @@ test('workout length on the list and the workout page; over 3 hours, “check ti
 	await expect(page.getByTestId('workout-length')).toHaveText('4 h');
 	await page.getByTestId('check-workout-times').click();
 	await page.waitForURL('/workouts/manage/start');
-	await expect(page.locator('#end-date')).toBeVisible();
+	await expect(page.getByLabel('Length (min)')).toHaveValue('240');
 });
 
 /** A saved workout yesterday: Barbell rows, 3 × 10 at 60 kg, bodyweight 80 kg */
@@ -1473,6 +1473,41 @@ const savedFirstSetReps = async (workoutId: string) =>
 			where: { setIndex: 0, workoutExercise: { workoutId } }
 		})
 	).reps;
+
+test('editing a past workout: its date, start time and length; a future date warns', async ({ page, userData }) => {
+	const workout = await createPastWorkout(userData.userId);
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/start/);
+	await expect(page.getByLabel('Length (min)')).toHaveValue('60');
+
+	await page.getByLabel('Start time').fill('09:30');
+	await page.getByLabel('Length (min)').fill('75');
+	await page.getByLabel('Length (min)').blur();
+	await expect(page.getByTestId('workout-ends-at')).toContainText('10:45');
+	await expect(page.getByTestId('workout-in-future')).toHaveCount(0);
+
+	// A date in the future only warns
+	const nextYear = new Date(Date.now() + 365 * 86400000);
+	const iso = (date: Date) =>
+		`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+	await page.getByLabel('Date', { exact: true }).fill(iso(nextYear));
+	await page.getByLabel('Date', { exact: true }).blur();
+	await expect(page.getByTestId('workout-in-future')).toBeVisible();
+	await page.getByLabel('Date', { exact: true }).fill(iso(workout.startedAt));
+	await page.getByLabel('Date', { exact: true }).blur();
+	await expect(page.getByTestId('workout-in-future')).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await page.getByRole('button', { name: 'Next' }).click();
+	await saveWorkout(page);
+	const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
+	expect(saved.endedAt.getTime() - saved.startedAt.getTime()).toEqual(75 * 60000);
+	await page.goto(`/workouts/${workout.id}`);
+	await expect(page.getByTestId('workout-length')).toHaveText('1 h 15 min');
+});
 
 test('editing a past workout, unchanged: leaving asks nothing (even kg → lb → kg), and no panel; Discard changes asks nothing more', async ({
 	page,

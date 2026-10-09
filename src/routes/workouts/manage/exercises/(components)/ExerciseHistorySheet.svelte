@@ -10,7 +10,7 @@
 	import WorkoutExerciseCard from '../../../[workoutId]/(components)/WorkoutExerciseCard.svelte';
 	import { workoutRunes } from '../../workoutRunes.svelte';
 	import type { InfiniteEvent } from 'svelte-infinite-loading';
-	import ExerciseStatsChart from '../../../../exercise-stats/ExerciseStatsChart.svelte';
+	import ExerciseStatsChart from '../../../../stats/ExerciseStatsChart.svelte';
 
 	let exercisesFound: RouterOutputs['workouts']['getExerciseHistory'] = $state([]);
 

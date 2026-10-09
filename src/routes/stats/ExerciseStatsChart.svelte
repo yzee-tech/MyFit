@@ -15,6 +15,7 @@
 		Chart,
 		Filler,
 		LinearScale,
+		Legend,
 		LineController,
 		LineElement,
 		PointElement,
@@ -26,6 +27,7 @@
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	Chart.register(
+		Legend,
 		Tooltip,
 		CategoryScale,
 		LineController,
@@ -58,9 +60,21 @@
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
 
 	let maxSets = $derived(Math.max(...exercises.map((ex) => ex.sets.length)));
-	let chartType = $state<'relative-overload' | 'absolute-load' | 'load-and-bodyweight' | 'reps'>('relative-overload');
-	// For levels, the level itself (the overload formula and bodyweight are for weights)
-	let shownChartType = $derived(loadKind === 'levels' && chartType !== 'reps' ? ('absolute-load' as const) : chartType);
+	// Reps only: reps are what goes up; its load only if it ever had one (e.g. holding a plate)
+	let repsOnly = $derived(allExercises.at(-1)?.exercise?.repsOnly ?? false);
+	let hasLoad = $derived(exercises.some((ex) => ex.sets.some((set) => set.load !== 0)));
+	type ChartType = 'relative-overload' | 'absolute-load' | 'load-and-bodyweight' | 'reps';
+	let chartType = $state<ChartType>('relative-overload');
+	let shownChartType: ChartType = $derived.by(() => {
+		if (repsOnly) return chartType === 'absolute-load' && hasLoad ? 'absolute-load' : 'reps';
+		// For levels, the level itself (the overload formula and bodyweight are for weights)
+		if (loadKind === 'levels' && chartType !== 'reps') return 'absolute-load';
+		return chartType;
+	});
+	// The radio button follows what's shown
+	$effect(() => {
+		if (repsOnly && chartType !== 'reps' && !(chartType === 'absolute-load' && hasLoad)) chartType = 'reps';
+	});
 	let selectedSets: string[] = $state([]);
 
 	$effect(() => {
@@ -87,16 +101,19 @@
 					if (!selectedSets.includes(setIdx.toString())) return null;
 					if (!ex.sets[setIdx]) return null;
 
-					return solveBergerFormula({
+					const oldest = nonSkippedExercises.find((ex) => ex.sets[setIdx])!;
+					const overload = solveBergerFormula({
 						variableToSolve: 'OverloadPercentage',
 						knownValues: {
 							bodyweightFraction: ex.bodyweightFraction,
 							newSet: ex.sets[setIdx],
 							oldSet: oldestSet,
-							oldUserBodyweight: idx === 0 ? ex.workout.userBodyweight : exercises[idx - 1].workout.userBodyweight,
+							oldUserBodyweight: oldest.workout.userBodyweight,
 							newUserBodyweight: ex.workout.userBodyweight
 						}
 					});
+					// To 0.1%: the same numbers twice must chart as 0, not a rounding error like 4.5E-5
+					return Math.round(overload * 10) / 10;
 				})
 			);
 		} else if (shownChartType === 'absolute-load') {
@@ -130,13 +147,17 @@
 			type: 'line',
 			data: {
 				labels: nonSkippedExercises.map((ex) => new Date(ex.workout.startedAt)),
-				datasets: dataValues.map((data, idx) => ({
-					label: `Set ${idx + 1}`,
-					data,
-					borderColor: colors[idx],
-					tension: 0.2,
-					borderWidth: 2
-				}))
+				// Only the sets picked under "Show sets", each named in the legend
+				datasets: dataValues
+					.map((data, idx) => ({
+						label: `Set ${idx + 1}`,
+						data,
+						borderColor: colors[idx],
+						backgroundColor: colors[idx],
+						tension: 0.2,
+						borderWidth: 2
+					}))
+					.filter((_, idx) => selectedSets.includes(idx.toString()))
 			},
 			options: {
 				scales: {
@@ -149,7 +170,9 @@
 				},
 				plugins: {
 					legend: {
-						display: false
+						display: true,
+						position: 'bottom',
+						labels: { boxWidth: 12, boxHeight: 2 }
 					}
 				}
 			}
@@ -186,7 +209,14 @@
 					{/if}
 					<span class="font-semibold">Chart type</span>
 					<RadioGroup.Root class="py-2" bind:value={chartType}>
-						{#if loadKind === 'levels'}
+						{#if repsOnly}
+							{#if hasLoad}
+								<div class="flex items-center space-x-2">
+									<RadioGroup.Item value="absolute-load" id="absolute-load" />
+									<Label for="absolute-load">Load</Label>
+								</div>
+							{/if}
+						{:else if loadKind === 'levels'}
 							<div class="flex items-center space-x-2">
 								<RadioGroup.Item value="absolute-load" id="absolute-load" />
 								<Label for="absolute-load">Level</Label>
@@ -205,7 +235,7 @@
 							<RadioGroup.Item value="reps" id="reps" />
 							<Label for="reps">Reps</Label>
 						</div>
-						{#if loadKind === 'weights' && typeof exercises.at(0)?.bodyweightFraction === 'number'}
+						{#if !repsOnly && loadKind === 'weights' && typeof exercises.at(0)?.bodyweightFraction === 'number'}
 							<div class="flex items-center space-x-2">
 								<RadioGroup.Item value="load-and-bodyweight" id="load-and-bodyweight" />
 								<Label for="load-and-bodyweight">Load + BW</Label>
@@ -215,7 +245,7 @@
 
 					<Separator class="my-2" />
 
-					<span class="font-semibold">Sets to graph</span>
+					<span class="font-semibold">Show sets</span>
 					<ToggleGroup.Root class="justify-start py-1" type="multiple" bind:value={selectedSets}>
 						{#each Array.from({ length: maxSets }) as _, idx}
 							<ToggleGroup.Item size="sm" value={idx.toString()}>{idx + 1}</ToggleGroup.Item>

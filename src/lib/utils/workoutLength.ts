@@ -9,7 +9,12 @@ export function workoutMinutes(startedAt: Date | string, endedAt: Date | string)
 
 /** A workout's length, e.g. "45 min" or "1 h 8 min" */
 export function formatWorkoutLength(startedAt: Date | string, endedAt: Date | string) {
-	const minutes = workoutMinutes(startedAt, endedAt);
+	return formatMinutes(workoutMinutes(startedAt, endedAt));
+}
+
+/** Minutes as "45 min", "1 h" or "5 h 19 min" */
+export function formatMinutes(totalMinutes: number) {
+	const minutes = Math.max(0, Math.round(totalMinutes));
 	const hours = Math.floor(minutes / 60);
 	if (hours === 0) return `${minutes} min`;
 	const rest = minutes % 60;

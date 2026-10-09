@@ -1003,7 +1003,9 @@ export const workouts = t.router({
 							}
 						}
 					},
-					sets: { include: { miniSets: true }, orderBy: { setIndex: 'asc' } }
+					sets: { include: { miniSets: true }, orderBy: { setIndex: 'asc' } },
+					// Reps-only exercises are charted by their reps
+					exercise: { select: { repsOnly: true } }
 				},
 				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 				skip: input.cursorId !== undefined ? 1 : 0,

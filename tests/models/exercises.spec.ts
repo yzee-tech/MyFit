@@ -13,7 +13,7 @@ import {
 
 const prisma = new PrismaClient();
 
-/** Opens the exercise search on Exercise stats, once the page is ready for it */
+/** Opens the exercise search on Stats › Exercises, once the page is ready for it */
 async function openExerciseSearch(page: Page) {
 	await expect(async () => {
 		await page.getByRole('combobox').filter({ hasText: 'Search for an exercise' }).click();
@@ -89,7 +89,7 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByRole('button', { name: 'Next' }).click();
 	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
 
-	// Rename it on Exercise stats
+	// Rename it on Stats › Exercises (an old link still gets there)
 	await page.goto('/exercise-stats');
 	await openExerciseSearch(page);
 	await page.getByPlaceholder('Type here').fill('Barbell rows');
@@ -133,7 +133,7 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await expect(page.locator('[id="Bent-over\\ rows-set-1-load"]')).toHaveValue('40');
 
 	// A name that's taken is refused, rather than mixing two exercises
-	await page.goto('/exercise-stats');
+	await page.goto('/stats?tab=exercises');
 	await openExerciseSearch(page);
 	await page.getByPlaceholder('Type here').fill('Bent-over rows');
 	await page.getByRole('option', { name: 'Bent-over rows' }).click();

@@ -105,13 +105,14 @@
 		}));
 	}
 
-	async function selectExercise(name: string) {
+	// The loader below fetches every page, the first one too: fetched here as well, it came in twice
+	function selectExercise(name: string) {
 		searchText = name;
 		searchOpen = false;
+		// Already showing it: the loader carries on as it was
+		if (selectedExercise === name) return;
 		selectedExercise = name;
-		exerciseInstances = await trpc().workouts.getExerciseHistory.query({ exerciseName: name });
-		dateRange.start = dateToCalendarDate(exerciseInstances[exerciseInstances.length - 1].workout.startedAt);
-		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
+		exerciseInstances = [];
 	}
 
 	async function loadMore(infiniteEvent: InfiniteEvent) {
@@ -128,9 +129,12 @@
 			return;
 		}
 
+		if (selectedExercise !== exerciseName) return;
 		infiniteEvent.detail.loaded();
 		if (!exerciseInstances) exerciseInstances = [];
-		exerciseInstances?.push(...newExercisesFound);
+		// Never the same workout twice
+		const shown = new Set(exerciseInstances.map((ex) => ex.id));
+		exerciseInstances.push(...newExercisesFound.filter((ex) => !shown.has(ex.id)));
 		dateRange.start = dateToCalendarDate(exerciseInstances[exerciseInstances.length - 1].workout.startedAt);
 		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
 		if (newExercisesFound.length < 10) infiniteEvent.detail.complete();

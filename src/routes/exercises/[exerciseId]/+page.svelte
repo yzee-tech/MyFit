@@ -243,7 +243,7 @@
 							data.lastDoneAt
 						).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}{/if}
 				</p>
-				<a class="text-sm underline" href="/exercise-stats?exercise={encodeURIComponent(exercise.name)}">
+				<a class="text-sm underline" href="/stats?exercise={encodeURIComponent(exercise.name)}">
 					See its charts and past sets
 				</a>
 			{/if}

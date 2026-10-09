@@ -13,15 +13,16 @@
 </script>
 
 <h2
-	class="mb-4 flex h-10 scroll-m-20 items-end justify-between border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0"
+	class="mb-4 flex h-10 scroll-m-20 items-end justify-between gap-2 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0"
 >
 	{@render children()}
 	{#if showChartIcon}
-		<Button onclick={() => (chartMode = !chartMode)} size="icon" variant="outline">
+		<!-- Labelled, so the charts are easy to find -->
+		<Button class="shrink-0 gap-1.5" onclick={() => (chartMode = !chartMode)} size="sm" variant="outline">
 			{#if !chartMode}
-				<ChartIcon />
+				<ChartIcon class="h-4 w-4" /> Stats
 			{:else}
-				<TextIcon />
+				<TextIcon class="h-4 w-4" /> Details
 			{/if}
 		</Button>
 	{/if}

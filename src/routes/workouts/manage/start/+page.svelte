@@ -22,6 +22,7 @@
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
 	import type { WeightSetLike } from '$lib/utils/weightSets';
+	import { workoutMinutes } from '$lib/utils/workoutLength';
 	import * as Select from '$lib/components/ui/select';
 
 	type TodaysWorkoutData = RouterOutputs['workouts']['getTodaysWorkoutData'];
@@ -29,13 +30,33 @@
 
 	let { data } = $props();
 
-	function dateToLocalISOString(date: Date): string {
-		return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-	}
+	const pad = (value: number) => String(value).padStart(2, '0');
 
-	function localISOStringToDate(isoString: string): Date {
-		const localDate = new Date(isoString);
-		return new Date(localDate.getTime());
+	// A past workout's time, edited as a date, a start time and a length; it's still kept as a start and end
+	let timeFields = $derived.by(() => {
+		const startedAt = new Date(workoutRunes.workoutData?.startedAt ?? Date.now());
+		const endedAt = new Date(workoutRunes.workoutData?.endedAt ?? startedAt);
+		return {
+			date: `${startedAt.getFullYear()}-${pad(startedAt.getMonth() + 1)}-${pad(startedAt.getDate())}`,
+			time: `${pad(startedAt.getHours())}:${pad(startedAt.getMinutes())}`,
+			minutes: workoutMinutes(startedAt, endedAt),
+			endsAt: endedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+			inFuture: startedAt.getTime() > Date.now()
+		};
+	});
+
+	function setWorkoutTime(change: { date?: string; time?: string; minutes?: number }) {
+		if (!workoutRunes.workoutData) return;
+		const date = change.date ?? timeFields.date;
+		const time = change.time ?? timeFields.time;
+		const minutes = change.minutes ?? timeFields.minutes;
+		const startedAt = new Date(`${date}T${time}`);
+		// A cleared or half-typed box keeps what was there
+		if (Number.isNaN(startedAt.getTime()) || !Number.isFinite(minutes)) return;
+		// 0 is fine: a workout saved straight after it started
+		const length = Math.min(Math.max(Math.round(minutes), 0), 600);
+		workoutRunes.workoutData.startedAt = startedAt;
+		workoutRunes.workoutData.endedAt = new Date(startedAt.getTime() + length * 60000);
 	}
 
 	function formatLastDone(lastDoneAt: Date | string | null) {
@@ -268,29 +289,43 @@
 		<Label for="user-bodyweight">Bodyweight ({unitLabel(homeWeightUnit)})</Label>
 		<Input id="user-bodyweight" placeholder="Type here" type="number" min={1} step={0.01} bind:value={userBodyweight} />
 		{#if workoutRunes.editingWorkoutId !== null && workoutRunes.workoutData}
-			<div class="grid grid-cols-2 gap-x-2 gap-y-1.5">
-				<Label for="start-date">Start date</Label>
-				<Label for="end-date">End date</Label>
+			<div class="grid grid-cols-[1fr_auto_auto] items-end gap-x-2 gap-y-1.5">
+				<Label for="workout-date">Date</Label>
+				<Label for="workout-start-time">Start time</Label>
+				<Label for="workout-length-minutes">Length (min)</Label>
 				<Input
-					id="start-date"
-					type="datetime-local"
-					value={dateToLocalISOString(workoutRunes.workoutData.startedAt as Date)}
-					onchange={(e) => {
-						workoutRunes.workoutData!.startedAt = localISOStringToDate(e.currentTarget.value);
-					}}
+					id="workout-date"
+					onchange={(e) => setWorkoutTime({ date: e.currentTarget.value })}
 					required
+					type="date"
+					value={timeFields.date}
 				/>
 				<Input
-					id="end-date"
-					type="datetime-local"
-					min={dateToLocalISOString(workoutRunes.workoutData.startedAt as Date)}
-					value={dateToLocalISOString(workoutRunes.workoutData.endedAt! as Date)}
-					onchange={(e) => {
-						workoutRunes.workoutData!.endedAt = localISOStringToDate(e.currentTarget.value);
-					}}
+					id="workout-start-time"
+					class="w-28"
+					onchange={(e) => setWorkoutTime({ time: e.currentTarget.value })}
 					required
+					type="time"
+					value={timeFields.time}
+				/>
+				<Input
+					id="workout-length-minutes"
+					class="w-24"
+					max={600}
+					min={0}
+					onchange={(e) => setWorkoutTime({ minutes: e.currentTarget.valueAsNumber })}
+					required
+					step={1}
+					type="number"
+					value={timeFields.minutes}
 				/>
 			</div>
+			<p class="text-sm text-muted-foreground" data-testid="workout-ends-at">
+				Ends {timeFields.endsAt}
+			</p>
+			{#if timeFields.inFuture}
+				<p class="text-sm text-destructive" data-testid="workout-in-future">This is in the future</p>
+			{/if}
 		{/if}
 	</form>
 	{#if useRoutine && activeBlock && workoutRunes.editingWorkoutId === null && deloadWeek}

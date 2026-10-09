@@ -30,7 +30,7 @@
 	});
 </script>
 
-<H2 showChartIcon bind:chartMode>View mesocycle</H2>
+<H2 showChartIcon bind:chartMode>{mesocycle === 'loading' ? 'Block' : mesocycle.name}</H2>
 
 {#if mesocycle === 'loading'}
 	<MesocycleSkeleton />
@@ -52,9 +52,7 @@
 			{#if !chartMode}
 				<MesocycleSplitTab {mesocycle} />
 			{:else}
-				<MesocycleExerciseSplitStats
-					splitExercises={mesocycle.mesocycleExerciseSplitDays.map((splitDay) => splitDay.mesocycleSplitDayExercises)}
-				/>
+				<MesocycleExerciseSplitStats {mesocycle} />
 			{/if}
 		</Tabs.Content>
 		<Tabs.Content class="grow" value="workouts">

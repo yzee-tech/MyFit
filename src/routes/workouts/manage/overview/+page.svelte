@@ -10,7 +10,7 @@
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
-	import ExerciseSplitExercisesCharts from '../../../exercise-splits/(components)/ExerciseSplitExercisesCharts.svelte';
+	import SetsPerMuscleChart from '$lib/components/charts/SetsPerMuscleChart.svelte';
 	import { workoutRunes } from '../workoutRunes.svelte';
 	import { buildWorkoutSaveData, saveWorkoutEdits } from '../saveWorkout';
 	import WorkoutComparisonChart from './(components)/WorkoutComparisonChart.svelte';
@@ -136,7 +136,7 @@
 <Tabs.Root class="w-full" value="progression">
 	<Tabs.List class="grid grid-cols-2">
 		<Tabs.Trigger value="progression">Progression</Tabs.Trigger>
-		<Tabs.Trigger value="basic">Basic</Tabs.Trigger>
+		<Tabs.Trigger value="basic">Muscles</Tabs.Trigger>
 	</Tabs.List>
 	<Tabs.Content value="progression">
 		{#if workoutRunes.previousWorkoutData && workoutRunes.workoutExercises && workoutRunes.workoutData?.userBodyweight}
@@ -152,7 +152,13 @@
 		{/if}
 	</Tabs.Content>
 	<Tabs.Content class="rounded-md border bg-card p-4" value="basic">
-		<ExerciseSplitExercisesCharts exercises={workoutExercises} />
+		<SetsPerMuscleChart
+			exercises={workoutExercises.map((exercise) => ({
+				...exercise,
+				sets: exercise.sets.filter((set) => !set.skipped && set.reps !== undefined).length
+			}))}
+			label="Sets done"
+		/>
 	</Tabs.Content>
 </Tabs.Root>
 
