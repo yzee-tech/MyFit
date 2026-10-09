@@ -19,7 +19,7 @@ async function editExercise(page: Page, exerciseName: string, change: () => Prom
 	await page.getByLabel(`${exerciseName} options`).click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await change();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 }
 
 const cardNames = (page: Page) => page.getByTestId('routine-card-name').allTextContents();
@@ -438,7 +438,7 @@ test('weight sets live under My routines: from its menu, and from a routine bein
 	await expect(page.getByLabel('Pick an exercise')).toHaveText('Barbell rows');
 	await page.getByRole('combobox', { name: 'Weights available' }).click();
 	await page.getByRole('option', { name: /Hotel DBs/ }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await saveRoutine(page);
 	const rows = await prisma.exerciseTemplate.findFirstOrThrow({
 		where: {

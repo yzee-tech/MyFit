@@ -64,7 +64,7 @@
 	}
 </script>
 
-<H2>{editing ? 'Edit' : 'New'} workout</H2>
+<H2>{editing ? 'Edit' : 'Log'} workout</H2>
 {@render children(data)}
 
 <ResponsiveDialog cancelLabel="Keep editing" title="Save your changes?" bind:open={leaveDialogOpen}>

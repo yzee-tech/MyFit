@@ -189,7 +189,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	for (const text of [
-		'New workout Exercises Pull A Week 1',
+		'Log workout Exercises Pull A Week 1',
 		'Pull-ups KG 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
 		'Barbell rows KG 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
 		'Dumbbell bicep curls KG 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
@@ -415,7 +415,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByPlaceholder('For this routine').fill('Custom note');
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('main')).toContainText('Custom note');
 
 	await page.getByTestId('Pull-ups-set-1-action').click();
@@ -642,7 +642,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Building DBs (kg)' }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]').fill('20');
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-2-reps"]').fill('20');
@@ -783,7 +783,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Hotel machine (levels)' }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-load-header')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-unit-toggle')).toHaveCount(0);
@@ -1153,7 +1153,7 @@ test('Just this workout leaves the routine; Update routine changes My routines a
 	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([false, false]);
 });
 
-test('workout panel: on New workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
+test('workout panel: on Log workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
 	page
 }) => {
 	await createSplitAndMesoForTest(page);
@@ -1166,7 +1166,7 @@ test('workout panel: on New workout after Back and on every screen, resumes the 
 	// Not on the workout's own page
 	await expect(panel).toHaveCount(0);
 
-	// Back to New workout: the panel, with the clock and the exercise being done
+	// Back to Log workout: the panel, with the clock and the exercise being done
 	await page.getByRole('link', { name: 'Previous' }).click();
 	await expect(page.getByTestId('setup-in-progress')).toHaveCount(0);
 	await expect(page.getByTestId('workout-panel-clock')).toHaveText(/^\d+:\d\d$/);

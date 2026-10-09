@@ -535,7 +535,7 @@
 					bind:value={currentExercise.note as string}
 				/>
 			</div>
-			<Button class="col-span-2" type="submit">{mode} exercise</Button>
+			<Button class="col-span-2" type="submit">{mode === 'Add' ? 'Add exercise' : 'Save'}</Button>
 		</form>
 	</Sheet.Content>
 </Sheet.Root>

@@ -13,7 +13,7 @@
 	/** After this long, a workout most likely wasn't finished: ask to finish or discard it */
 	const NUDGE_AFTER_MINUTES = 2 * 60;
 
-	// The workout's own pages show it already; the New workout page (back from it) still gets the panel
+	// The workout's own pages show it already; the Log workout page (back from it) still gets the panel
 	let onWorkoutPages = $derived(
 		['/workouts/manage/exercises', '/workouts/manage/overview'].some((path) => $page.url.pathname.startsWith(path))
 	);
