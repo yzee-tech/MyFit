@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
@@ -160,7 +161,7 @@
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto text-sm lowercase text-muted-foreground">
 			{exercise.sets.length}
-			{convertCamelCaseToNormal(exercise.setType)} sets of
+			{setTypeLabel(exercise.setType)} sets of
 			{exercise.repRangeStart} to {exercise.repRangeEnd} reps
 		</span>
 		{#if isRepsOnly}

@@ -15,10 +15,7 @@
 </script>
 
 <!-- Set up once per gym, then picked for exercises in My routines: so it lives with them -->
-<a
-	class="mb-2 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:underline"
-	href={back.href}
->
+<a class="mb-2 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:underline" href={back.href}>
 	<BackIcon class="h-4 w-4" />
 	{back.label}
 </a>

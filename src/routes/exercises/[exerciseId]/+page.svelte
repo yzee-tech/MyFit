@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
@@ -139,7 +140,7 @@
 	}
 
 	const setsText = (entry: { setType: string; repRangeStart: number; repRangeEnd: number; sets?: number }) =>
-		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${convertCamelCaseToNormal(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
+		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${setTypeLabel(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
 </script>
 
 <!-- Reps only: the cap wins over a routine's range, so say when the range starts above it -->

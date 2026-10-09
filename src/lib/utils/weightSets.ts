@@ -37,7 +37,9 @@ export function levelSetsFor(exercises: ExerciseLevels[]): WeightSetLike[] {
 		if (levelsFrom === null || levelsTo === null || levelStep === null) return [];
 		const weights = expandRange(levelsFrom, levelsTo, levelStep);
 		if (weights.length === 0) return [];
-		return [{ id: `levels:${exercise.id}`, name: exercise.name, unit: 'LEVEL' as const, weights, levelsOf: exercise.name }];
+		return [
+			{ id: `levels:${exercise.id}`, name: exercise.name, unit: 'LEVEL' as const, weights, levelsOf: exercise.name }
+		];
 	});
 }
 

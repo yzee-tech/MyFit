@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { setTypeLabel } from '$lib/utils/setTypes';
 	import type { SplitExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 	import * as Select from '$lib/components/ui/select';
-	import { cn, convertCamelCaseToNormal } from '$lib/utils';
+	import { cn } from '$lib/utils';
 	import { SetType } from '$lib/utils/prismaEnums';
 	import type { Selected } from 'bits-ui';
 	import {
@@ -103,7 +104,7 @@
 			chart = new Chart(chartCanvas, {
 				type: 'polarArea',
 				data: {
-					labels: setTypes.map((setType) => convertCamelCaseToNormal(setType)),
+					labels: setTypes.map((setType) => setTypeLabel(setType)),
 					datasets: [
 						{
 							data,

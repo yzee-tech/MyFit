@@ -102,8 +102,8 @@
 		<Card.Title>Weight sets</Card.Title>
 		<Card.Description>
 			The weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20. Link one to an exercise in a routine,
-			and suggestions only use those weights. Without one, weights go up by 2.5 kg or 5 lb. A machine that shows
-			levels instead of weights has them set on its exercise, on the Exercises page.
+			and suggestions only use those weights. Without one, weights go up by 2.5 kg or 5 lb. A machine that shows levels
+			instead of weights has them set on its exercise, on the Exercises page.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="grid gap-2">

@@ -52,8 +52,7 @@ export const exerciseDetailsInput = z
 	})
 	.refine(
 		(details) =>
-			details.levels === null ||
-			(details.levels.to - details.levels.from) / details.levels.step < MAX_WEIGHTS_PER_SET,
+			details.levels === null || (details.levels.to - details.levels.from) / details.levels.step < MAX_WEIGHTS_PER_SET,
 		{ message: `At most ${MAX_WEIGHTS_PER_SET} levels` }
 	)
 	.transform(({ levels, ...details }) => ({

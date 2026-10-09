@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { invalidate } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
@@ -382,7 +383,7 @@
 						required
 						selected={{
 							value: currentExercise.setType,
-							label: convertCamelCaseToNormal(currentExercise.setType)
+							label: setTypeLabel(currentExercise.setType)
 						}}
 					>
 						<Select.Label class="p-0 text-sm font-medium leading-none">Set type</Select.Label>
@@ -391,7 +392,7 @@
 						</Select.Trigger>
 						<Select.Content>
 							{#each Object.values(SetType) as setTemplate}
-								<Select.Item label={convertCamelCaseToNormal(setTemplate)} value={setTemplate} />
+								<Select.Item label={setTypeLabel(setTemplate)} value={setTemplate} />
 							{/each}
 						</Select.Content>
 					</Select.Root>
@@ -503,38 +504,38 @@
 						Levels {formatWeightList(machineLevels.weights)} (set on the exercise)
 					</span>
 				{:else}
-				{#key currentExercise}
-					<Select.Root
-						name="exercise-weight-set"
-						onSelectedChange={(v) => (currentExercise.weightSetId = v?.value || null)}
-						selected={weightSetOption(currentExercise.weightSetId)}
-					>
-						<Select.Label class="p-0 text-sm font-medium leading-none">Weights available</Select.Label>
-						<Select.Trigger aria-label="Weights available">
-							<Select.Value placeholder="Standard steps" />
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item label="Standard steps" value="" />
-							{#each weightSets as weightSet (weightSet.id)}
-								<Select.Item label={weightSetLabel(weightSet)} value={weightSet.id} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				{/key}
-				{#if weightSets.length === 0}
-					<span class="text-xs text-muted-foreground">
-						To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set.
-					</span>
-				{/if}
-				<!-- Only in My routines: the routine's edits wait on this device; elsewhere leaving would interrupt -->
-				{#if props.context === 'exerciseSplit'}
-					<a
-						class="w-fit text-xs text-primary hover:underline"
-						href="/exercise-splits/weight-sets?back={encodeURIComponent($page.url.pathname + $page.url.search)}"
-					>
-						Manage weight sets ›
-					</a>
-				{/if}
+					{#key currentExercise}
+						<Select.Root
+							name="exercise-weight-set"
+							onSelectedChange={(v) => (currentExercise.weightSetId = v?.value || null)}
+							selected={weightSetOption(currentExercise.weightSetId)}
+						>
+							<Select.Label class="p-0 text-sm font-medium leading-none">Weights available</Select.Label>
+							<Select.Trigger aria-label="Weights available">
+								<Select.Value placeholder="Standard steps" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item label="Standard steps" value="" />
+								{#each weightSets as weightSet (weightSet.id)}
+									<Select.Item label={weightSetLabel(weightSet)} value={weightSet.id} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/key}
+					{#if weightSets.length === 0}
+						<span class="text-xs text-muted-foreground">
+							To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set.
+						</span>
+					{/if}
+					<!-- Only in My routines: the routine's edits wait on this device; elsewhere leaving would interrupt -->
+					{#if props.context === 'exerciseSplit'}
+						<a
+							class="w-fit text-xs text-primary hover:underline"
+							href="/exercise-splits/weight-sets?back={encodeURIComponent($page.url.pathname + $page.url.search)}"
+						>
+							Manage weight sets ›
+						</a>
+					{/if}
 				{/if}
 			</div>
 			<div class="col-span-2 flex w-full flex-col gap-1.5">

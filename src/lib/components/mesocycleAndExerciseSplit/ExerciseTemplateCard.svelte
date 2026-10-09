@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { convertCamelCaseToNormal } from '$lib/utils';
@@ -92,7 +93,7 @@
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto text-sm lowercase text-muted-foreground">
 			{routineSetCount(props.exerciseTemplate.sets)}
-			{convertCamelCaseToNormal(props.exerciseTemplate.setType)} sets of
+			{setTypeLabel(props.exerciseTemplate.setType)} sets of
 			{props.exerciseTemplate.repRangeStart} to {props.exerciseTemplate.repRangeEnd} reps
 		</span>
 		{#if props.exerciseTemplate.bodyweightFraction}
