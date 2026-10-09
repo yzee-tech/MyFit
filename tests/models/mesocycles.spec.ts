@@ -174,7 +174,7 @@ test('a block starts with My routines as they are when it starts', async ({ page
 	await page.getByLabel('Face pulls options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.locator('#exercise-sets').fill('4');
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await saveRoutine(page);
 
 	await page.goto('/mesocycles');

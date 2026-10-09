@@ -396,6 +396,52 @@ function adjustIdealPerformance(actualPerformances: number[], idealPerformance: 
 	return adjustedIdealPerformance;
 }
 
+/** Myo-rep match: a match set may take this many mini-sets at most for the weight to go up */
+export const MYOREP_MATCH_MAX_MINI_SETS = 3;
+
+/**
+ * Myo-rep match goes up in weight only when set 1 went past the top of the rep range AND every match
+ * set reached set 1's reps in at most 3 mini-sets (last time's numbers)
+ */
+export function myorepMatchReadyToGoUp(sets: WorkoutExercise['sets'], repRangeEnd: number) {
+	const [first, ...matchSets] = sets.filter((set) => !set.skipped);
+	if (!first || first.reps <= repRangeEnd) return false;
+	return matchSets.every((set) => {
+		const miniSets = set.miniSets.filter((miniSet) => miniSet.reps > 0);
+		const matched = set.reps + arraySum(miniSets.map((miniSet) => miniSet.reps)) >= first.reps;
+		return matched && miniSets.length <= MYOREP_MATCH_MAX_MINI_SETS;
+	});
+}
+
+/**
+ * Myo-rep match up a weight: set 1, the match sets and their mini-sets all at the next weight. Set 1
+ * gets its reps at that weight; each match set a guess for its main part, with no mini-sets yet so
+ * it shows the reps left to match. Stays as is when set 1 would fall below the rep range
+ */
+function raiseMyorepMatchLoad(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
+	const first = ex.sets[0];
+	if (first?.reps === undefined || first.load === undefined || first.RIR === undefined) return ex.sets;
+	const unit = ex.weightUnit ?? 'KG';
+	let newLoad = first.load + toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
+	if (weights) {
+		const nextWeight = nextWeightUp(weights, roundWeight(fromKg(first.load, unit)));
+		if (nextWeight === null) return ex.sets;
+		newLoad = toKg(nextWeight, unit);
+	}
+	const repsAt = (set: { reps: number; load: number; RIR: number }) =>
+		Math.round(repsAtLoad(ex, set, newLoad, userBodyweight));
+	const firstReps = repsAt({ reps: first.reps, load: first.load, RIR: first.RIR });
+	if (firstReps < ex.repRangeStart) return ex.sets;
+	return ex.sets.map((set, setIdx) => {
+		if (setIdx === 0) return { ...set, reps: firstReps, load: newLoad, miniSets: [] };
+		if (set.reps === undefined || set.load === undefined || set.RIR === undefined) {
+			return { ...set, load: newLoad, miniSets: [] };
+		}
+		const reps = Math.max(1, Math.min(repsAt({ reps: set.reps, load: set.load, RIR: set.RIR }), firstReps));
+		return { ...set, reps, load: newLoad, miniSets: [] };
+	});
+}
+
 function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
 	let loadIncreasedForOneOfSameLoadSets = false;
@@ -832,7 +878,14 @@ export function progressiveOverloadMagic(
 		}
 
 		fitSetsToRoutine(ex, routineSetCount);
-		ex.sets = increaseLoadOfSets(ex, userBodyweight, weights);
+		// Myo-rep match moves as one: set 1 and how the match sets went decide, never a set on its own
+		if (ex.setType === 'MyorepMatch') {
+			if (myorepMatchReadyToGoUp(lastPerformance.exercise.sets, ex.repRangeEnd)) {
+				ex.sets = raiseMyorepMatchLoad(ex, userBodyweight, weights);
+			}
+		} else {
+			ex.sets = increaseLoadOfSets(ex, userBodyweight, weights);
+		}
 		snapToRealWeights();
 	});
 

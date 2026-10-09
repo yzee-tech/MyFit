@@ -30,7 +30,9 @@ import {
 	availableWeightsFor,
 	expandRange,
 	formatWeightList,
+	levelSetsFor,
 	nextWeightUp,
+	pickableWeightSets,
 	normalizeWeights,
 	type WeightSetLike
 } from '../../src/lib/utils/weightSets';
@@ -723,4 +725,73 @@ test('reps only: a level exercise keeps its own rule; the at-max check', () => {
 	expect(allSetsAtMaxReps(ex(30, 30, 30), 30)).toBe(true);
 	expect(allSetsAtMaxReps(ex(30, 30, 28), 30)).toBe(false);
 	expect(allSetsAtMaxReps(ex(30, 30, 30), null)).toBe(false);
+});
+
+test('levels set on the exercise: its levels apply whatever weight set it has, and are never picked as a set', () => {
+	const [press] = levelSetsFor([{ id: 'e1', name: 'Chest press', levelsFrom: 1, levelsTo: 4, levelStep: 0.5 }]);
+	expect(press).toMatchObject({ unit: 'LEVEL', weights: [1, 1.5, 2, 2.5, 3, 3.5, 4], levelsOf: 'Chest press' });
+	expect(levelSetsFor([{ id: 'e2', name: 'Curls', levelsFrom: null, levelsTo: null, levelStep: null }])).toEqual([]);
+	const weightSets = [buildingDumbbells, press];
+	const pressExercise = { name: 'Chest press', weightSetId: buildingDumbbells.id };
+	expect(availableWeightsFor({ ...pressExercise, weightUnit: 'LEVEL' }, weightSets)).toEqual(press.weights);
+	expect(availableWeightsFor({ ...pressExercise, weightUnit: 'KG' }, weightSets)).toBeNull();
+	expect(
+		availableWeightsFor({ name: 'Curls', weightSetId: buildingDumbbells.id, weightUnit: 'KG' }, weightSets)
+	).toEqual(buildingDumbbells.weights);
+	expect(pickableWeightSets(weightSets)).toEqual([buildingDumbbells]);
+});
+
+// Myo-rep match: Barbell rows at 10–20 reps, 3 sets, steady effort (RIR 1 every week)
+type MatchSet = TestSet & { miniSets?: number[] };
+function myorepMatchSuggestion(lastTime: MatchSet[], weightSets: WeightSetLike[] = []) {
+	const block = blockWithWeightSet(weightSets[0]?.id ?? null);
+	block.weeklyRIR = [1];
+	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 20, setType: 'MyorepMatch', sets: lastTime.length });
+	const past = performance('Barbell rows', lastTime);
+	past.exercise.setType = 'MyorepMatch';
+	past.exercise.sets.forEach((set, setIdx) => {
+		set.miniSets = (lastTime[setIdx].miniSets ?? []).map((reps, miniSetIndex) => ({
+			id: `mini-${setIdx}-${miniSetIndex}`,
+			miniSetIndex,
+			reps,
+			load: set.load,
+			RIR: 1,
+			workoutExerciseSetId: set.id
+		}));
+	});
+	const output = progressiveOverloadMagic(block, 1, 100, 0, { 'Barbell rows': [past] }, 'normal', weightSets);
+	return output.find((exercise) => exercise.name === 'Barbell rows')!;
+}
+const matchSet = (reps: number, ...miniSets: number[]): MatchSet => ({ reps, load: 40, RIR: 1, miniSets });
+
+test('myo-rep match: set 1 past the top and every match in 3 mini-sets or fewer: all up a weight together', () => {
+	// 22 reps on set 1; the match sets got there in 3 and 2 mini-sets
+	const lastTime = [matchSet(22), matchSet(12, 4, 3, 3), matchSet(13, 5, 4)];
+	const rows = myorepMatchSuggestion(lastTime);
+	expect(rows.sets.map((set) => set.load)).toEqual([42.5, 42.5, 42.5]);
+	// Set 1 fewer reps at the heavier weight, still in range; the match sets start fresh, to match it
+	expect(rows.sets[0].reps).toBeLessThan(22);
+	expect(rows.sets[0].reps).toBeGreaterThanOrEqual(10);
+	rows.sets.forEach((set) => expect(set.miniSets).toEqual([]));
+	rows.sets.slice(1).forEach((set) => expect(set.reps).toBeLessThanOrEqual(rows.sets[0].reps!));
+
+	// With a gym's dumbbells: the next one it has, for every set
+	const dumbbells: WeightSetLike = { id: 'db', name: 'DBs', unit: 'KG', weights: [36, 40, 45, 50] };
+	expect(myorepMatchSuggestion(lastTime, [dumbbells]).sets.map((set) => set.load)).toEqual([45, 45, 45]);
+});
+
+test('myo-rep match: a match set taking 4 mini-sets, or not matching, keeps the weight', () => {
+	const fourMiniSets = myorepMatchSuggestion([matchSet(22), matchSet(12, 3, 3, 2, 2), matchSet(13, 5, 4)]);
+	expect(fourMiniSets.sets.map((set) => set.load)).toEqual([40, 40, 40]);
+	const notMatched = myorepMatchSuggestion([matchSet(22), matchSet(12, 4, 3), matchSet(13, 5, 4)]);
+	expect(notMatched.sets.map((set) => set.load)).toEqual([40, 40, 40]);
+});
+
+test('myo-rep match: set 1 not past the top of the range keeps the weight, even with quick matches', () => {
+	const rows = myorepMatchSuggestion([matchSet(20), matchSet(15, 5), matchSet(14, 6)]);
+	expect(rows.sets.map((set) => set.load)).toEqual([40, 40, 40]);
+	// Only set 1 counts: a match set's main part past the top doesn't move it on its own
+	const bigMatch = myorepMatchSuggestion([matchSet(18), matchSet(21), matchSet(19)]);
+	expect(bigMatch.sets.map((set) => set.load)).toEqual([40, 40, 40]);
 });

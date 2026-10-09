@@ -1,6 +1,6 @@
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
-import type { WeightSetLike } from '$lib/utils/weightSets';
+import { levelSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
@@ -130,9 +130,11 @@ function createWorkoutRunes() {
 		if (exerciseNameExists(exercise.name)) return false;
 		// New exercises use their own weight set, else the gym's picked for this workout; and start in
 		// that weight set's unit, else the unit picked for this workout (or the home unit)
-		const weightSetId = exercise.weightSetId ?? workoutData?.sessionWeightSetId ?? null;
+		// A machine with levels always logs its own levels
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
-		const weightSetUnit = weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit;
+		const levels = levelSetOf(exercise.name, weightSets);
+		const weightSetId = levels ? null : (exercise.weightSetId ?? workoutData?.sessionWeightSetId ?? null);
+		const weightSetUnit = levels ? 'LEVEL' : weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit;
 		const weightUnit = weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
 		workoutExercises.push({
 			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise),
@@ -194,7 +196,9 @@ function createWorkoutRunes() {
 		const current = workoutExercises[editingExerciseIndex];
 		// Switching between a machine's levels and weights: the loads so far mean something else
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
-		const weightSetUnit = weightSets.find((weightSet) => weightSet.id === exercise.weightSetId)?.unit;
+		const weightSetUnit = levelSetOf(exercise.name, weightSets)
+			? 'LEVEL'
+			: weightSets.find((weightSet) => weightSet.id === exercise.weightSetId)?.unit;
 		const kindChanged = isLevelUnit(weightSetUnit) !== isLevelUnit(current.weightUnit);
 		const weightUnit = kindChanged
 			? (weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG')

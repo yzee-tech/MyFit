@@ -201,7 +201,12 @@
 	</div>
 {/if}
 
-<Button class="mt-1 h-8 text-muted-foreground" onclick={() => (discardDialogOpen = true)} size="sm" variant="ghost">
+<Button
+	class="mt-1 h-8 border border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+	onclick={() => (discardDialogOpen = true)}
+	size="sm"
+	variant="ghost"
+>
 	{workoutRunes.editingWorkoutId === null ? 'Discard workout' : 'Discard changes'}
 </Button>
 <div class="mt-1 grid grid-cols-2 gap-1">

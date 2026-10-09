@@ -17,6 +17,7 @@ import type { ChangeType, Prisma, SetType } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
+import { MAX_WEIGHTS_PER_SET } from '$lib/utils/weightSets';
 import { z } from 'zod';
 
 export const exerciseDetailsInput = z
@@ -27,14 +28,38 @@ export const exerciseDetailsInput = z
 		bodyweightFraction: z.number().min(0.01).max(2).nullable(),
 		note: z.string().trim().max(1000).nullable(),
 		repsOnly: z.boolean().default(false),
-		maxReps: z.number().int().min(1).max(500).nullable().default(null)
+		maxReps: z.number().int().min(1).max(500).nullable().default(null),
+		/** A machine with levels: lowest and highest level, and the step (1 or 0.5); null for weights */
+		levels: z
+			.strictObject({
+				from: z.number().positive().max(1000),
+				to: z.number().positive().max(1000),
+				step: z.union([z.literal(1), z.literal(0.5)])
+			})
+			.nullable()
+			.default(null)
 	})
 	// Reps only never counts bodyweight: one or the other
 	.refine((details) => !(details.repsOnly && details.bodyweightFraction !== null), {
 		message: 'Pick either Reps only or a bodyweight share'
 	})
-	.transform((details) => ({
+	// Reps only never adds load, so it has no levels either
+	.refine((details) => !(details.repsOnly && details.levels !== null), {
+		message: 'Pick either Reps only or machine levels'
+	})
+	.refine((details) => details.levels === null || details.levels.to >= details.levels.from, {
+		message: 'The highest level must be at least the lowest'
+	})
+	.refine(
+		(details) =>
+			details.levels === null || (details.levels.to - details.levels.from) / details.levels.step < MAX_WEIGHTS_PER_SET,
+		{ message: `At most ${MAX_WEIGHTS_PER_SET} levels` }
+	)
+	.transform(({ levels, ...details }) => ({
 		...details,
+		levelsFrom: levels?.from ?? null,
+		levelsTo: levels?.to ?? null,
+		levelStep: levels?.step ?? null,
 		customMuscleGroup: details.targetMuscleGroup === 'Custom' ? details.customMuscleGroup || null : null,
 		note: details.note || null,
 		// A rep cap only applies to reps-only exercises
@@ -285,10 +310,13 @@ export const exercises = t.router({
 			const exercise = await findOwnExercise(ctx.userId, input.id);
 			if (input.details.name !== exercise.name) await assertNameFree(ctx.userId, input.details.name, exercise.id);
 			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
-			const { note, repsOnly, maxReps, ...shared } = input.details;
+			const { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...shared } = input.details;
 			await withRoutinesTransaction(async (tx) => {
 				await updateExerciseEverywhere(tx, ctx.userId, exercise.id, shared);
-				await tx.exercise.update({ where: { id: exercise.id }, data: { note, repsOnly, maxReps } });
+				await tx.exercise.update({
+					where: { id: exercise.id },
+					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep }
+				});
 			});
 			return { message: 'Exercise saved' };
 		}),

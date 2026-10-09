@@ -140,7 +140,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Incline dumbbell press');
 	await page.locator('button').filter({ hasText: 'Straight' }).click();
-	await page.getByRole('option', { name: 'V2' }).click();
+	await page.getByRole('option', { name: 'Independent' }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -174,7 +174,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 50 1 2 8 45 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Reps Load (kg) RIR 1 12 10 2 2 10 10 0 1 2 10 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Reps Load (kg) RIR 1 18 10 2 1 12 5 22 16 10 2 1 10 5 2Incline dumbbell press 2 V2 sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Reps Load (kg) RIR 1 14 20 2 2 12 15 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Reps Load (kg) RIR 1 18 180 2 2 12 180 0'
+		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 50 1 2 8 45 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Reps Load (kg) RIR 1 12 10 2 2 10 10 0 1 2 10 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Reps Load (kg) RIR 1 18 10 2 1 12 5 22 16 10 2 1 10 5 2Incline dumbbell press 2 Independent sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Reps Load (kg) RIR 1 14 20 2 2 12 15 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Reps Load (kg) RIR 1 18 180 2 2 12 180 0'
 	);
 });
 
@@ -189,7 +189,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	for (const text of [
-		'New workout Exercises Pull A Week 1',
+		'Log workout Exercises Pull A Week 1',
 		'Pull-ups KG 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
 		'Barbell rows KG 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
 		'Dumbbell bicep curls KG 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
@@ -415,7 +415,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByPlaceholder('For this routine').fill('Custom note');
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('main')).toContainText('Custom note');
 
 	await page.getByTestId('Pull-ups-set-1-action').click();
@@ -642,7 +642,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Building DBs (kg)' }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]').fill('20');
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-2-reps"]').fill('20');
@@ -756,20 +756,19 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 }) => {
 	await createSplitAndMesoForTest(page);
 
-	// The hotel's machine shows levels 1–10
-	await page.goto('/exercise-splits/weight-sets');
-	await page.getByRole('button', { name: 'Add weight set' }).click();
-	await page.getByLabel('Name').fill('Hotel machine');
-	await page.getByLabel('Machine levels').click();
-	await expect(page.getByTestId('weight-set-levels-hint')).toBeVisible();
-	await page.getByLabel('From').fill('1');
-	await page.getByLabel('To', { exact: true }).fill('10');
-	await page.getByLabel('Every').fill('1');
-	await page.getByRole('button', { name: 'Add range' }).click();
-	await page.getByRole('button', { name: 'Save weight set' }).click();
-	await expect(page.getByTestId('weight-set-Hotel machine')).toContainText('Levels 1–10 by 1');
+	// Curls are on a machine that shows levels 1–10: set on the exercise
+	await page.goto('/exercises');
+	await page.getByRole('link', { name: /^Dumbbell bicep curls/ }).click();
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Machine with levels').click();
+	await page.getByLabel('From level').fill('1');
+	await page.getByLabel('To level').fill('10');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Exercise saved everywhere' })).toBeVisible();
+	await expect(page.getByRole('main')).toContainText('Levels 1–10');
 
-	// Curls on it (10–20 reps): all three sets at the top, on level 7
+	// Curls (10–20 reps): all three sets at the top, on level 7
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -779,15 +778,17 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 		await page.getByTestId(`${exercise}-menu-button`).click();
 		await page.getByRole('menuitem', { name: 'Delete' }).click();
 	}
-	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByLabel('Weights available').click();
-	await page.getByRole('option', { name: 'Hotel machine (levels)' }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
 	await expect(page.getByTestId('Dumbbell bicep curls-levels')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-load-header')).toHaveText('LVL');
 	await expect(page.getByTestId('Dumbbell bicep curls-unit-toggle')).toHaveCount(0);
 	await expect(page.getByLabel('Set 1 level')).toBeVisible();
+
+	// Its editor shows the machine's levels instead of weight sets
+	await page.getByTestId('Dumbbell bicep curls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByTestId('exercise-machine-levels')).toHaveText('Levels 1–10 by 1 (set on the exercise)');
+	await expect(page.getByLabel('Weights available')).toHaveCount(0);
+	await page.keyboard.press('Escape');
 
 	for (const set of [1, 2, 3]) {
 		await page.locator(`[id="Dumbbell\\ bicep\\ curls-set-${set}-reps"]`).fill('20');
@@ -795,12 +796,9 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]').fill('7');
 	for (const set of [1, 2, 3]) await page.getByTestId(`Dumbbell bicep curls-set-${set}-action`).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page, {
-		changes: ['Removed: Pull-ups', 'Dumbbell bicep curls: weights available'],
-		answer: 'Update routine'
-	});
+	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Update routine' });
 
-	// Logged as level 7, not a weight; the routine keeps the machine, not a unit of its own
+	// Logged as level 7, not a weight; the routine keeps no unit or weight set of its own
 	const logged = await prisma.workoutExercise.findFirstOrThrow({
 		where: { name: 'Dumbbell bicep curls', workout: { userId: userData.userId } },
 		include: { sets: true }
@@ -811,7 +809,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
 	});
 	expect(routineCurls.weightUnit).toBeNull();
-	expect(routineCurls.weightSetId).not.toBeNull();
+	expect(routineCurls.weightSetId).toBeNull();
 
 	// Next time: level 8, back at the bottom of the range
 	await page.getByLabel('create-workout').click();
@@ -1153,7 +1151,7 @@ test('Just this workout leaves the routine; Update routine changes My routines a
 	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([false, false]);
 });
 
-test('workout panel: on New workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
+test('workout panel: on Log workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
 	page
 }) => {
 	await createSplitAndMesoForTest(page);
@@ -1166,7 +1164,7 @@ test('workout panel: on New workout after Back and on every screen, resumes the 
 	// Not on the workout's own page
 	await expect(panel).toHaveCount(0);
 
-	// Back to New workout: the panel, with the clock and the exercise being done
+	// Back to Log workout: the panel, with the clock and the exercise being done
 	await page.getByRole('link', { name: 'Previous' }).click();
 	await expect(page.getByTestId('setup-in-progress')).toHaveCount(0);
 	await expect(page.getByTestId('workout-panel-clock')).toHaveText(/^\d+:\d\d$/);

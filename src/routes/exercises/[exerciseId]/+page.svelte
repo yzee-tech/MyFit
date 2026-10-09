@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { setTypeLabel } from '$lib/utils/setTypes';
+	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -73,6 +74,8 @@
 			)
 		) {
 			editOpen = false;
+			// Its levels (or none now) for the workout screen and routine editors
+			await invalidate('settings:userSettings');
 			await load();
 		}
 	}
@@ -137,7 +140,7 @@
 	}
 
 	const setsText = (entry: { setType: string; repRangeStart: number; repRangeEnd: number; sets?: number }) =>
-		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${convertCamelCaseToNormal(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
+		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${setTypeLabel(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
 </script>
 
 <!-- Reps only: the cap wins over a routine's range, so say when the range starts above it -->
@@ -192,6 +195,11 @@
 				{/if}
 				{#if exercise.repsOnly}
 					<Badge variant="outline">Reps only{exercise.maxReps ? `, max ${exercise.maxReps}` : ''}</Badge>
+				{/if}
+				{#if exercise.levelsFrom !== null && exercise.levelsTo !== null}
+					<Badge variant="outline">
+						Levels {exercise.levelsFrom}–{exercise.levelsTo}{exercise.levelStep === 0.5 ? ' by ½' : ''}
+					</Badge>
 				{/if}
 			</div>
 			{#if exercise.note}

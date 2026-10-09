@@ -579,7 +579,7 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await expect(page.locator('#exercise-sets')).toHaveValue('4');
 	await expect(page.locator('#exercise-note')).toHaveValue('seat on 4');
 	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/edit');
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('main')).toContainText('Sit-ups');
 	await expect(page.getByRole('main')).not.toContainText('Face pulls');
 	await saveRoutine(page);

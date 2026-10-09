@@ -46,10 +46,10 @@
 	<h3>Straight sets</h3>
 	<p>Sets with the same weight but can vary in reps. Easy and straightforward.</p>
 
-	<h3>V2 sets</h3>
+	<h3>Independent sets</h3>
 	<p>
-		Or also default sets, reps and load can be changed in any way as desired.
-		<i>This used to be the only default set type in V2 of the app.</i>
+		Each set on its own: reps and load can be changed in any way as desired.
+		<i>Called V2 sets before: the only default set type in V2 of the app.</i>
 	</p>
 
 	<h3>Down sets</h3>
@@ -73,7 +73,9 @@
 	<h3>Myorep match sets</h3>
 	<p>
 		All sets subsequent to the first one should match the reps of the first set. The subsequent sets maybe made up of
-		multiple mini-sets with short breaks in between to achieve the same reps.
+		multiple mini-sets with short breaks in between to achieve the same reps. All sets and mini-sets use the same load.
+		The load goes up only once the first set goes past the top of the rep range and every later set matched it in 3
+		mini-sets or fewer.
 	</p>
 
 	<h3>Myorep match down sets</h3>

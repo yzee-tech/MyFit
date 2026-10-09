@@ -19,7 +19,7 @@ async function editExercise(page: Page, exerciseName: string, change: () => Prom
 	await page.getByLabel(`${exerciseName} options`).click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await change();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 }
 
 const cardNames = (page: Page) => page.getByTestId('routine-card-name').allTextContents();
@@ -66,10 +66,10 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 	await expect(page.getByRole('heading', { level: 2 })).toHaveText('New routine');
 
 	// Needs a name and an exercise
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Give the routine a name' })).toBeVisible();
 	await page.getByLabel('Name', { exact: true }).fill('Pull');
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Add at least one exercise' })).toBeVisible();
 
 	// A new exercise, made from the picker
@@ -144,7 +144,7 @@ test('edit one routine: just it changes; a taken name is refused; leaving with c
 	// A name another routine has
 	await editRoutine(page, 'Pull A');
 	await page.getByLabel('Name', { exact: true }).fill('Push A');
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: 'You already have a routine called “Push A”' })
 	).toBeVisible();
@@ -276,7 +276,7 @@ test('changed or deleted on another device while open: asked before overwriting'
 		where: { name: 'Barbell rows', exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } },
 		data: { sets: 5 }
 	});
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	// (The exercise pop-up may still be closing: pick the question by its title)
 	const conflict = page.getByRole('dialog').filter({ hasText: 'Changed on another device' });
 	await expect(conflict).toContainText('This routine was changed on another device since you opened it.');
@@ -286,7 +286,7 @@ test('changed or deleted on another device while open: asked before overwriting'
 			.find((routine) => routine.name === 'Pull A')!
 			.exercises.find((exercise) => exercise.name === 'Barbell rows')!.sets;
 	expect(await rowsSets()).toEqual(5);
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	await conflict.getByRole('button', { name: 'Overwrite with mine' }).click();
 	await page.waitForURL('/exercise-splits');
 	expect(await rowsSets()).toEqual(4);
@@ -297,7 +297,7 @@ test('changed or deleted on another device while open: asked before overwriting'
 	await prisma.exerciseSplitDay.deleteMany({
 		where: { name: 'Push A', exerciseSplit: { userId: userData.userId } }
 	});
-	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
 	const gone = page.getByRole('dialog').filter({ hasText: 'This routine is gone' });
 	await expect(gone).toContainText('“Push A” was deleted or renamed on another device');
 	await gone.getByRole('button', { name: 'Save as a new routine' }).click();
@@ -400,7 +400,7 @@ test('adding an exercise by picking it in a new routine', async ({ page, userDat
 	expect(saved[0].exercises.map((exercise) => [exercise.name, exercise.sets])).toEqual([['Squats', 3]]);
 });
 
-test('weight sets live under My routines: from its menu, and from a routine being edited and back', async ({
+test('weight sets live under My routines: from its menu, from a routine being edited and back, and from Exercises', async ({
 	page,
 	userData
 }) => {
@@ -438,7 +438,7 @@ test('weight sets live under My routines: from its menu, and from a routine bein
 	await expect(page.getByLabel('Pick an exercise')).toHaveText('Barbell rows');
 	await page.getByRole('combobox', { name: 'Weights available' }).click();
 	await page.getByRole('option', { name: /Hotel DBs/ }).click();
-	await page.getByRole('button', { name: 'Edit exercise' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
 	await saveRoutine(page);
 	const rows = await prisma.exerciseTemplate.findFirstOrThrow({
 		where: {
@@ -448,6 +448,16 @@ test('weight sets live under My routines: from its menu, and from a routine bein
 	});
 	const hotelDBs = await prisma.weightSet.findFirstOrThrow({ where: { name: 'Hotel DBs', userId: userData.userId } });
 	expect(rows.weightSetId).toEqual(hotelDBs.id);
+
+	// From the Exercises page too, and back there; levels aren't a weight set any more
+	await page.goto('/exercises');
+	await page.getByRole('link', { name: 'Weight sets ›' }).click();
+	await page.waitForURL('/exercise-splits/weight-sets?back=/exercises');
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await expect(page.getByLabel('Weight set in pounds')).toBeVisible();
+	await expect(page.getByLabel('Machine levels')).toHaveCount(0);
+	await page.getByRole('main').getByRole('link', { name: 'Exercises' }).click();
+	await page.waitForURL('/exercises');
 
 	// Settings no longer has them
 	await page.goto('/settings');
