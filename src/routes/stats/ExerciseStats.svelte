@@ -105,13 +105,24 @@
 		}));
 	}
 
+	// "Load more" only starts once the first page is in: starting together, both loaded the first page
+	// and every workout showed twice
+	let firstPageLoaded = $state(false);
+
 	async function selectExercise(name: string) {
 		searchText = name;
 		searchOpen = false;
 		selectedExercise = name;
-		exerciseInstances = await trpc().workouts.getExerciseHistory.query({ exerciseName: name });
-		dateRange.start = dateToCalendarDate(exerciseInstances[exerciseInstances.length - 1].workout.startedAt);
-		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
+		firstPageLoaded = false;
+		exerciseInstances = [];
+		const found = await trpc().workouts.getExerciseHistory.query({ exerciseName: name });
+		// Another exercise picked meanwhile
+		if (selectedExercise !== name) return;
+		exerciseInstances = found;
+		firstPageLoaded = true;
+		if (found.length === 0) return;
+		dateRange.start = dateToCalendarDate(found[found.length - 1].workout.startedAt);
+		dateRange.end = dateToCalendarDate(found[0].workout.startedAt);
 	}
 
 	async function loadMore(infiniteEvent: InfiniteEvent) {
@@ -128,9 +139,12 @@
 			return;
 		}
 
+		if (selectedExercise !== exerciseName) return;
 		infiniteEvent.detail.loaded();
 		if (!exerciseInstances) exerciseInstances = [];
-		exerciseInstances?.push(...newExercisesFound);
+		// Never the same workout twice
+		const shown = new Set(exerciseInstances.map((ex) => ex.id));
+		exerciseInstances.push(...newExercisesFound.filter((ex) => !shown.has(ex.id)));
 		dateRange.start = dateToCalendarDate(exerciseInstances[exerciseInstances.length - 1].workout.startedAt);
 		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
 		if (newExercisesFound.length < 10) infiniteEvent.detail.complete();
@@ -284,7 +298,9 @@
 			{#each filteredExerciseInstances as instance}
 				<WorkoutExerciseCard exercise={instance} date={new Date(instance.workout.startedAt)} />
 			{/each}
-			<DefaultInfiniteLoader {loadMore} identifier={selectedExercise} entityPlural="exercises" />
+			{#if firstPageLoaded}
+				<DefaultInfiniteLoader {loadMore} identifier={selectedExercise} entityPlural="exercises" />
+			{/if}
 		{/if}
 	{/if}
 </div>

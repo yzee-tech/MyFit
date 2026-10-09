@@ -6,6 +6,7 @@ import { workouts } from './routes/workouts';
 import { users } from './routes/users';
 import { weightSets } from './routes/weightSets';
 import { exercises } from './routes/exercises';
+import { stats } from './routes/stats';
 
 export const router = t.router({
 	exerciseSplits,
@@ -13,7 +14,8 @@ export const router = t.router({
 	workouts,
 	users,
 	weightSets,
-	exercises
+	exercises,
+	stats
 });
 
 export const createCaller = t.createCallerFactory(router);
