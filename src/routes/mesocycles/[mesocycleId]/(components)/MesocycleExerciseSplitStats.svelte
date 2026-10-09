@@ -1,34 +1,61 @@
 <script lang="ts">
-	import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
+	import SetsPerMuscleChart from '$lib/components/charts/SetsPerMuscleChart.svelte';
 	import { Root as Card } from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import MesocycleExerciseSplitVolumeCharts from '../../(components)/MesocycleExerciseSplitVolumeCharts.svelte';
-	import ExerciseSplitExercisesCharts from '../../../exercise-splits/(components)/ExerciseSplitExercisesCharts.svelte';
-	import ExerciseSplitMuscleGroupsCharts from '../../../exercise-splits/(components)/ExerciseSplitMuscleGroupsCharts.svelte';
+	import type { RouterOutputs } from '$lib/trpc/router';
+	import { BarController, BarElement, CategoryScale, Chart, LinearScale, Tooltip } from 'chart.js';
+	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
-	type PropsType = { splitExercises: MesocycleExerciseTemplateWithoutIdsOrIndex[][] };
-	let { splitExercises }: PropsType = $props();
+	type Block = NonNullable<RouterOutputs['mesocycles']['findById']>;
+	let { mesocycle }: { mesocycle: Block } = $props();
+
+	// The block's routines as planned now: not old hidden ones or the old rotation's rest days
+	let routines = $derived(
+		mesocycle.mesocycleExerciseSplitDays.filter((routine) => !routine.isRestDay && !routine.hidden)
+	);
+	let exercises = $derived(routines.flatMap((routine) => routine.mesocycleSplitDayExercises));
+
+	let chart: Chart<'bar'> | undefined;
+	let chartCanvas: HTMLCanvasElement | undefined = $state();
+	$effect(() => {
+		if (!chartCanvas) return;
+		chart?.destroy();
+		const style = getComputedStyle(document.body);
+		const primary = style.getPropertyValue('--primary').split(' ').join(', ');
+		chart = new Chart(chartCanvas, {
+			type: 'bar',
+			data: {
+				labels: routines.map((routine) => routine.name),
+				datasets: [
+					{
+						label: 'Sets',
+						data: routines.map((routine) =>
+							routine.mesocycleSplitDayExercises.reduce((total, exercise) => total + exercise.sets, 0)
+						),
+						backgroundColor: `hsl(${primary})`,
+						borderRadius: 4
+					}
+				]
+			},
+			options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+		});
+	});
 </script>
 
-<Tabs.Root class="mb-auto w-full" value="volume">
-	<Tabs.List class="grid grid-cols-3">
-		<Tabs.Trigger value="volume">Volume</Tabs.Trigger>
-		<Tabs.Trigger value="exercises">Exercises</Tabs.Trigger>
-		<Tabs.Trigger value="muscleGroups">MuscleGroups</Tabs.Trigger>
+<Tabs.Root class="mb-auto w-full" value="muscles">
+	<Tabs.List class="grid grid-cols-2">
+		<Tabs.Trigger value="muscles">Per muscle</Tabs.Trigger>
+		<Tabs.Trigger value="routines">Per routine</Tabs.Trigger>
 	</Tabs.List>
-	<Tabs.Content value="volume">
+	<Tabs.Content value="muscles">
 		<Card class="p-4">
-			<MesocycleExerciseSplitVolumeCharts mesocycleSplitExercises={splitExercises} />
+			<SetsPerMuscleChart {exercises} label="Sets planned (each routine once)" />
 		</Card>
 	</Tabs.Content>
-	<Tabs.Content value="exercises">
+	<Tabs.Content value="routines">
 		<Card class="p-4">
-			<ExerciseSplitExercisesCharts exercises={splitExercises.flat()} />
-		</Card>
-	</Tabs.Content>
-	<Tabs.Content value="muscleGroups">
-		<Card class="p-4">
-			<ExerciseSplitMuscleGroupsCharts {splitExercises} />
+			<p class="mb-2 text-sm text-muted-foreground">Sets planned per routine</p>
+			<canvas bind:this={chartCanvas} data-testid="sets-per-routine-chart"></canvas>
 		</Card>
 	</Tabs.Content>
 </Tabs.Root>

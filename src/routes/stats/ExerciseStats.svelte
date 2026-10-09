@@ -105,24 +105,14 @@
 		}));
 	}
 
-	// "Load more" only starts once the first page is in: starting together, both loaded the first page
-	// and every workout showed twice
-	let firstPageLoaded = $state(false);
-
-	async function selectExercise(name: string) {
+	// The loader below fetches every page, the first one too: fetched here as well, it came in twice
+	function selectExercise(name: string) {
 		searchText = name;
 		searchOpen = false;
+		// Already showing it: the loader carries on as it was
+		if (selectedExercise === name) return;
 		selectedExercise = name;
-		firstPageLoaded = false;
 		exerciseInstances = [];
-		const found = await trpc().workouts.getExerciseHistory.query({ exerciseName: name });
-		// Another exercise picked meanwhile
-		if (selectedExercise !== name) return;
-		exerciseInstances = found;
-		firstPageLoaded = true;
-		if (found.length === 0) return;
-		dateRange.start = dateToCalendarDate(found[found.length - 1].workout.startedAt);
-		dateRange.end = dateToCalendarDate(found[0].workout.startedAt);
 	}
 
 	async function loadMore(infiniteEvent: InfiniteEvent) {
@@ -298,9 +288,7 @@
 			{#each filteredExerciseInstances as instance}
 				<WorkoutExerciseCard exercise={instance} date={new Date(instance.workout.startedAt)} />
 			{/each}
-			{#if firstPageLoaded}
-				<DefaultInfiniteLoader {loadMore} identifier={selectedExercise} entityPlural="exercises" />
-			{/if}
+			<DefaultInfiniteLoader {loadMore} identifier={selectedExercise} entityPlural="exercises" />
 		{/if}
 	{/if}
 </div>

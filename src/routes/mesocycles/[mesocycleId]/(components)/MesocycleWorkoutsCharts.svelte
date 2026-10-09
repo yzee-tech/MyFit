@@ -7,7 +7,9 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	const firstNonRestDay = mesocycle.mesocycleExerciseSplitDays.find((splitDay) => !splitDay.isRestDay)!;
+	// Routines that can be picked: not old hidden ones or the old rotation's rest days
+	const routines = mesocycle.mesocycleExerciseSplitDays.filter((splitDay) => !splitDay.isRestDay && !splitDay.hidden);
+	const firstNonRestDay = routines[0] ?? mesocycle.mesocycleExerciseSplitDays[0];
 	let selectedExerciseSplitDayIndex: Selected<number> = $state({
 		value: firstNonRestDay.dayIndex,
 		label: firstNonRestDay.name
@@ -22,15 +24,13 @@
 	/>
 
 	<Select.Root bind:selected={selectedExerciseSplitDayIndex}>
-		<Select.Label class="pl-0">Split day name</Select.Label>
+		<Select.Label class="pl-0">Routine</Select.Label>
 		<Select.Trigger class="w-full">
 			<Select.Value />
 		</Select.Trigger>
 		<Select.Content>
-			{#each mesocycle.mesocycleExerciseSplitDays as splitDay}
-				<Select.Item disabled={splitDay.isRestDay} value={splitDay.dayIndex}>
-					{splitDay.isRestDay ? 'Rest' : splitDay.name}
-				</Select.Item>
+			{#each routines as splitDay}
+				<Select.Item value={splitDay.dayIndex}>{splitDay.name}</Select.Item>
 			{/each}
 		</Select.Content>
 	</Select.Root>

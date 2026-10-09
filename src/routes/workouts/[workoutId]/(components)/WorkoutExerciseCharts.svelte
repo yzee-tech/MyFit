@@ -2,7 +2,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import type { FullWorkoutWithMesoData } from '../+page.server';
-	import ExerciseSplitExercisesCharts from '../../../exercise-splits/(components)/ExerciseSplitExercisesCharts.svelte';
+	import SetsPerMuscleChart from '$lib/components/charts/SetsPerMuscleChart.svelte';
 
 	type PropsType = { workout: FullWorkoutWithMesoData };
 	let { workout }: PropsType = $props();
@@ -14,6 +14,12 @@
 	</div>
 {:else}
 	<Card.Root class="p-4">
-		<ExerciseSplitExercisesCharts exercises={workout.workoutExercises} />
+		<SetsPerMuscleChart
+			exercises={workout.workoutExercises.map((exercise) => ({
+				...exercise,
+				sets: exercise.sets.filter((set) => !set.skipped).length
+			}))}
+			label="Sets done"
+		/>
 	</Card.Root>
 {/if}
