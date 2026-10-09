@@ -53,7 +53,8 @@
 		const startedAt = new Date(`${date}T${time}`);
 		// A cleared or half-typed box keeps what was there
 		if (Number.isNaN(startedAt.getTime()) || !Number.isFinite(minutes)) return;
-		const length = Math.min(Math.max(Math.round(minutes), 1), 600);
+		// 0 is fine: a workout saved straight after it started
+		const length = Math.min(Math.max(Math.round(minutes), 0), 600);
 		workoutRunes.workoutData.startedAt = startedAt;
 		workoutRunes.workoutData.endedAt = new Date(startedAt.getTime() + length * 60000);
 	}
@@ -311,7 +312,7 @@
 					id="workout-length-minutes"
 					class="w-24"
 					max={600}
-					min={1}
+					min={0}
 					onchange={(e) => setWorkoutTime({ minutes: e.currentTarget.valueAsNumber })}
 					required
 					step={1}
