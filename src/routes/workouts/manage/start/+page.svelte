@@ -113,7 +113,7 @@
 			return { ...rest, workoutExercises: [], workoutOfMesocycle: undefined, routineName: null };
 		}
 		// No block: a routine of My routines, and the workout isn't part of any block
-		if (!activeBlock || selectedRoutine.splitDayIndex === undefined) {
+		if (!activeBlock) {
 			return {
 				...rest,
 				workoutExercises: selectedRoutine.workoutExercises,
@@ -129,7 +129,6 @@
 				mesocycle: activeBlock.mesocycle,
 				cycleNumber: activeBlock.weekNumber,
 				splitDayName: selectedRoutine.name,
-				splitDayIndex: selectedRoutine.splitDayIndex,
 				workoutStatus: null
 			}
 		};
@@ -173,8 +172,9 @@
 		const { workoutOfMesocycle, routineName } = workoutRunes.workoutData;
 		const fromRoutine = workoutOfMesocycle !== undefined || Boolean(routineName);
 		let exercisesLink = `./exercises?userBodyweight=${userBodyweightKg}`;
-		if (workoutOfMesocycle) exercisesLink += `&useActiveMesocycle&splitDayIndex=${workoutOfMesocycle.splitDayIndex}`;
-		else if (routineName) exercisesLink += `&routine=${encodeURIComponent(routineName)}`;
+		// A routine of My routines, done in the active block (its settings and week) or not
+		if (routineName) exercisesLink += `&routine=${encodeURIComponent(routineName)}`;
+		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
 		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
 		if (fromRoutine && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
 		if (fromRoutine && workoutRunes.workoutData.sessionWeightUnit) {

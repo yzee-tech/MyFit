@@ -7,31 +7,32 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	// Routines that can be picked: not old hidden ones or the old rotation's rest days
-	const routines = mesocycle.mesocycleExerciseSplitDays.filter((splitDay) => !splitDay.isRestDay && !splitDay.hidden);
-	const firstNonRestDay = routines[0] ?? mesocycle.mesocycleExerciseSplitDays[0];
-	let selectedExerciseSplitDayIndex: Selected<number> = $state({
-		value: firstNonRestDay.dayIndex,
-		label: firstNonRestDay.name
-	});
+	// The routines this mesocycle's workouts were done from, by their names at the time
+	const done = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null && wm.workout.routineName);
+	const routineNames = [...new Set(done.map((wm) => wm.workout.routineName!))];
+	let selectedRoutine: Selected<string> | undefined = $state(
+		routineNames[0] === undefined ? undefined : { value: routineNames[0], label: routineNames[0] }
+	);
 </script>
 
 <Card.Root class="p-4">
-	<WorkoutProgressionChart
-		pastWorkouts={mesocycle.workoutsOfMesocycle
-			.filter((wm) => wm.splitDayIndex === selectedExerciseSplitDayIndex.value)
-			.map((wm) => wm.workout)}
-	/>
+	{#if routineNames.length === 0}
+		<div class="muted-text-box">No workouts yet</div>
+	{:else}
+		<WorkoutProgressionChart
+			pastWorkouts={done.filter((wm) => wm.workout.routineName === selectedRoutine?.value).map((wm) => wm.workout)}
+		/>
 
-	<Select.Root bind:selected={selectedExerciseSplitDayIndex}>
-		<Select.Label class="pl-0">Routine</Select.Label>
-		<Select.Trigger class="w-full">
-			<Select.Value />
-		</Select.Trigger>
-		<Select.Content>
-			{#each routines as splitDay}
-				<Select.Item value={splitDay.dayIndex}>{splitDay.name}</Select.Item>
-			{/each}
-		</Select.Content>
-	</Select.Root>
+		<Select.Root bind:selected={selectedRoutine}>
+			<Select.Label class="pl-0">Routine</Select.Label>
+			<Select.Trigger class="w-full">
+				<Select.Value />
+			</Select.Trigger>
+			<Select.Content>
+				{#each routineNames as name}
+					<Select.Item value={name}>{name}</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
+	{/if}
 </Card.Root>

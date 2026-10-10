@@ -173,6 +173,61 @@ test('a block workout is named after its block routine, whatever the client says
 	expect((await prisma.workout.findUniqueOrThrow({ where: { id: workoutId } })).routineName).toEqual('Pull A');
 });
 
+test('a block workout from today’s app: named by its routine of My routines, its block position still kept; renaming the routine keeps old names', async () => {
+	const { userId, caller } = await seedPerson();
+	await caller.mesocycles.create({
+		mesocycle: {
+			name: 'Now',
+			weeklyRIR: [3, 2, 1],
+			startOverloadPercentage: 2.5,
+			lastSetToFailure: false,
+			forceRIRMatching: false
+		},
+		mesocycleCyclicSetChanges: [],
+		startImmediately: true
+	});
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId } });
+
+	// Suggestions for a block routine come from My routines, with the block's settings
+	const suggested = await caller.workouts.getWorkoutExercisesWithPreviousData({
+		userBodyweight: 80,
+		routineName: 'Pull A',
+		useActiveMesocycle: true
+	});
+	expect(suggested.todaysWorkoutExercises.map((exercise) => exercise.name)).toEqual(['Barbell rows']);
+	// The start page lists My routines for the block
+	const today = await caller.workouts.getTodaysWorkoutData();
+	expect(today.activeBlock?.routines.map((routine) => routine.name)).toContain('Pull A');
+
+	const { workoutId } = await caller.workouts.create({
+		...pullAWorkout(),
+		workoutData: {
+			userBodyweight: 80,
+			routineName: 'Pull A',
+			workoutOfMesocycle: { mesocycle: { id: block.id }, workoutStatus: null }
+		}
+	});
+	const saved = await prisma.workout.findUniqueOrThrow({
+		where: { id: workoutId },
+		include: { workoutOfMesocycle: true }
+	});
+	expect(saved.routineName).toEqual('Pull A');
+	const position = await prisma.mesocycleExerciseSplitDay.findFirstOrThrow({
+		where: { mesocycleId: block.id, name: 'Pull A' }
+	});
+	expect(saved.workoutOfMesocycle?.splitDayIndex).toEqual(position.dayIndex);
+	// Done from it, in this block
+	const after = await caller.workouts.getTodaysWorkoutData();
+	expect(after.activeBlock?.routines.find((routine) => routine.name === 'Pull A')?.lastDoneAt).not.toBeNull();
+
+	// Renamed in My routines: the workout keeps the name it was done under
+	await prisma.exerciseSplitDay.updateMany({
+		where: { exerciseSplit: { userId }, name: 'Pull A' },
+		data: { name: 'Pull – Hotel' }
+	});
+	expect((await prisma.workout.findUniqueOrThrow({ where: { id: workoutId } })).routineName).toEqual('Pull A');
+});
+
 test('no block: Update routine is offered from the routine’s name; a deleted routine or a blank workout isn’t', async () => {
 	const { userId, caller } = await seedPerson();
 	const withExtraSet = {

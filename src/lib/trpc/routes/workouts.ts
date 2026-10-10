@@ -46,7 +46,9 @@ type TodaysWorkoutData = {
 	endedAt: Date | string | null;
 	userBodyweight: number | null;
 	workoutExercises: Pick<WorkoutExercise, 'name' | 'targetMuscleGroup' | 'customMuscleGroup'>[];
-	workoutOfMesocycle?: Pick<WorkoutOfMesocycle, 'workoutStatus' | 'splitDayIndex'> & {
+	workoutOfMesocycle?: Pick<WorkoutOfMesocycle, 'workoutStatus'> & {
+		/** Old app versions only: the block routine's position */
+		splitDayIndex?: number;
 		mesocycle: Mesocycle;
 		cycleNumber: number;
 		splitDayName: string;
@@ -68,8 +70,6 @@ type TodaysWorkoutData = {
 };
 
 export type RoutineOption = {
-	/** Its position in the active block; none for a routine of My routines picked with no block */
-	splitDayIndex?: number;
 	name: string;
 	weightUnit: RoutineWeightUnit;
 	workoutExercises: Pick<WorkoutExercise, 'name' | 'targetMuscleGroup' | 'customMuscleGroup'>[];
@@ -116,16 +116,9 @@ type WorkoutExercisesWithPreviousData = {
 	};
 };
 
-const createActiveMesocycleWithProgressionDataInclude = () =>
-	Prisma.validator<Prisma.MesocycleInclude>()({
-		mesocycleExerciseSplitDays: {
-			include: { mesocycleSplitDayExercises: { orderBy: { exerciseIndex: 'asc' } } },
-			orderBy: { dayIndex: 'asc' }
-		}
-	});
-
+/** A block with its routines and their exercises: what the suggestions work from */
 export type ActiveMesocycleWithProgressionData = Prisma.MesocycleGetPayload<{
-	include: ReturnType<typeof createActiveMesocycleWithProgressionDataInclude>;
+	include: { mesocycleExerciseSplitDays: { include: { mesocycleSplitDayExercises: true } } };
 }>;
 
 /** Whether a workout on this date falls in a deload week of the block */
@@ -167,13 +160,14 @@ const workoutInputDataSchema = z.object({
 	startedAt: z.date().or(z.string().datetime()).optional(),
 	/** A new workout's end: its last ticked set. Kept between its start and now; none means now */
 	endedAt: z.date().or(z.string().datetime()).optional(),
-	/** The routine of My routines a workout outside a block is done from (a block's is looked up) */
+	/** The routine of My routines the workout is done from, in a block or not; none for a blank workout */
 	routineName: z.string().trim().min(1).max(100).nullish(),
 	userBodyweight: z.number(),
 	workoutOfMesocycle: z
 		.object({
 			mesocycle: z.object({ id: z.string().cuid2() }),
-			splitDayIndex: z.number().int(),
+			/** Old app versions name the block routine by its position instead of routineName */
+			splitDayIndex: z.number().int().optional(),
 			workoutStatus: z.nativeEnum(WorkoutStatus).nullable()
 		})
 		.optional(),
@@ -190,12 +184,12 @@ const createWorkoutSchema = z.strictObject({
 });
 
 /**
- * The name of the routine a workout is done from: a block workout's from its block routine (whatever
- * the client says), else the one given; none for a blank workout
+ * The name of the routine a workout is done from: the one given (a routine of My routines, in a block
+ * or not), or for an old app version's block workout, its block routine's; none for a blank workout
  */
 async function workoutRoutineName(userId: string, workoutData: z.infer<typeof workoutInputDataSchema>) {
 	const { workoutOfMesocycle } = workoutData;
-	if (!workoutOfMesocycle) return workoutData.routineName ?? null;
+	if (workoutOfMesocycle?.splitDayIndex === undefined) return workoutData.routineName ?? null;
 	const blockRoutine = await prisma.mesocycleExerciseSplitDay.findFirst({
 		where: {
 			mesocycleId: workoutOfMesocycle.mesocycle.id,
@@ -206,6 +200,20 @@ async function workoutRoutineName(userId: string, workoutData: z.infer<typeof wo
 	});
 	if (!blockRoutine) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Routine of the active block not found' });
 	return blockRoutine.name;
+}
+
+/**
+ * A block routine's position in the block's copy of the routines, by name (a visible one first), still
+ * written for now so the copy stays complete; -1 when it has none
+ */
+async function blockRoutinePosition(mesocycleId: string, routineName: string | null) {
+	if (routineName === null) return -1;
+	const blockRoutine = await prisma.mesocycleExerciseSplitDay.findFirst({
+		where: { mesocycleId, name: routineName, isRestDay: false },
+		orderBy: [{ hidden: 'asc' }, { dayIndex: 'asc' }],
+		select: { dayIndex: true }
+	});
+	return blockRoutine?.dayIndex ?? -1;
 }
 
 /** The routine in My routines a workout is from (by name), if it's still there */
@@ -267,28 +275,20 @@ function workoutAsRoutine(input: z.infer<typeof createWorkoutSchema>, routine: W
 	}));
 }
 
-/** Today's routine in the active block, with the block's progression settings */
-async function findBlockRoutineForWorkout(userId: string, splitDayIndex: number) {
-	const data: ActiveMesocycleWithProgressionData | null = await prisma.mesocycle.findFirst({
-		where: { userId, startDate: { not: null }, endDate: null },
-		include: createActiveMesocycleWithProgressionDataInclude()
-	});
-	const routine = data?.mesocycleExerciseSplitDays.find((splitDay) => splitDay.dayIndex === splitDayIndex);
-	if (!data || !routine || routine.isRestDay) return null;
-	return { data, splitDayIndex, weekNumber: getBlockWeek(data.startDate!), inBlock: true };
-}
-
 /**
- * A routine of My routines for a workout outside a block, as a stand-in block holding just that
- * routine, with steady progression settings
+ * A routine of My routines as the plan the suggestions work from: a stand-in block holding just that
+ * routine, with the active block's progression settings and week, else steady ones
  */
-async function findMyRoutineForWorkout(userId: string, routineName: string) {
-	const routine = await prisma.exerciseSplitDay.findFirst({
-		where: { exerciseSplit: { userId }, name: routineName, isRestDay: false },
-		include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
-	});
-	if (!routine) return null;
-	const data: ActiveMesocycleWithProgressionData = {
+async function findMyRoutineForWorkout(userId: string, routineName: string, inBlock = false) {
+	const [routine, block] = await Promise.all([
+		prisma.exerciseSplitDay.findFirst({
+			where: { exerciseSplit: { userId }, name: routineName, isRestDay: false },
+			include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
+		}),
+		inBlock ? prisma.mesocycle.findFirst({ where: { userId, startDate: { not: null }, endDate: null } }) : null
+	]);
+	if (!routine || (inBlock && !block)) return null;
+	const settings = block ?? {
 		id: 'my-routines',
 		name: '',
 		userId,
@@ -298,7 +298,10 @@ async function findMyRoutineForWorkout(userId: string, routineName: string) {
 		endDate: null,
 		startOverloadPercentage: NO_BLOCK_PROGRESSION.startOverloadPercentage,
 		lastSetToFailure: NO_BLOCK_PROGRESSION.lastSetToFailure,
-		forceRIRMatching: NO_BLOCK_PROGRESSION.forceRIRMatching,
+		forceRIRMatching: NO_BLOCK_PROGRESSION.forceRIRMatching
+	};
+	const data: ActiveMesocycleWithProgressionData = {
+		...settings,
 		mesocycleExerciseSplitDays: [
 			{
 				id: routine.id,
@@ -307,7 +310,7 @@ async function findMyRoutineForWorkout(userId: string, routineName: string) {
 				isRestDay: false,
 				hidden: false,
 				weightUnit: routine.weightUnit,
-				mesocycleId: 'my-routines',
+				mesocycleId: settings.id,
 				mesocycleSplitDayExercises: routine.exercises.map(({ exerciseSplitDayId, sets, ...exercise }) => ({
 					...exercise,
 					sets: routineSetCount(sets),
@@ -316,7 +319,21 @@ async function findMyRoutineForWorkout(userId: string, routineName: string) {
 			}
 		]
 	};
-	return { data, splitDayIndex: 0, weekNumber: 1, inBlock: false };
+	const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
+	return { data, splitDayIndex: 0, weekNumber, inBlock: block !== null };
+}
+
+/** An old app version's block routine, by its position: its name, from the active block's copy */
+async function activeBlockRoutineName(userId: string, splitDayIndex: number) {
+	const blockRoutine = await prisma.mesocycleExerciseSplitDay.findFirst({
+		where: {
+			dayIndex: splitDayIndex,
+			isRestDay: false,
+			mesocycle: { userId, startDate: { not: null }, endDate: null }
+		},
+		select: { name: true }
+	});
+	return blockRoutine?.name ?? null;
 }
 
 const loadWorkoutsSchema = z.strictObject({
@@ -483,76 +500,46 @@ export const workouts = t.router({
 			if (daysSinceLastWorkout >= welcomeBackAfterDays) todaysWorkoutData.welcomeBack = { daysSinceLastWorkout };
 		}
 
-		const data = await prisma.mesocycle.findFirst({
-			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-			include: {
-				mesocycleExerciseSplitDays: {
-					include: {
-						mesocycleSplitDayExercises: {
-							select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
-							orderBy: { exerciseIndex: 'asc' }
-						}
-					},
-					orderBy: { dayIndex: 'asc' }
-				},
-				workoutsOfMesocycle: {
-					select: { splitDayIndex: true, workout: { select: { startedAt: true } } },
-					orderBy: { workout: { startedAt: 'desc' } }
+		// Routines to pick from are My routines, in a block or not
+		const myRoutines = await prisma.exerciseSplitDay.findMany({
+			where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
+			orderBy: { dayIndex: 'asc' },
+			select: {
+				name: true,
+				weightUnit: true,
+				exercises: {
+					select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
+					orderBy: { exerciseIndex: 'asc' }
 				}
 			}
 		});
+		const data = await prisma.mesocycle.findFirst({
+			where: { userId: ctx.userId, startDate: { not: null }, endDate: null }
+		});
+		// "Last done": the latest workout from each routine (by name), in this block if there is one
+		const lastDone = await prisma.workout.groupBy({
+			by: ['routineName'],
+			where: {
+				userId: ctx.userId,
+				routineName: { not: null },
+				...(data ? { workoutOfMesocycle: { is: { mesocycleId: data.id } } } : {})
+			},
+			_max: { startedAt: true }
+		});
+		const routines: RoutineOption[] = myRoutines.map((routine) => ({
+			name: routine.name,
+			weightUnit: routine.weightUnit,
+			workoutExercises: routine.exercises,
+			lastDoneAt: lastDone.find((row) => row.routineName === routine.name)?._max.startedAt ?? null
+		}));
 		if (data === null) {
-			// No block: pick from My routines; "last done" from workouts done from each routine (by name)
-			const [myRoutines, lastDone] = await Promise.all([
-				prisma.exerciseSplitDay.findMany({
-					where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
-					orderBy: { dayIndex: 'asc' },
-					select: {
-						name: true,
-						weightUnit: true,
-						exercises: {
-							select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
-							orderBy: { exerciseIndex: 'asc' }
-						}
-					}
-				}),
-				prisma.workout.groupBy({
-					by: ['routineName'],
-					where: { userId: ctx.userId, routineName: { not: null } },
-					_max: { startedAt: true }
-				})
-			]);
-			todaysWorkoutData.myRoutines = myRoutines.map((routine) => ({
-				name: routine.name,
-				weightUnit: routine.weightUnit,
-				workoutExercises: routine.exercises,
-				lastDoneAt: lastDone.find((row) => row.routineName === routine.name)?._max.startedAt ?? null
-			}));
+			todaysWorkoutData.myRoutines = routines;
 			return todaysWorkoutData;
 		}
 
-		const { mesocycleExerciseSplitDays, workoutsOfMesocycle, ...mesocycle } = data;
+		const mesocycle = data;
 		const weekNumber = getBlockWeek(mesocycle.startDate!);
 		const totalWeeks = mesocycle.weeklyRIR.length;
-
-		// The block's routines are a copy of My routines: in their order, without ones no longer there
-		const myRoutineNames = (
-			await prisma.exerciseSplitDay.findMany({
-				where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
-				orderBy: { dayIndex: 'asc' },
-				select: { name: true }
-			})
-		).map((routine) => routine.name);
-		const routines: RoutineOption[] = mesocycleExerciseSplitDays
-			.filter((splitDay) => !splitDay.isRestDay && !splitDay.hidden)
-			.sort((a, b) => myRoutineNames.indexOf(a.name) - myRoutineNames.indexOf(b.name))
-			.map((splitDay) => ({
-				splitDayIndex: splitDay.dayIndex,
-				name: splitDay.name,
-				weightUnit: splitDay.weightUnit,
-				workoutExercises: splitDay.mesocycleSplitDayExercises,
-				lastDoneAt: workoutsOfMesocycle.find((wm) => wm.splitDayIndex === splitDay.dayIndex)?.workout.startedAt ?? null
-			}));
 
 		todaysWorkoutData.activeBlock = {
 			mesocycle,
@@ -568,10 +555,12 @@ export const workouts = t.router({
 		.input(
 			z.strictObject({
 				userBodyweight: z.number(),
-				/** A routine of the active block, by its position... */
-				splitDayIndex: z.number().int().optional(),
-				/** ...or, with no block, a routine of My routines, by its name */
+				/** A routine of My routines, by its name... */
 				routineName: z.string().trim().min(1).max(100).optional(),
+				/** ...done in the active block, with its settings and week */
+				useActiveMesocycle: z.boolean().optional(),
+				/** Old app versions: a routine of the active block, by its position */
+				splitDayIndex: z.number().int().optional(),
 				welcomeBack: z.boolean().optional(),
 				/** Unit chosen at the start of the workout, for routines set to "ask each time" */
 				sessionUnit: z.enum(['KG', 'LB']).optional(),
@@ -588,10 +577,12 @@ export const workouts = t.router({
 				repsOnly: {},
 				previousWorkoutData: null
 			};
-			const today =
+			const routineName =
 				input.splitDayIndex !== undefined
-					? await findBlockRoutineForWorkout(ctx.userId, input.splitDayIndex)
-					: await findMyRoutineForWorkout(ctx.userId, input.routineName!);
+					? await activeBlockRoutineName(ctx.userId, input.splitDayIndex)
+					: input.routineName!;
+			const useBlock = input.splitDayIndex !== undefined || input.useActiveMesocycle === true;
+			const today = routineName === null ? null : await findMyRoutineForWorkout(ctx.userId, routineName, useBlock);
 			if (!today) return workoutExercisesWithPreviousData;
 			const { data, splitDayIndex, weekNumber, inBlock } = today;
 			const todaysSplitDay = data.mesocycleExerciseSplitDays.find((splitDay) => splitDay.dayIndex === splitDayIndex)!;
@@ -825,7 +816,9 @@ export const workouts = t.router({
 			workout.workoutOfMesocycle = {
 				create: {
 					mesocycleId: workoutOfMesocycle.mesocycle.id,
-					splitDayIndex: workoutOfMesocycle.splitDayIndex,
+					splitDayIndex:
+						workoutOfMesocycle.splitDayIndex ??
+						(await blockRoutinePosition(workoutOfMesocycle.mesocycle.id, routineName)),
 					workoutStatus: workoutOfMesocycle.workoutStatus
 				}
 			};

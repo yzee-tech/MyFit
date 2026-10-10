@@ -139,13 +139,12 @@
 			<span class="text-sm text-muted-foreground">Mesocycle</span>
 			{#if workout.workoutOfMesocycle}
 				{@const wm = workout.workoutOfMesocycle}
-				{@const splitDay = wm.mesocycle.mesocycleExerciseSplitDays[wm.splitDayIndex]}
 				<div class="flex items-center justify-between">
 					<a class="font-semibold underline" href="/mesocycles/{wm.mesocycle.id}">
 						{wm.mesocycle.name}
 					</a>
 					<Badge class="whitespace-nowrap" variant={wm.workoutStatus === null ? 'secondary' : 'outline'}>
-						{wm.workoutStatus === null ? splitDay.name : convertCamelCaseToNormal(wm.workoutStatus)}
+						{wm.workoutStatus === null ? (workout.routineName ?? '') : convertCamelCaseToNormal(wm.workoutStatus)}
 					</Badge>
 				</div>
 			{:else}

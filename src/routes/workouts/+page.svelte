@@ -142,10 +142,8 @@
 					<StickyNoteIcon class="text-muted-foreground" />
 				{/if}
 				{#if workoutOfMesocycle}
-					{@const splitDayName =
-						workoutOfMesocycle.mesocycle.mesocycleExerciseSplitDays[workoutOfMesocycle.splitDayIndex].name}
 					<span class="truncate text-right text-muted-foreground">
-						{splitDayName === '' ? 'Rest' : splitDayName}
+						{workoutOfMesocycle.workoutStatus === 'RestDay' ? 'Rest' : (workout.routineName ?? '')}
 						{workoutOfMesocycle.workoutStatus === 'Skipped' ? '(skipped)' : ''}
 					</span>
 				{:else if workout.routineName}

@@ -43,7 +43,10 @@ export function getAveragePercentageChangeOfExercisePerformances(
 
 export function generatePerformanceChangesPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMesocycle) {
 	const allExercises = workoutsOfMesocycle.flatMap((wm) =>
-		wm.workout.workoutExercises.map((exercise) => ({ ...exercise, name: exercise.name + wm.splitDayIndex.toString() }))
+		wm.workout.workoutExercises.map((exercise) => ({
+			...exercise,
+			name: `${exercise.name}|${wm.workout.routineName ?? ''}`
+		}))
 	);
 	const groupedExercisesByMuscleGroup = groupExercisesByMuscleGroup(allExercises);
 
@@ -70,21 +73,19 @@ type GroupedWorkoutsBySplitDayName = {
 	workouts: Workout[];
 }[];
 
-export function groupWorkoutsBySplitDayName(
-	workoutsOfMesocycle: WorkoutsOfMesocycle,
-	splitDays: Mesocycle['mesocycleExerciseSplitDays']
-): GroupedWorkoutsBySplitDayName {
-	const groupedObject = Object.groupBy(workoutsOfMesocycle, ({ splitDayIndex }) => splitDayIndex);
+/** A mesocycle's workouts by the routine they were done from (its name at the time) */
+export function groupWorkoutsBySplitDayName(workoutsOfMesocycle: WorkoutsOfMesocycle): GroupedWorkoutsBySplitDayName {
+	const groupedObject = Object.groupBy(workoutsOfMesocycle, ({ workout }) => workout.routineName ?? '');
 
-	return Object.entries(groupedObject).map(([splitDayIndex, workoutsOfMesocycle]) => ({
-		splitDayName: splitDays.find((splitDay) => splitDay.dayIndex === Number(splitDayIndex))?.name ?? '',
+	return Object.entries(groupedObject).map(([routineName, workoutsOfMesocycle]) => ({
+		splitDayName: routineName,
 		workouts: (workoutsOfMesocycle ?? []).map((wm) => wm.workout)
 	}));
 }
 
 export function generatePerformanceChangesPerSplitDay(mesocycle: Mesocycle) {
 	const workoutsOfMesocycle = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null);
-	const groupedWorkouts = groupWorkoutsBySplitDayName(workoutsOfMesocycle, mesocycle.mesocycleExerciseSplitDays);
+	const groupedWorkouts = groupWorkoutsBySplitDayName(workoutsOfMesocycle);
 
 	const performanceChangesPerSplitDay = groupedWorkouts.map(({ splitDayName, workouts }) => ({
 		splitDayName,
