@@ -35,7 +35,7 @@
 					}}
 				>
 					<Button class="pointer-events-none justify-start gap-2 text-foreground" variant="link">
-						<img alt="MyFit logo" height={52} src="/favicon.webp" width={52} />
+						<img alt="MyFit logo" height={52} src="/logo.svg" width={52} />
 						<h1 class="text-2xl font-bold">MyFit</h1>
 					</Button>
 				</Sheet.Title>
@@ -49,7 +49,7 @@
 				<LoaderCircle class="animate-spin text-primary" height={24} width={24} />
 			</div>
 		{:else}
-			<img alt="MyFit logo" height={40} src="/favicon.webp" width={40} />
+			<img alt="MyFit logo" height={40} src="/logo.svg" width={40} />
 		{/if}
 	</a>
 	<PWAButtons isMobile={true} />

@@ -25,7 +25,7 @@ function createSettingsRunes() {
 		if (pushNotificationsEnabled) {
 			new Notification(notification.title, {
 				body: notification.description,
-				icon: '/favicon.webp'
+				icon: '/favicon.png'
 			});
 		}
 	}

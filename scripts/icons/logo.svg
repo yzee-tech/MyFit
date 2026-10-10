@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+	<!-- MyFit: a plate-loaded dumbbell with a rising arrow (getting stronger) -->
+	<rect width="120" height="120" rx="28" fill="#2C74BA"/>
+	<path d="M60 52 V20 M46 34 L60 20 L74 34" stroke="#9FD0FF" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+	<g fill="#FFFFFF">
+		<rect x="15" y="62" width="11" height="34" rx="2"/>
+		<rect x="27" y="68" width="8" height="22" rx="2"/>
+		<rect x="35" y="75" width="50" height="8" rx="1"/>
+		<rect x="85" y="68" width="8" height="22" rx="2"/>
+		<rect x="94" y="62" width="11" height="34" rx="2"/>
+	</g>
+</svg>

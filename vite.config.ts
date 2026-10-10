@@ -30,7 +30,8 @@ export default defineConfig({
 				icons: [
 					{
 						src: 'maskable_icon_x192.png',
-						sizes: '192x192'
+						sizes: '192x192',
+						purpose: 'maskable'
 					},
 					{
 						src: 'windows11/SmallTile.scale-100.png',

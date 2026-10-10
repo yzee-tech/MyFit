@@ -24,7 +24,7 @@
 				<LoaderCircle class="animate-spin text-primary" height={48} width={48} />
 			</div>
 		{:else}
-			<img alt="MyFit logo" height={72} src="/favicon.webp" width={72} />
+			<img alt="MyFit logo" height={72} src="/logo.svg" width={72} />
 		{/if}
 		<h1 class="text-4xl font-bold">MyFit</h1>
 	</Button>
