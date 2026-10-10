@@ -64,12 +64,12 @@ export const mesocycles = t.router({
 			prisma.exerciseSplitDay.findMany({
 				where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
 				orderBy: { dayIndex: 'asc' },
-				select: { name: true }
+				select: { name: true, exercises: { orderBy: { exerciseIndex: 'asc' } } }
 			})
 		]);
 		if (!mesocycle) return null;
-		// A block that isn't finished shows its routines in My routines' order
-		return { ...mesocycle, routineOrder: mesocycle.endDate ? null : myRoutines.map((routine) => routine.name) };
+		// A mesocycle that isn't finished uses My routines as they are; a finished one is its workouts
+		return { ...mesocycle, routines: mesocycle.endDate ? null : myRoutines };
 	}),
 
 	findActiveMesocycle: t.procedure.query(async ({ ctx }) => {

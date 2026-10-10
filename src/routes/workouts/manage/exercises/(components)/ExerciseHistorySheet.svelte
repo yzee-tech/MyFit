@@ -69,9 +69,7 @@
 						<CopyIcon />
 					</Button>
 					<div class="mr-auto flex flex-col">
-						<span class="font-bold"
-							>{wm?.mesocycle.mesocycleExerciseSplitDays[wm.splitDayIndex].name ?? exercise.workout.routineName}</span
-						>
+						<span class="font-bold">{exercise.workout.routineName}</span>
 						<span class="text-xs font-semibold">{wm?.mesocycle.name}</span>
 					</div>
 					<span class="font-semibold text-muted-foreground">

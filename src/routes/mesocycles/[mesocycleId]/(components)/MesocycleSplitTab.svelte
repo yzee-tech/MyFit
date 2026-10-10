@@ -5,12 +5,8 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	// Read-only: routines are edited in My routines. A block that isn't finished lists them in My
-	// routines' order, without ones no longer there
-	const order = mesocycle.routineOrder;
-	const routines = mesocycle.mesocycleExerciseSplitDays
-		.filter((splitDay) => !splitDay.isRestDay && !splitDay.hidden)
-		.sort((a, b) => (order ? order.indexOf(a.name) - order.indexOf(b.name) : a.dayIndex - b.dayIndex));
+	// Read-only: a mesocycle that isn't finished uses My routines, edited there
+	const routines = mesocycle.routines ?? [];
 	let selectedName = $state(routines[0]?.name ?? '');
 	let selectedRoutine = $derived(routines.find((routine) => routine.name === selectedName));
 </script>
@@ -28,8 +24,8 @@
 		</Tabs.List>
 		{#if selectedRoutine}
 			<Tabs.Content class="flex flex-col gap-1" value={selectedRoutine.name}>
-				{#each selectedRoutine.mesocycleSplitDayExercises as exercise}
-					<ExerciseTemplateCard context="mesocycle" exerciseTemplate={exercise} readOnly />
+				{#each selectedRoutine.exercises as exercise}
+					<ExerciseTemplateCard context="exerciseSplit" exerciseTemplate={exercise} readOnly />
 				{/each}
 			</Tabs.Content>
 		{/if}

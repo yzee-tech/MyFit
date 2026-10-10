@@ -3,17 +3,20 @@
 	import { Root as Card } from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import type { RouterOutputs } from '$lib/trpc/router';
+	import { routineSetCount } from '$lib/utils/routineSets';
 	import { BarController, BarElement, CategoryScale, Chart, LinearScale, Tooltip } from 'chart.js';
 	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
 	type Block = NonNullable<RouterOutputs['mesocycles']['findById']>;
 	let { mesocycle }: { mesocycle: Block } = $props();
 
-	// The block's routines as planned now: not old hidden ones or the old rotation's rest days
-	let routines = $derived(
-		mesocycle.mesocycleExerciseSplitDays.filter((routine) => !routine.isRestDay && !routine.hidden)
+	// The routines as planned now: My routines (a finished mesocycle has no Routines tab)
+	let routines = $derived(mesocycle.routines ?? []);
+	let exercises = $derived(
+		routines.flatMap((routine) =>
+			routine.exercises.map((exercise) => ({ ...exercise, sets: routineSetCount(exercise.sets) }))
+		)
 	);
-	let exercises = $derived(routines.flatMap((routine) => routine.mesocycleSplitDayExercises));
 
 	let chart: Chart<'bar'> | undefined;
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
@@ -30,7 +33,7 @@
 					{
 						label: 'Sets',
 						data: routines.map((routine) =>
-							routine.mesocycleSplitDayExercises.reduce((total, exercise) => total + exercise.sets, 0)
+							routine.exercises.reduce((total, exercise) => total + routineSetCount(exercise.sets), 0)
 						),
 						backgroundColor: `hsl(${primary})`,
 						borderRadius: 4
