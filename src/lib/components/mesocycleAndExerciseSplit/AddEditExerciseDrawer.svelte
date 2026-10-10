@@ -96,6 +96,8 @@
 	const muscleGroupOf = (exercise: { targetMuscleGroup: MuscleGroup; customMuscleGroup?: string | null }) =>
 		exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup);
 	let pickedExercise = $derived(pickerExercises.find((exercise) => exercise.name === currentExercise.name));
+	// Reps only (e.g. pull-ups): no weights to pick
+	let repsOnly = $derived(pickedExercise?.repsOnly ?? false);
 	let pickerGroups = $derived(
 		Object.entries(
 			Object.groupBy(
@@ -120,7 +122,7 @@
 
 	const defaultExercise: Partial<FullExerciseTemplate> = {
 		name: '',
-		setType: 'Straight',
+		setType: 'V2',
 		bodyweightFraction: null,
 		...structuredClone(extraMesocycleProps),
 		...(props.context === 'exerciseSplit' && { sets: DEFAULT_SETS })
@@ -191,6 +193,7 @@
 			toast.error('Pick an exercise');
 			return;
 		}
+		if (repsOnly) currentExercise.weightSetId = null;
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
 		if (isBlockExercise(finishedExercise)) {
 			if (mode === 'Add') result = props.addExercise(finishedExercise);
@@ -379,7 +382,7 @@
 				{#key currentExercise}
 					<Select.Root
 						name="exercise-set-type"
-						onSelectedChange={(v) => (currentExercise.setType = v?.value ?? 'Straight')}
+						onSelectedChange={(v) => (currentExercise.setType = v?.value ?? 'V2')}
 						required
 						selected={{
 							value: currentExercise.setType,
@@ -497,47 +500,49 @@
 					bind:value={currentExercise.repRangeEnd}
 				/>
 			</div>
-			<div class="col-span-2 flex w-full flex-col gap-1.5">
-				{#if machineLevels}
-					<span class="text-sm font-medium leading-none">Weights available</span>
-					<span class="text-sm text-muted-foreground" data-testid="exercise-machine-levels">
-						Levels {formatWeightList(machineLevels.weights)} (set on the exercise)
-					</span>
-				{:else}
-					{#key currentExercise}
-						<Select.Root
-							name="exercise-weight-set"
-							onSelectedChange={(v) => (currentExercise.weightSetId = v?.value || null)}
-							selected={weightSetOption(currentExercise.weightSetId)}
-						>
-							<Select.Label class="p-0 text-sm font-medium leading-none">Weights available</Select.Label>
-							<Select.Trigger aria-label="Weights available">
-								<Select.Value placeholder="Standard steps" />
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item label="Standard steps" value="" />
-								{#each weightSets as weightSet (weightSet.id)}
-									<Select.Item label={weightSetLabel(weightSet)} value={weightSet.id} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					{/key}
-					{#if weightSets.length === 0}
-						<span class="text-xs text-muted-foreground">
-							To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set.
+			{#if !repsOnly}
+				<div class="col-span-2 flex w-full flex-col gap-1.5">
+					{#if machineLevels}
+						<span class="text-sm font-medium leading-none">Weights available</span>
+						<span class="text-sm text-muted-foreground" data-testid="exercise-machine-levels">
+							Levels {formatWeightList(machineLevels.weights)} (set on the exercise)
 						</span>
+					{:else}
+						{#key currentExercise}
+							<Select.Root
+								name="exercise-weight-set"
+								onSelectedChange={(v) => (currentExercise.weightSetId = v?.value || null)}
+								selected={weightSetOption(currentExercise.weightSetId)}
+							>
+								<Select.Label class="p-0 text-sm font-medium leading-none">Weights available</Select.Label>
+								<Select.Trigger aria-label="Weights available">
+									<Select.Value placeholder="Standard steps" />
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item label="Standard steps" value="" />
+									{#each weightSets as weightSet (weightSet.id)}
+										<Select.Item label={weightSetLabel(weightSet)} value={weightSet.id} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/key}
+						{#if weightSets.length === 0}
+							<span class="text-xs text-muted-foreground">
+								To use only weights a gym has (e.g. 5–10 kg dumbbells, then 14 and 20), add a weight set.
+							</span>
+						{/if}
+						<!-- Only in My routines: the routine's edits wait on this device; elsewhere leaving would interrupt -->
+						{#if props.context === 'exerciseSplit'}
+							<a
+								class="w-fit text-xs text-primary hover:underline"
+								href="/exercise-splits/weight-sets?back={encodeURIComponent($page.url.pathname + $page.url.search)}"
+							>
+								Manage weight sets ›
+							</a>
+						{/if}
 					{/if}
-					<!-- Only in My routines: the routine's edits wait on this device; elsewhere leaving would interrupt -->
-					{#if props.context === 'exerciseSplit'}
-						<a
-							class="w-fit text-xs text-primary hover:underline"
-							href="/exercise-splits/weight-sets?back={encodeURIComponent($page.url.pathname + $page.url.search)}"
-						>
-							Manage weight sets ›
-						</a>
-					{/if}
-				{/if}
-			</div>
+				</div>
+			{/if}
 			<div class="col-span-2 flex w-full flex-col gap-1.5">
 				<Label for="exercise-note">Routine note</Label>
 				<Textarea
@@ -547,7 +552,7 @@
 					bind:value={currentExercise.note as string}
 				/>
 			</div>
-			<Button class="col-span-2" type="submit">{mode === 'Add' ? 'Add exercise' : 'Save'}</Button>
+			<Button class="col-span-2" type="submit">{mode === 'Add' ? 'Add exercise' : 'Update'}</Button>
 		</form>
 	</Sheet.Content>
 </Sheet.Root>

@@ -147,9 +147,7 @@
 	</div>
 
 	{#if routines.length > 0}
-		<p class="mb-2 text-sm text-muted-foreground">
-			You pick one of these each time you train. Your current block always uses them as they are here.
-		</p>
+		<p class="mb-2 text-sm text-muted-foreground">You pick one of these each time you train.</p>
 		<div class="flex flex-col gap-2 overflow-y-auto pb-2">
 			{#each routines as routine, idx (routine.id)}
 				{@const isShown = shown.includes(routine.name)}

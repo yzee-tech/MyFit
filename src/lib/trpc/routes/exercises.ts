@@ -81,7 +81,7 @@ type RoutineSettings = {
 
 /** Routine settings for an exercise with no routine or workout to copy them from */
 const DEFAULT_ROUTINE_SETTINGS: RoutineSettings = {
-	setType: 'Straight',
+	setType: 'V2',
 	repRangeStart: 8,
 	repRangeEnd: 12,
 	changeType: null,
@@ -101,18 +101,13 @@ const routineSettingsSelect = {
 	topRepRangeEnd: true
 } as const;
 
-/** Each exercise's routine settings from its most recent use: a workout, else a block, else My routines */
+/** Each exercise's routine settings from its most recent use: a workout, else My routines */
 async function getRoutineSettings(userId: string, exerciseIds: string[]) {
-	const [fromWorkouts, fromBlocks, fromMyRoutines] = await Promise.all([
+	const [fromWorkouts, fromMyRoutines] = await Promise.all([
 		prisma.workoutExercise.findMany({
 			where: { exerciseId: { in: exerciseIds }, workout: { userId } },
 			distinct: ['exerciseId'],
 			orderBy: { workout: { startedAt: 'desc' } },
-			select: routineSettingsSelect
-		}),
-		prisma.mesocycleExerciseTemplate.findMany({
-			where: { exerciseId: { in: exerciseIds }, mesocycleExerciseSplitDay: { mesocycle: { userId } } },
-			distinct: ['exerciseId'],
 			select: routineSettingsSelect
 		}),
 		prisma.exerciseTemplate.findMany({
@@ -122,7 +117,7 @@ async function getRoutineSettings(userId: string, exerciseIds: string[]) {
 		})
 	]);
 	const settings = new Map<string, RoutineSettings>();
-	for (const { exerciseId, ...rest } of [...fromMyRoutines, ...fromBlocks, ...fromWorkouts]) {
+	for (const { exerciseId, ...rest } of [...fromMyRoutines, ...fromWorkouts]) {
 		if (exerciseId) settings.set(exerciseId, rest);
 	}
 	return settings;
@@ -134,8 +129,9 @@ function builtInRoutineSettings(name: string): RoutineSettings | undefined {
 		.flatMap((group) => group.exercises)
 		.find((exercise) => exercise.name === name);
 	if (!builtIn) return undefined;
+	// Its rep range only: with no history, every exercise starts as Independent
 	return {
-		setType: builtIn.setType,
+		setType: DEFAULT_ROUTINE_SETTINGS.setType,
 		repRangeStart: builtIn.repRangeStart,
 		repRangeEnd: builtIn.repRangeEnd,
 		changeType: builtIn.changeType ?? null,
