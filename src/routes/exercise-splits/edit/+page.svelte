@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { beforeNavigate, goto, invalidate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import AddEditExerciseDrawer from '$lib/components/mesocycleAndExerciseSplit/AddEditExerciseDrawer.svelte';
 	import DndComponent from '$lib/components/mesocycleAndExerciseSplit/DndComponent.svelte';
@@ -66,8 +66,23 @@
 	// Someone else changed or deleted this routine while it was open here
 	let conflict: 'changed' | 'gone' | null = $state(null);
 	let conflictOpen = $state(false);
-	// Where to go once saved (the place someone was leaving for), else My routines
-	let afterSave: URL | string = '/exercise-splits';
+	// Saving on the way out: where to go once the conflict question is answered
+	let conflictLeaveTo: URL | null = null;
+
+	// Back returns where someone came from in the app; opened directly (or from weight sets), My routines
+	let canGoBack = false;
+	let arrived = false;
+	afterNavigate(({ from }) => {
+		if (arrived) return;
+		arrived = true;
+		const path = from?.url.pathname;
+		canGoBack = !!path && path !== '/exercise-splits/edit' && path !== '/exercise-splits/weight-sets';
+	});
+
+	function back() {
+		if (canGoBack) history.back();
+		else goto('/exercise-splits');
+	}
 
 	/** Problems that stop a save (`others`: the rest of My routines), else null */
 	function invalid(others: MyRoutine[]): string | null {
@@ -82,9 +97,10 @@
 
 	/**
 	 * Saves just this routine into My routines as they are now on the server. `force`: after the
-	 * question, overwrite someone else's changes, or save a routine deleted elsewhere as a new one
+	 * question, overwrite someone else's changes, or save a routine deleted elsewhere as a new one.
+	 * `leaveTo`: saving on the way out, go there once saved; else stay here and carry on editing
 	 */
-	async function save(force = false) {
+	async function save(force = false, leaveTo: URL | null = null) {
 		if (saving || !routineEditor.editing) return;
 		saving = true;
 		try {
@@ -93,11 +109,11 @@
 			const idx = originalName === null ? -1 : routines.findIndex((routine) => routine.name === originalName);
 			if (!force && originalName !== null) {
 				if (idx === -1) {
-					askAboutConflict('gone');
+					askAboutConflict('gone', leaveTo);
 					return;
 				}
 				if (routineFingerprint(routines[idx]) !== routineEditor.opened) {
-					askAboutConflict('changed');
+					askAboutConflict('changed', leaveTo);
 					return;
 				}
 			}
@@ -117,9 +133,22 @@
 			const next = idx === -1 ? [...routines, edited] : routines.map((routine, i) => (i === idx ? edited : routine));
 			const message = await saveMyRoutines(next);
 			toast.success(message);
-			routineEditor.close();
 			await invalidate('exerciseSplits:all');
-			await goto(afterSave);
+			if (leaveTo) {
+				routineEditor.close();
+				await goto(leaveTo);
+				return;
+			}
+			// Stays here: carry on editing it as now saved
+			const saved = (await fetchMyRoutines()).find((routine) => routine.name === edited.name);
+			routineEditor.open(saved ?? { ...edited, previousName: edited.name });
+			if ($page.url.searchParams.get('routine') !== edited.name) {
+				await goto(`/exercise-splits/edit?routine=${encodeURIComponent(edited.name)}`, {
+					replaceState: true,
+					noScroll: true,
+					keepFocus: true
+				});
+			}
 		} catch (error) {
 			// Nothing is lost: the edits stay here to try again
 			toast.error(error instanceof TRPCClientError ? error.message : "Couldn't save the routine, try again");
@@ -128,14 +157,15 @@
 		}
 	}
 
-	function askAboutConflict(kind: 'changed' | 'gone') {
+	function askAboutConflict(kind: 'changed' | 'gone', leaveTo: URL | null) {
 		conflict = kind;
+		conflictLeaveTo = leaveTo;
 		conflictOpen = true;
 	}
 
 	async function resolveConflict() {
 		conflictOpen = false;
-		await save(true);
+		await save(true, conflictLeaveTo);
 	}
 
 	// Leaving with unsaved changes asks first; unchanged, it just ends
@@ -157,8 +187,7 @@
 
 	async function saveAndLeave() {
 		leaveOpen = false;
-		if (leavingTo) afterSave = leavingTo;
-		await save();
+		await save(false, leavingTo);
 	}
 
 	async function discardAndLeave() {
@@ -262,15 +291,15 @@
 	</div>
 
 	<p class="mt-2 text-sm text-muted-foreground" data-testid="block-follows-routines">
-		Your current block uses this routine as soon as you save.
+		Your current block uses this routine as soon as you update.
 	</p>
 	<div class="mt-2 grid grid-cols-2 gap-1">
-		<Button href="/exercise-splits" variant="secondary">Cancel</Button>
+		<Button onclick={back} variant="secondary">Back</Button>
 		<Button disabled={saving} onclick={() => save()}>
 			{#if saving}
 				<LoaderCircle class="animate-spin" />
 			{:else}
-				Save
+				Update
 			{/if}
 		</Button>
 	</div>

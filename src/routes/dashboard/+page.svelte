@@ -21,5 +21,5 @@
 <H2>Home</H2>
 <GetStartedComponent {entityCounts} />
 
-<H3>Current block</H3>
+<H3>Active mesocycle block</H3>
 <TodaysWorkoutCard {...data} />

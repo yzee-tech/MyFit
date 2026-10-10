@@ -30,6 +30,8 @@ test('create workout', async ({ page, userData }) => {
 
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Barbell bench press');
+	// Never done before: it starts as Independent
+	await expect(page.locator('button').filter({ hasText: 'Independent' })).toBeVisible();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -37,7 +39,7 @@ test('create workout', async ({ page, userData }) => {
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('100');
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-RIR"]').fill('2');
 	await page.locator('[id="Barbell\\ bench\\ press-set-2-reps"]').fill('8');
-	await page.getByPlaceholder('95').fill('95');
+	await page.locator('[id="Barbell\\ bench\\ press-set-2-load"]').fill('95');
 	await page.locator('[id="Barbell\\ bench\\ press-set-2-RIR"]').fill('1');
 	await page.getByTestId('Barbell bench press-set-1-action').click();
 	await page.getByTestId('Barbell bench press-set-2-action').click();
@@ -49,7 +51,7 @@ test('create workout', async ({ page, userData }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
 	);
 });
 
@@ -73,7 +75,8 @@ test('create workout with all set types', async ({ page, userData }) => {
 
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Barbell bench press');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.locator('button').filter({ hasText: 'Independent' }).click();
+	await page.getByRole('option', { name: 'Down', exact: true }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -89,7 +92,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Dumbbell bicep curls');
 	await page.getByLabel('Sets').fill('2');
-	await page.locator('button').filter({ hasText: 'Straight' }).click();
+	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Myorep match' }).first().click();
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -111,7 +114,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Leaning dumbbell lateral raises');
 	await page.getByLabel('Sets').fill('2');
-	await page.locator('button').filter({ hasText: 'Straight' }).click();
+	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Drop' }).click();
 	await page.locator('button').filter({ hasText: 'Pick one' }).click();
 	await page.getByRole('option', { name: 'Absolute load' }).click();
@@ -139,8 +142,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Incline dumbbell press');
-	await page.locator('button').filter({ hasText: 'Straight' }).click();
-	await page.getByRole('option', { name: 'Independent' }).click();
+	await expect(page.locator('button').filter({ hasText: 'Independent' })).toBeVisible();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
@@ -155,7 +157,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 
 	await page.getByLabel('add-exercise').click();
 	await pickExercise(page, 'Leg press');
-	await page.locator('button').filter({ hasText: 'Straight' }).click();
+	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Myorep', exact: true }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
@@ -262,7 +264,7 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('100');
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-RIR"]').fill('2');
 	await page.locator('[id="Barbell\\ bench\\ press-set-2-reps"]').fill('8');
-	await page.getByPlaceholder('95').fill('95');
+	await page.locator('[id="Barbell\\ bench\\ press-set-2-load"]').fill('95');
 	await page.locator('[id="Barbell\\ bench\\ press-set-2-RIR"]').fill('1');
 	await page.getByTestId('Barbell bench press-set-1-action').click();
 	await page.getByTestId('Barbell bench press-set-2-action').click();
@@ -274,7 +276,7 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
 	);
 });
 
@@ -420,7 +422,7 @@ test('workout changes should update mesocycle split', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Sets').fill('2');
 	await page.getByPlaceholder('For this routine').fill('Custom note');
-	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Update', exact: true }).click();
 	await expect(page.getByRole('main')).toContainText('Custom note');
 
 	await page.getByTestId('Pull-ups-set-1-action').click();
@@ -647,7 +649,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Building DBs (kg)' }).click();
-	await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Update', exact: true }).click();
 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]').fill('20');
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-2-reps"]').fill('20');

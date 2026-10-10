@@ -71,11 +71,14 @@ export async function editRoutine(page: Page, name: string) {
 	await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name);
 }
 
-/** Saves the routine being edited, and waits until it's back on My routines */
+/** Updates the routine being edited (it stays open), then goes Back to My routines: nothing left to ask */
 export async function saveRoutine(page: Page) {
-	await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
+	await page.getByRole('main').getByRole('button', { name: 'Update', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/edit');
+	await page.getByRole('main').getByRole('button', { name: 'Back', exact: true }).click();
 	await page.waitForURL('/exercise-splits');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 /** Deletes a routine of My routines (from the My routines page), after its warning */
