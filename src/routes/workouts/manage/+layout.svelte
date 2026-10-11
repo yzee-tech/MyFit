@@ -64,7 +64,12 @@
 	}
 </script>
 
-<H2>{editing ? 'Edit' : 'Log'} workout</H2>
+{#if editing}
+	<H2>Edit workout</H2>
+{:else}
+	<!-- Hidden but kept: it's the only H2 on these pages, so the outline goes H1 → H2 → H3 for screen readers -->
+	<h2 class="sr-only">Log workout</h2>
+{/if}
 {@render children(data)}
 
 <ResponsiveDialog cancelLabel="Keep editing" title="Save your changes?" bind:open={leaveDialogOpen}>

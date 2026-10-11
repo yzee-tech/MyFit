@@ -188,10 +188,18 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await expect(page.getByRole('button', { name: 'Pick a routine' })).toBeDisabled();
+	// No visible title on the workout's screens, only one for screen readers
+	await expect(page.getByRole('heading', { level: 2 })).toHaveCSS('position', 'absolute');
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
+	// The page title is for screen readers only; the workout's clock sits beside "Exercises"
+	const title = page.getByRole('heading', { level: 2 });
+	await expect(title).toHaveText('Log workout');
+	await expect(title).toHaveCSS('position', 'absolute');
+	await expect(page.getByRole('heading', { level: 3, name: 'Exercises', exact: true })).toBeVisible();
+	await expect(page.getByTestId('workout-clock')).toHaveText(/^\d+:\d\d$/);
 	for (const text of [
-		'Log workout Exercises Pull A Week 1',
+		'Pull A Week 1',
 		'Pull-ups KG 3 Straight sets of 5 to 15 reps BW Lats Set Previous KG (BW) Reps RIR',
 		'Barbell rows KG 3 Straight sets of 10 to 15 reps Traps Set Previous KG Reps RIR',
 		'Dumbbell bicep curls KG 3 Straight sets of 10 to 20 reps Biceps Set Previous KG Reps RIR',
@@ -380,6 +388,10 @@ test('edit a workout', async ({ page }) => {
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	// Straight to its exercises; bodyweight, date and times are at the top
 	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	// Titled as an edit, with no running clock
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Edit workout');
+	await expect(page.getByRole('heading', { level: 2 })).not.toHaveCSS('position', 'absolute');
+	await expect(page.getByTestId('workout-clock')).toHaveCount(0);
 	await page.getByLabel('Edit date, time and bodyweight').click();
 	await page.getByLabel('Bodyweight (kg)').fill('95');
 	await page.getByLabel('Bodyweight (kg)').blur();
@@ -932,8 +944,19 @@ test('first workout with a reps-only exercise: no load to enter, every set ticks
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	// No rest timer any more
-	await expect(page.getByLabel('time-since-last-set')).toHaveCount(0);
+	// Rest shows once a set is ticked, and keeps counting from that tick when it's unticked
+	await expect(page.getByTestId('workout-clock')).toBeVisible();
+	await expect(page.getByTestId('workout-rest')).toHaveCount(0);
+	await fillSet(page, 'Pull-ups', 1, { reps: '12', load: '0' });
+	await setBox(page, 'Pull-ups', 1).click();
+	await expect(page.getByTestId('workout-rest')).toHaveText(/^\d+:\d\d$/);
+	await setBox(page, 'Pull-ups', 1).click();
+	await expect(setBox(page, 'Pull-ups', 1)).toHaveAttribute('aria-checked', 'false');
+	await expect(page.getByTestId('workout-rest')).toBeVisible();
+	// Opened straight from a link or a reload: the clock is there too
+	await page.reload();
+	await expect(page.getByTestId('workout-clock')).toHaveText(/^\d+:\d\d$/);
+	await expect(page.getByTestId('workout-rest')).toBeVisible();
 
 	// Face pulls: reps only, so no load box
 	await expect(page.locator('[id="Face\\ pulls-set-1-load"]')).toHaveCount(0);
@@ -954,6 +977,7 @@ test('first workout with a reps-only exercise: no load to enter, every set ticks
 	await expectSetsFitPhone(page);
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/overview/);
+	await expect(page.getByRole('heading', { level: 2 })).toHaveCSS('position', 'absolute');
 	// Same as the routine: saved without asking
 	await saveWorkout(page);
 	const facePulls = await prisma.workoutExercise.findFirstOrThrow({
