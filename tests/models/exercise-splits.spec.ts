@@ -315,19 +315,12 @@ test('changed or deleted on another device while open: asked before overwriting'
 	]);
 });
 
-test('the current block follows My routines: a rename, set counts, overrides, a removed routine, the order', async ({
+test('the current mesocycle uses My routines: a rename, set counts, overrides, a removed routine, the order', async ({
 	page,
 	userData
 }) => {
 	await createMesocycle(page);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
-	const blockRoutines = () =>
-		prisma.mesocycleExerciseSplitDay.findMany({
-			where: { mesocycleId: block.id },
-			include: { mesocycleSplitDayExercises: { orderBy: { exerciseIndex: 'asc' } } },
-			orderBy: { dayIndex: 'asc' }
-		});
-	const before = await blockRoutines();
 
 	// Rename Pull A, 4 sets of rows with their own overload
 	await editRoutine(page, 'Pull A');
@@ -346,27 +339,21 @@ test('the current block follows My routines: a rename, set counts, overrides, a 
 	await (await menuItem(page, 'Pull B', 'Move up')).click();
 	await expect.poll(() => cardNames(page)).toEqual(['Hotel – Pull', 'Push A', 'Pull B', 'Legs A', 'Push B']);
 
-	const after = await blockRoutines();
-	// Same rows in the same places: past workouts keep pointing at the right routine
-	expect(after.map((routine) => routine.id)).toEqual(before.map((routine) => routine.id));
-	expect(after.map((routine) => [routine.name, routine.dayIndex, routine.hidden])).toEqual([
-		['Hotel – Pull', 0, false],
-		['Push A', 1, false],
-		['Legs A', 2, false],
-		['Pull B', 3, false],
-		['Push B', 4, false],
-		['Legs B', 5, true]
-	]);
-	const rows = after[0].mesocycleSplitDayExercises.find((exercise) => exercise.name === 'Barbell rows')!;
+	const rows = await prisma.exerciseTemplate.findFirstOrThrow({
+		where: {
+			name: 'Barbell rows',
+			exerciseSplitDay: { name: 'Hotel – Pull', exerciseSplit: { userId: userData.userId } }
+		}
+	});
 	expect([rows.sets, rows.overloadPercentage]).toEqual([4, 5]);
 
-	// The start page lists the block's routines in My routines order
+	// The start page lists My routines in their order, for the mesocycle
 	await page.goto('/workouts/manage/start');
 	await expect(page.getByRole('radio').first()).toContainText('Hotel – Pull');
 	const startNames = (await page.getByRole('radio').allTextContents()).map((text) => text.split(/ (Not|Done)/)[0]);
 	expect(startNames.slice(0, 5)).toEqual(['Hotel – Pull', 'Push A', 'Pull B', 'Legs A', 'Push B']);
 
-	// The block shows them read-only, without Legs B, with a way to edit My routines
+	// The mesocycle shows them read-only, without Legs B, with a way to edit My routines
 	await page.goto(`/mesocycles/${block.id}`);
 	await page.getByRole('tab', { name: 'Routines' }).click();
 	await expect(page.getByRole('tab', { name: 'Legs B' })).toHaveCount(0);

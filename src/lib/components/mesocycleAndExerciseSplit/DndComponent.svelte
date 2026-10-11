@@ -5,7 +5,7 @@
 	import ExerciseTemplateCard from './ExerciseTemplateCard.svelte';
 	import type {
 		ExerciseTemplateWithoutIdsOrIndex,
-		MesocycleExerciseTemplateWithoutIdsOrIndex,
+		RoutineExerciseTemplate,
 		SplitExerciseTemplateWithoutIdsOrIndex
 	} from './commonTypes';
 
@@ -19,7 +19,7 @@
 
 	type PropsType =
 		| ({ context: 'exerciseSplit' } & CommonProps<SplitExerciseTemplateWithoutIdsOrIndex>)
-		| ({ context: 'mesocycle' } & CommonProps<MesocycleExerciseTemplateWithoutIdsOrIndex>);
+		| ({ context: 'mesocycle' } & CommonProps<RoutineExerciseTemplate>);
 
 	let { itemList = $bindable(), reordering, ...contextProps }: PropsType = $props();
 
@@ -47,7 +47,7 @@
 				<ExerciseTemplateCard
 					context="mesocycle"
 					deleteExercise={contextProps.deleteExercise}
-					exerciseTemplate={exerciseTemplate as MesocycleExerciseTemplateWithoutIdsOrIndex}
+					exerciseTemplate={exerciseTemplate as RoutineExerciseTemplate}
 					{idx}
 					readOnly={false}
 					{reordering}

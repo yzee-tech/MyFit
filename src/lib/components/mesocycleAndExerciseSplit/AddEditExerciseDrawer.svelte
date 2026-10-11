@@ -33,10 +33,7 @@
 	import FilterIcon from 'virtual:icons/lucide/filter';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import XIcon from 'virtual:icons/lucide/x';
-	import type {
-		MesocycleExerciseTemplateWithoutIdsOrIndex,
-		SplitExerciseTemplateWithoutIdsOrIndex
-	} from './commonTypes';
+	import type { RoutineExerciseTemplate, SplitExerciseTemplateWithoutIdsOrIndex } from './commonTypes';
 
 	type CommonProps<T> = {
 		editingExercise: T | undefined;
@@ -50,11 +47,11 @@
 		| ({
 				context: 'mesocycle';
 				mesocycle: Mesocycle;
-		  } & CommonProps<MesocycleExerciseTemplateWithoutIdsOrIndex & { isUserExercise?: boolean }>)
+		  } & CommonProps<RoutineExerciseTemplate & { isUserExercise?: boolean }>)
 		| ({
 				context: 'workout';
 				mesocycle?: Mesocycle;
-		  } & CommonProps<MesocycleExerciseTemplateWithoutIdsOrIndex & { isUserExercise?: boolean }>);
+		  } & CommonProps<RoutineExerciseTemplate & { isUserExercise?: boolean }>);
 
 	type NonUndefined<T> = T extends undefined ? never : T;
 	type FullExerciseTemplate = NonUndefined<PropsType['editingExercise']>;
@@ -64,7 +61,7 @@
 	/** Has progression overrides: every exercise does, in My routines, a block or a workout */
 	function isBlockExercise(
 		exercise: Partial<FullExerciseTemplate>
-	): exercise is Partial<MesocycleExerciseTemplateWithoutIdsOrIndex & { isUserExercise?: boolean }> {
+	): exercise is Partial<RoutineExerciseTemplate & { isUserExercise?: boolean }> {
 		return exercise !== null;
 	}
 
@@ -112,7 +109,7 @@
 	);
 	let pickerMuscleGroups = $derived([...new Set(pickerExercises.map((exercise) => exercise.targetMuscleGroup))]);
 
-	const extraMesocycleProps: Partial<MesocycleExerciseTemplateWithoutIdsOrIndex> = {
+	const extraMesocycleProps: Partial<RoutineExerciseTemplate> = {
 		sets: undefined,
 		overloadPercentage: null,
 		forceRIRMatching: null,

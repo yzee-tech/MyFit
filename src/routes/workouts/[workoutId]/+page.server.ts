@@ -16,13 +16,7 @@ export const load = async (event) => {
 };
 
 export type FullWorkoutWithMesoData = Workout & {
-	workoutOfMesocycle:
-		| (WorkoutOfMesocycle & {
-				mesocycle: Mesocycle & {
-					mesocycleExerciseSplitDays: { name: string }[];
-				};
-		  })
-		| null;
+	workoutOfMesocycle: (WorkoutOfMesocycle & { mesocycle: Mesocycle }) | null;
 	workoutExercises: (WorkoutExercise & {
 		sets: (WorkoutExerciseSet & { miniSets: WorkoutExerciseMiniSet[] })[];
 	})[];

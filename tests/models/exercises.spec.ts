@@ -28,13 +28,12 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	await page.goto('/exercise-splits');
 	await createMesocycle(page);
 
-	// Cable lateral raises is in two routines of My routines, and in the block that follows them
+	// Cable lateral raises is in two routines of My routines, which the mesocycle uses
 	const exercise = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Cable lateral raises' } },
-		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true }
+		include: { exerciseTemplates: true }
 	});
 	expect(exercise.exerciseTemplates).toHaveLength(2);
-	expect(exercise.mesocycleExerciseTemplates).toHaveLength(2);
 	expect(exercise.targetMuscleGroup).toEqual('SideDelts');
 
 	// Change its muscle group on the Exercises page
@@ -54,14 +53,13 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	await expect(page.getByTestId('picked-exercise-details')).toContainText('Front delts');
 	await expect(page.getByRole('combobox', { name: 'Muscle group' })).toHaveCount(0);
 
-	// Every copy follows: the other routine, and the block
+	// Both routines follow
 	const edited = await prisma.exercise.findUniqueOrThrow({
 		where: { id: exercise.id },
-		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true }
+		include: { exerciseTemplates: true }
 	});
 	expect(edited.targetMuscleGroup).toEqual('FrontDelts');
 	expect(edited.exerciseTemplates.map((copy) => copy.targetMuscleGroup)).toEqual(['FrontDelts', 'FrontDelts']);
-	expect(edited.mesocycleExerciseTemplates.map((copy) => copy.targetMuscleGroup)).toEqual(['FrontDelts', 'FrontDelts']);
 	expect(await prisma.exercise.count({ where: { userId: userData.userId, name: 'Cable lateral raises' } })).toEqual(1);
 });
 
@@ -99,31 +97,25 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByRole('button', { name: 'Rename', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Renamed 1 exercises' })).toBeVisible();
 
-	// The library, the block and the past workout all have the new name
+	// My routines and the past workout have the new name
 	const renamed = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Bent-over rows' } },
-		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true, workoutExercises: true }
+		include: { exerciseTemplates: true, workoutExercises: true }
 	});
-	for (const copy of [
-		...renamed.exerciseTemplates,
-		...renamed.mesocycleExerciseTemplates,
-		...renamed.workoutExercises
-	]) {
+	expect(renamed.exerciseTemplates.length).toBeGreaterThan(0);
+	for (const copy of [...renamed.exerciseTemplates, ...renamed.workoutExercises]) {
 		expect(copy.name).toEqual('Bent-over rows');
 	}
 	expect(renamed.workoutExercises).toHaveLength(1);
 
-	// Every routine, block and workout exercise saved so far is linked to an exercise
+	// Every routine and workout exercise saved so far is linked to an exercise
 	const unlinked = await Promise.all([
 		prisma.exerciseTemplate.count({
 			where: { exerciseId: null, exerciseSplitDay: { exerciseSplit: { userId: userData.userId } } }
 		}),
-		prisma.mesocycleExerciseTemplate.count({
-			where: { exerciseId: null, mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
-		}),
 		prisma.workoutExercise.count({ where: { exerciseId: null, workout: { userId: userData.userId } } })
 	]);
-	expect(unlinked).toEqual([0, 0, 0]);
+	expect(unlinked).toEqual([0, 0]);
 
 	// Next time, suggestions carry on from last time's 40 kg
 	await page.goto('/workouts');
@@ -163,7 +155,7 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 	await expect(page.getByRole('main')).toContainText('Chest press – Hotel');
 	await expect(page.getByRole('main')).toContainText('Not in a routine yet');
 
-	// Add it to Push A and Pull B in My routines: the current block follows
+	// Add it to Push A and Pull B in My routines (the current mesocycle uses them)
 	await page.getByRole('button', { name: 'Add to routine' }).click();
 	await page.getByLabel('My routines Push A').click();
 	await page.getByLabel('My routines Pull B').click();
@@ -174,22 +166,22 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 
 	const exercise = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Chest press – Hotel' } },
-		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true }
+		include: { exerciseTemplates: { include: { exerciseSplitDay: true } } }
 	});
-	expect(exercise.exerciseTemplates).toHaveLength(2);
-	expect(exercise.mesocycleExerciseTemplates).toHaveLength(2);
-	expect(exercise.mesocycleExerciseTemplates[0].sets).toBeGreaterThan(0);
+	expect(exercise.exerciseTemplates.map((entry) => entry.exerciseSplitDay.name).toSorted()).toEqual([
+		'Pull B',
+		'Push A'
+	]);
+	expect(exercise.exerciseTemplates[0].sets).toBeGreaterThan(0);
 
-	// Remove it from Pull B: gone from the block's Pull B too
+	// Remove it from Pull B
 	await page.getByRole('button', { name: 'Remove from routines' }).click();
 	await page.getByLabel('Remove from My routines Pull B').click();
 	await page.getByRole('button', { name: 'Remove', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Removed from 1 routine' })).toBeVisible();
 	await expect(page.getByRole('main')).not.toContainText('My routines › Pull B');
 	expect(
-		await prisma.mesocycleExerciseTemplate.count({
-			where: { exerciseId: exercise.id, mesocycleExerciseSplitDay: { name: 'Pull B' } }
-		})
+		await prisma.exerciseTemplate.count({ where: { exerciseId: exercise.id, exerciseSplitDay: { name: 'Pull B' } } })
 	).toEqual(0);
 
 	// Never done, so deleting removes it completely
@@ -198,7 +190,7 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 	await page.getByRole('button', { name: 'Yes, delete' }).click();
 	await page.waitForURL('/exercises');
 	expect(await prisma.exercise.count({ where: { id: exercise.id } })).toEqual(0);
-	expect(await prisma.mesocycleExerciseTemplate.count({ where: { exerciseId: exercise.id } })).toEqual(0);
+	expect(await prisma.exerciseTemplate.count({ where: { exerciseId: exercise.id } })).toEqual(0);
 });
 
 /** A past workout with one exercise, as if logged a day ago */
@@ -274,11 +266,10 @@ test('merging a misspelling moves its workouts; deleting an exercise with workou
 	await expect(page.getByRole('main')).toContainText('Only in past workouts Barbell rows');
 	const archived = await prisma.exercise.findUniqueOrThrow({
 		where: { id: rows.id },
-		include: { exerciseTemplates: true, mesocycleExerciseTemplates: true, workoutExercises: true }
+		include: { exerciseTemplates: true, workoutExercises: true }
 	});
 	expect(archived.archived).toBe(true);
 	expect(archived.exerciseTemplates).toHaveLength(0);
-	expect(archived.mesocycleExerciseTemplates).toHaveLength(0);
 	expect(archived.workoutExercises).toHaveLength(1);
 });
 
@@ -370,21 +361,11 @@ test('merging when a routine has both exercises: each routine keeps exactly one,
 	const byName = (name: string) => prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name } } });
 	const [curls, rows] = await Promise.all([byName('Dumbbell bicep curls'), byName('Barbell rows')]);
 
-	// Where each is, before: Pull A has both, in the library and in the block
+	// Where each is, before: Pull A in My routines has both
 	const libraryDays = async (exerciseId: string) =>
 		(await prisma.exerciseTemplate.findMany({ where: { exerciseId } })).map((entry) => entry.exerciseSplitDayId);
-	const blockDays = async (exerciseId: string) =>
-		(await prisma.mesocycleExerciseTemplate.findMany({ where: { exerciseId } })).map(
-			(entry) => entry.mesocycleExerciseSplitDayId
-		);
-	const [curlsLibrary, rowsLibrary, curlsBlock, rowsBlock] = await Promise.all([
-		libraryDays(curls.id),
-		libraryDays(rows.id),
-		blockDays(curls.id),
-		blockDays(rows.id)
-	]);
+	const [curlsLibrary, rowsLibrary] = await Promise.all([libraryDays(curls.id), libraryDays(rows.id)]);
 	expect(curlsLibrary.some((day) => rowsLibrary.includes(day))).toBe(true);
-	expect(curlsBlock.some((day) => rowsBlock.includes(day))).toBe(true);
 	await logPastWorkout(userId, 'Dumbbell bicep curls', 12);
 	await logPastWorkout(userId, 'Barbell rows', 40);
 
@@ -397,11 +378,9 @@ test('merging when a routine has both exercises: each routine keeps exactly one,
 	await page.waitForURL(`/exercises/${rows.id}`);
 
 	// Every routine that had either now has Barbell rows exactly once
-	const [libraryAfter, blockAfter] = await Promise.all([libraryDays(rows.id), blockDays(rows.id)]);
+	const libraryAfter = await libraryDays(rows.id);
 	expect(libraryAfter.toSorted()).toEqual([...new Set([...curlsLibrary, ...rowsLibrary])].toSorted());
-	expect(blockAfter.toSorted()).toEqual([...new Set([...curlsBlock, ...rowsBlock])].toSorted());
 	expect(new Set(libraryAfter).size).toEqual(libraryAfter.length);
-	expect(new Set(blockAfter).size).toEqual(blockAfter.length);
 
 	// Both workouts are Barbell rows now; the duplicate is gone with nothing pointing at it
 	const workouts = await prisma.workoutExercise.findMany({ where: { workout: { userId } } });

@@ -19,6 +19,8 @@ const config = {
 		// See https://kit.svelte.dev/docs/adapters for more information about adapters.
 		adapter: adapter(),
 		serviceWorker: { register: false },
+		// Checks every 5 minutes for a newer version; the layout moves to it on the next page change
+		version: { pollInterval: 300000 },
 		files: { serviceWorker: 'src/service-worker.ts' },
 		alias: { '.prisma/client/index-browser': require.resolve('@prisma/client/index-browser') }
 	}

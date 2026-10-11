@@ -6,15 +6,14 @@ import { config } from 'dotenv';
 config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
-import { syncBlockFromRoutines } from '../../src/lib/server/blockCache';
 
 /**
- * A block's routines are a cache of My routines. Only src/lib/server/blockCache.ts writes them:
- * syncBlockFromRoutines for the active block, relinkExerciseInBlocks for exercise upkeep elsewhere.
+ * Mesocycles used to keep a copy of the routines (MesocycleExerciseSplitDay / MesocycleExerciseTemplate,
+ * and each workout's splitDayIndex into it). Nothing reads or writes that copy any more: mesocycles and
+ * workouts use My routines and Workout.routineName. The tables stay, frozen, until they're dropped.
  */
 
 const srcDir = path.join(process.cwd(), 'src');
-const blockCacheFile = path.join(srcDir, 'lib', 'server', 'blockCache.ts');
 
 function sourceFiles(dir: string): string[] {
 	return readdirSync(dir).flatMap((name) => {
@@ -24,24 +23,25 @@ function sourceFiles(dir: string): string[] {
 	});
 }
 
-const WRITE = '(create|createMany|createManyAndReturn|update|updateMany|upsert|delete|deleteMany)';
-const blockTableWrite = new RegExp(`\\b(mesocycleExerciseSplitDay|mesocycleExerciseTemplate)\\.${WRITE}\\b`);
-const nestedBlockWrite = new RegExp(
-	`\\b(mesocycleExerciseSplitDays|mesocycleSplitDayExercises)\\s*:\\s*\\{\\s*${WRITE.slice(0, -1)}|set|connect)\\b`
-);
+// Data access only, not names: a model (prisma.x. / tx.x.), a relation key in an include, select or
+// where, or a splitDayIndex value written. Accepting splitDayIndex in an input schema (z.…) is fine
+const copyModelAccess = /\b(mesocycleExerciseSplitDay|mesocycleExerciseTemplate)\./;
+const copyRelationKey = /\b(mesocycleExerciseSplitDays?|mesocycleSplitDayExercises|mesocycleExerciseTemplates)\s*:/;
+const splitDayIndexValue = /\bsplitDayIndex\s*:(?!\s*z\.)/;
 const routineRowDelete = /\bmesocycleExerciseSplitDay\.(delete|deleteMany)\b/;
 const listCreate = /\bexerciseSplit\.(create|createMany)\b|\bexerciseSplits?\s*:\s*\{\s*create/;
 
-test('nothing outside blockCache.ts writes a block’s routines, or makes a second routine list', () => {
+test('nothing reads or writes the mesocycle copy of the routines, or makes a second routine list', () => {
 	const offenders: string[] = [];
 	for (const file of sourceFiles(srcDir)) {
 		const text = readFileSync(file, 'utf8');
 		const relative = path.relative(process.cwd(), file);
-		if (file !== blockCacheFile && (blockTableWrite.test(text) || nestedBlockWrite.test(text))) {
-			offenders.push(`${relative}: writes MesocycleExerciseSplitDay / MesocycleExerciseTemplate`);
+		if (copyModelAccess.test(text) || copyRelationKey.test(text)) {
+			offenders.push(`${relative}: reads or writes MesocycleExerciseSplitDay / MesocycleExerciseTemplate`);
 		}
-		// Workouts point at a block routine by its position: its row is never deleted, not even by the sync
-		if (routineRowDelete.test(text)) offenders.push(`${relative}: deletes a block routine row`);
+		if (splitDayIndexValue.test(text)) offenders.push(`${relative}: writes or selects splitDayIndex`);
+		// Kept from when workouts pointed at copy rows: a routine row is never deleted
+		if (routineRowDelete.test(text)) offenders.push(`${relative}: deletes a mesocycle routine row`);
 		// One list per person: only ensureMyRoutines (an upsert) makes it
 		if (listCreate.test(text)) offenders.push(`${relative}: creates an ExerciseSplit`);
 	}
@@ -138,31 +138,61 @@ async function seedPerson() {
 	return { userId, caller, bench, benchTypo, dips, weightSet, active, finished };
 }
 
-const blockRows = (mesocycleId: string) =>
+const copyRows = (mesocycleId: string) =>
 	prisma.mesocycleExerciseTemplate.findMany({
 		where: { mesocycleExerciseSplitDay: { mesocycleId } },
-		orderBy: { exerciseIndex: 'asc' },
-		select: { id: true, exerciseId: true, name: true, weightSetId: true, sets: true, exerciseIndex: true }
+		orderBy: { exerciseIndex: 'asc' }
 	});
+const copyRoutines = (mesocycleId: string) =>
+	prisma.mesocycleExerciseSplitDay.findMany({ where: { mesocycleId }, orderBy: { dayIndex: 'asc' } });
 
-/** The active block's cache as a fresh sync from My routines would leave it */
-async function expectActiveMatchesFreshSync(userId: string, mesocycleId: string) {
-	const shape = async () => (await blockRows(mesocycleId)).map(({ id, ...row }) => row);
-	const now = await shape();
-	await prisma.$transaction((tx) => syncBlockFromRoutines(tx, userId));
-	expect(now).toEqual(await shape());
-	const routines = await prisma.exerciseSplitDay.findMany({
-		where: { exerciseSplit: { userId } },
-		include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
-	});
-	expect(now.map((row) => row.name)).toEqual(routines[0].exercises.map((exercise) => exercise.name));
-}
-
-test('exercise upkeep: the active block follows My routines, a finished block changes only those columns', async () => {
+test('saving routines, exercise upkeep and a new mesocycle leave the frozen copy as it was', async () => {
 	const { userId, caller, bench, benchTypo, dips, weightSet, active, finished } = await seedPerson();
-	const finishedBefore = await blockRows(finished.id);
+	const before = {
+		activeRows: await copyRows(active.id),
+		finishedRows: await copyRows(finished.id),
+		activeRoutines: await copyRoutines(active.id),
+		finishedRoutines: await copyRoutines(finished.id)
+	};
+	const now = async () => ({
+		activeRows: await copyRows(active.id),
+		finishedRows: await copyRows(finished.id),
+		activeRoutines: await copyRoutines(active.id),
+		finishedRoutines: await copyRoutines(finished.id)
+	});
 
-	// Rename
+	// My routines saved: renamed, reordered, a routine added
+	await caller.exerciseSplits.save({
+		routines: [
+			{ name: 'Legs', weightUnit: 'KG' },
+			{ name: 'Push day', weightUnit: 'KG', previousName: 'Push A' }
+		],
+		routineExercises: [
+			[
+				{
+					name: dips.name,
+					exerciseIndex: 0,
+					targetMuscleGroup: 'Chest',
+					setType: 'Straight',
+					repRangeStart: 8,
+					repRangeEnd: 12,
+					sets: 4
+				}
+			],
+			[
+				{
+					name: bench.name,
+					exerciseIndex: 0,
+					targetMuscleGroup: 'Chest',
+					setType: 'Straight',
+					repRangeStart: 6,
+					repRangeEnd: 10,
+					sets: 5
+				}
+			]
+		]
+	});
+	// A rename on the Exercises page, and a deleted weight set
 	await caller.exercises.update({
 		id: dips.id,
 		details: {
@@ -175,119 +205,30 @@ test('exercise upkeep: the active block follows My routines, a finished block ch
 			maxReps: null
 		}
 	});
-	await expectActiveMatchesFreshSync(userId, active.id);
-	let finishedRows = await blockRows(finished.id);
-	expect(finishedRows.map((row) => row.id)).toEqual(finishedBefore.map((row) => row.id));
-	expect(finishedRows.map((row) => row.name)).toEqual(['Bench pres', 'Bench press', 'Weighted dips']);
-
-	// Merge the misspelling into the real one: finished rows are relinked, never deleted
-	await caller.exercises.merge({ fromId: benchTypo.id, intoId: bench.id });
-	await expectActiveMatchesFreshSync(userId, active.id);
-	finishedRows = await blockRows(finished.id);
-	expect(finishedRows.map((row) => row.id)).toEqual(finishedBefore.map((row) => row.id));
-	expect(finishedRows.map((row) => [row.exerciseId, row.name])).toEqual([
-		[bench.id, 'Bench press'],
-		[bench.id, 'Bench press'],
-		[dips.id, 'Weighted dips']
-	]);
-
-	// A deleted weight set: unlinked everywhere, rows kept
 	await caller.weightSets.delete(weightSet.id);
-	await expectActiveMatchesFreshSync(userId, active.id);
-	finishedRows = await blockRows(finished.id);
-	expect(finishedRows.map((row) => row.id)).toEqual(finishedBefore.map((row) => row.id));
-	expect(finishedRows.every((row) => row.weightSetId === null)).toBe(true);
+	expect(await now()).toEqual(before);
 
-	// Archive (it has no workouts here, so it's deleted): the finished block keeps the entry, unlinked
-	await caller.exercises.delete(dips.id);
-	await expectActiveMatchesFreshSync(userId, active.id);
-	finishedRows = await blockRows(finished.id);
-	expect(finishedRows.map((row) => row.id)).toEqual(finishedBefore.map((row) => row.id));
-	expect(finishedRows.map((row) => [row.exerciseId, row.name])).toEqual([
-		[bench.id, 'Bench press'],
-		[bench.id, 'Bench press'],
-		[null, 'Weighted dips']
-	]);
-	expect(finishedRows.map((row) => [row.sets, row.exerciseIndex])).toEqual(
-		finishedBefore.map((row) => [row.sets, row.exerciseIndex])
-	);
-});
-
-test('the sync never deletes a block routine: removed ones hide, come back by name, new ones go at the end', async () => {
-	const { userId, caller, active } = await seedPerson();
-	const exercise = await prisma.exercise.findFirstOrThrow({ where: { userId, name: 'Dips' } });
-	const plan = (name: string) => [
-		{
-			name: exercise.name,
-			exerciseIndex: 0,
-			targetMuscleGroup: 'Chest' as const,
-			setType: 'Straight' as const,
-			repRangeStart: 8,
-			repRangeEnd: 12,
-			sets: 3,
-			note: name
-		}
-	];
-	const days = () =>
-		prisma.mesocycleExerciseSplitDay.findMany({
-			where: { mesocycleId: active.id },
-			orderBy: { dayIndex: 'asc' },
-			select: { id: true, name: true, dayIndex: true, hidden: true }
-		});
-	const [push] = await days();
-	await prisma.workout.create({
-		data: {
-			userId,
-			userBodyweight: 80,
-			startedAt: new Date(),
-			endedAt: new Date(),
-			workoutOfMesocycle: { create: { mesocycleId: active.id, splitDayIndex: push.dayIndex, workoutStatus: null } }
-		}
+	// A new mesocycle gets no copy at all
+	await caller.mesocycles.create({
+		mesocycle: {
+			name: 'Next',
+			weeklyRIR: [3, 2, 1],
+			startOverloadPercentage: 2.5,
+			lastSetToFailure: false,
+			forceRIRMatching: false
+		},
+		mesocycleCyclicSetChanges: [],
+		startImmediately: false
 	});
+	const next = await prisma.mesocycle.findFirstOrThrow({ where: { userId, name: 'Next' } });
+	expect(await copyRoutines(next.id)).toEqual([]);
 
-	// Reorder, add Pull A and Legs, remove nothing
-	await caller.exerciseSplits.save({
-		routines: [
-			{ name: 'Legs', weightUnit: 'KG' },
-			{ name: 'Push A', weightUnit: 'KG', previousName: 'Push A' },
-			{ name: 'Pull A', weightUnit: 'KG' }
-		],
-		routineExercises: [plan('legs'), plan('push'), plan('pull')]
-	});
-	expect(await days()).toEqual([
-		{ id: push.id, name: 'Push A', dayIndex: 0, hidden: false },
-		{ id: expect.any(String), name: 'Legs', dayIndex: 1, hidden: false },
-		{ id: expect.any(String), name: 'Pull A', dayIndex: 2, hidden: false }
-	]);
-
-	// Push A removed: hidden, still at 0, so its past workout still names it
-	await caller.exerciseSplits.save({
-		routines: [
-			{ name: 'Legs', weightUnit: 'KG', previousName: 'Legs' },
-			{ name: 'Pull A', weightUnit: 'KG', previousName: 'Pull A' }
-		],
-		routineExercises: [plan('legs'), plan('pull')]
-	});
-	const afterRemove = await days();
-	expect(afterRemove[0]).toEqual({ id: push.id, name: 'Push A', dayIndex: 0, hidden: true });
-	const pastWorkout = await prisma.workoutOfMesocycle.findFirstOrThrow({ where: { mesocycleId: active.id } });
-	expect(afterRemove.find((day) => day.dayIndex === pastWorkout.splitDayIndex)?.name).toBe('Push A');
-
-	// Push A back by name: the same row shows again; a renamed routine keeps its row too
-	await caller.exerciseSplits.save({
-		routines: [
-			{ name: 'Legs day', weightUnit: 'KG', previousName: 'Legs' },
-			{ name: 'Pull A', weightUnit: 'KG', previousName: 'Pull A' },
-			{ name: 'Push A', weightUnit: 'KG' }
-		],
-		routineExercises: [plan('legs'), plan('pull'), plan('push again')]
-	});
-	const final = await days();
-	expect(final.map(({ name, dayIndex, hidden }) => [name, dayIndex, hidden])).toEqual([
-		['Push A', 0, false],
-		['Legs day', 1, false],
-		['Pull A', 2, false]
-	]);
-	expect(final[0].id).toBe(push.id);
-	expect(final[1].id).toBe(afterRemove[1].id);
+	// A merge deletes the exercise merged away: only its copy rows go, by the database's cascade
+	await caller.exercises.merge({ fromId: benchTypo.id, intoId: bench.id });
+	const afterMerge = await now();
+	const withoutTypo = (rows: { exerciseId: string | null }[]) => rows.filter((row) => row.exerciseId !== benchTypo.id);
+	expect(afterMerge.activeRows).toEqual(withoutTypo(before.activeRows));
+	expect(afterMerge.finishedRows).toEqual(withoutTypo(before.finishedRows));
+	expect(afterMerge.activeRoutines).toEqual(before.activeRoutines);
+	expect(afterMerge.finishedRoutines).toEqual(before.finishedRoutines);
 });

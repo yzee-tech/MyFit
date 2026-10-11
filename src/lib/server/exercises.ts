@@ -6,12 +6,7 @@
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
 import type { MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
-import {
-	findActiveBlockId,
-	relinkExerciseInBlocks,
-	syncBlockFromRoutines,
-	withRoutinesTransaction
-} from './blockCache';
+import { withRoutinesTransaction } from './blockCache';
 
 /** The details that belong to the exercise itself, not to a routine or a workout */
 export type ExerciseDetails = {
@@ -37,25 +32,15 @@ function detailsOf(item: ExerciseDetails) {
 	};
 }
 
-/**
- * Gives an exercise new details and copies them to My routines, past workouts and blocks' copies
- * (the active block's by syncing it from My routines)
- */
+/** Gives an exercise new details and copies them to My routines and past workouts */
 export async function updateExerciseEverywhere(
 	tx: Prisma.TransactionClient,
-	userId: string,
 	exerciseId: string,
 	data: Partial<Omit<ResolvedExercise, 'id'>>
 ) {
 	await tx.exercise.update({ where: { id: exerciseId }, data });
 	await tx.exerciseTemplate.updateMany({ where: { exerciseId }, data });
 	await tx.workoutExercise.updateMany({ where: { exerciseId }, data });
-	await relinkExerciseInBlocks(
-		tx,
-		{ kind: 'details', exerciseId, data },
-		{ activeBlockId: await findActiveBlockId(tx, userId) }
-	);
-	await syncBlockFromRoutines(tx, userId);
 }
 
 /**
@@ -130,6 +115,6 @@ export async function renameExercise(userId: string, oldName: string, newName: s
 	if (trimmed === oldName) return exercise;
 	const clash = await prisma.exercise.findUnique({ where: { userId_name: { userId, name: trimmed } } });
 	if (clash) throw new TRPCError({ code: 'CONFLICT', message: `An exercise called ${trimmed} already exists` });
-	await withRoutinesTransaction((tx) => updateExerciseEverywhere(tx, userId, exercise.id, { name: trimmed }));
+	await withRoutinesTransaction((tx) => updateExerciseEverywhere(tx, exercise.id, { name: trimmed }));
 	return exercise;
 }

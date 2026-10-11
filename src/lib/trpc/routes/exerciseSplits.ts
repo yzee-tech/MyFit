@@ -1,6 +1,6 @@
 /**
  * My routines: each person's one list of routines (an ExerciseSplit), the one place routines are
- * edited. The active block follows it: every change here syncs the block in the same transaction.
+ * edited. The active mesocycle reads it directly.
  */
 import { prisma } from '$lib/prisma';
 import { z } from 'zod';
@@ -10,19 +10,14 @@ import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
-import {
-	ensureMyRoutines,
-	syncBlockFromRoutines,
-	uniqueRoutineName,
-	withRoutinesTransaction
-} from '$lib/server/blockCache';
+import { ensureMyRoutines, uniqueRoutineName, withRoutinesTransaction } from '$lib/server/blockCache';
 
 const zodSaveRoutinesInput = z.strictObject({
 	routines: z.array(
 		z.strictObject({
 			name: z.string().trim().min(1).max(100),
 			weightUnit: z.enum(['KG', 'LB', 'ASK']),
-			/** The routine's name before this edit; unset for a new one. The block keeps its place */
+			/** The routine's name before this edit; unset for a new one. Sent by the app, not needed any more */
 			previousName: z.string().optional()
 		})
 	),
@@ -60,14 +55,6 @@ export const exerciseSplits = t.router({
 		const { byName, restoreIds } = await resolveExercises(ctx.userId, input.routineExercises.flat(), {
 			restore: true
 		});
-		const renames = new Map(
-			input.routines.flatMap((routine) =>
-				routine.previousName !== undefined && routine.previousName !== routine.name
-					? [[routine.name, routine.previousName] as const]
-					: []
-			)
-		);
-
 		await withRoutinesTransaction(async (tx) => {
 			if (restoreIds.length > 0) {
 				await tx.exercise.updateMany({ where: { id: { in: restoreIds } }, data: { archived: false } });
@@ -94,7 +81,6 @@ export const exerciseSplits = t.router({
 					}))
 				});
 			}
-			await syncBlockFromRoutines(tx, ctx.userId, { renames });
 		});
 		return { message: 'My routines saved' };
 	}),
@@ -168,7 +154,6 @@ export const exerciseSplits = t.router({
 						weightSetId: ex.weightSetId
 					}))
 				});
-				await syncBlockFromRoutines(tx, ctx.userId);
 				return name;
 			});
 			return { routineName, message: `Added to My routines as “${routineName}”` };

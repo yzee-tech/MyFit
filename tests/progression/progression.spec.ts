@@ -8,7 +8,7 @@ import {
 	progressiveOverloadMagic,
 	suggestWeeklyRIR,
 	weeklyRIRFromWeeksPerRIR,
-	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate,
+	createWorkoutExerciseInProgressFromRoutineExercise,
 	switchExerciseUnit,
 	getNextWeightHint,
 	getExerciseVolume,
@@ -37,17 +37,17 @@ import {
 	type WeightSetLike
 } from '../../src/lib/utils/weightSets';
 import { test, expect } from '../fixtures';
-import { testMesocycle } from './data';
+import { testPlan, testRoutines, testSettings } from './data';
 
 test('progress first cycle, no changes', () => {
-	const currentRIR = getRIRForWeek(testMesocycle.weeklyRIR, 1);
+	const currentRIR = getRIRForWeek(testSettings.weeklyRIR, 1);
 
-	for (let i = 0; i < testMesocycle.mesocycleExerciseSplitDays.length; i++) {
-		const output = progressiveOverloadMagic(testMesocycle, 1, 100, i);
+	for (let i = 0; i < testRoutines.length; i++) {
+		const output = progressiveOverloadMagic(testPlan(i), 1, 100);
 
 		// Check correct RIR
 		output.forEach((exercise) => {
-			const lastSetToFailure = exercise.lastSetToFailure ?? testMesocycle.lastSetToFailure;
+			const lastSetToFailure = exercise.lastSetToFailure ?? testSettings.lastSetToFailure;
 			exercise.sets.forEach((set, idx) => {
 				if (idx === exercise.sets.length - 1 && lastSetToFailure) {
 					expect(set.RIR).toEqual(0);
@@ -57,12 +57,10 @@ test('progress first cycle, no changes', () => {
 			});
 		});
 
-		const exercisesWithoutSets = testMesocycle.mesocycleExerciseSplitDays[i].mesocycleSplitDayExercises.map(
-			(exercise) => {
-				const { id, mesocycleExerciseSplitDayId, sets, ...rest } = exercise;
-				return rest;
-			}
-		);
+		const exercisesWithoutSets = testRoutines[i].exercises.map((exercise) => {
+			const { id, sets, ...rest } = exercise;
+			return rest;
+		});
 		const outputWithoutSets = output.map((exercise) => {
 			const { sets, ...rest } = exercise;
 			// Exercises without their own unit take the routine's (kg here)
@@ -83,10 +81,10 @@ function performance(
 	userBodyweight = 100,
 	weightUnit: 'KG' | 'LB' | 'LEVEL' = 'KG'
 ): PreviousPerformance {
-	const template = testMesocycle.mesocycleExerciseSplitDays
-		.flatMap((splitDay) => splitDay.mesocycleSplitDayExercises)
+	const template = testRoutines
+		.flatMap((routine) => routine.exercises)
 		.find((exercise) => exercise.name === exerciseName)!;
-	const { id, mesocycleExerciseSplitDayId, sets: _sets, ...exercise } = template;
+	const { id, sets: _sets, ...exercise } = template;
 	return {
 		oldUserBodyweight: userBodyweight,
 		exercise: {
@@ -118,7 +116,7 @@ test('progression uses the last time an exercise was done, in any routine', () =
 			])
 		]
 	};
-	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history);
+	const output = progressiveOverloadMagic(testPlan(), 1, 100, history);
 	const pullUps = output.find((exercise) => exercise.name === 'Pull-ups')!;
 
 	// Same weight, and at least one set asks for more reps than last time
@@ -136,12 +134,12 @@ test('progression uses the last time an exercise was done, in any routine', () =
 });
 
 test('the routine decides the number of sets, not the last performance', () => {
-	const moreSets = progressiveOverloadMagic(testMesocycle, 1, 100, 0, {
+	const moreSets = progressiveOverloadMagic(testPlan(), 1, 100, {
 		'Pull-ups': [performance('Pull-ups', Array(5).fill({ reps: 10, load: 0, RIR: 3 }))]
 	});
 	expect(moreSets.find((exercise) => exercise.name === 'Pull-ups')!.sets).toHaveLength(3);
 
-	const fewerSets = progressiveOverloadMagic(testMesocycle, 1, 100, 0, {
+	const fewerSets = progressiveOverloadMagic(testPlan(), 1, 100, {
 		'Pull-ups': [performance('Pull-ups', [{ reps: 10, load: 0, RIR: 3 }])]
 	});
 	const pullUps = fewerSets.find((exercise) => exercise.name === 'Pull-ups')!;
@@ -160,9 +158,9 @@ test('block weeks follow the calendar', () => {
 
 test('RIR stays at the last week once a block runs past its length', () => {
 	// 3 weeks at 3 RIR, 3 at 2, 3 at 1, 1 at 0 = 10 weeks
-	expect(getRIRForWeek(testMesocycle.weeklyRIR, 1)).toEqual(3);
-	expect(getRIRForWeek(testMesocycle.weeklyRIR, 10)).toEqual(0);
-	expect(getRIRForWeek(testMesocycle.weeklyRIR, 12)).toEqual(0);
+	expect(getRIRForWeek(testSettings.weeklyRIR, 1)).toEqual(3);
+	expect(getRIRForWeek(testSettings.weeklyRIR, 10)).toEqual(0);
+	expect(getRIRForWeek(testSettings.weeklyRIR, 12)).toEqual(0);
 });
 
 test('weekly plans: suggested plans and converting the old format', () => {
@@ -187,7 +185,7 @@ test('deload: same weights and reps target as last time, half the sets, easy eff
 		{ reps: 10, load: 20, RIR: 0 }
 	];
 	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
-	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history, 'deload');
+	const output = progressiveOverloadMagic(testPlan(), 1, 100, history, 'deload');
 	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
 
 	expect(rows.sets).toHaveLength(2); // 3 sets in the routine, halved and rounded up
@@ -207,7 +205,7 @@ test('welcome back: repeat last numbers with 1 extra RIR, no set to failure', ()
 	];
 	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
 	// Week 1 of the test plan is 3 RIR, so welcome back asks for 4
-	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history, 'welcomeBack');
+	const output = progressiveOverloadMagic(testPlan(), 1, 100, history, 'welcomeBack');
 	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
 
 	expect(rows.sets).toHaveLength(3);
@@ -218,7 +216,7 @@ test('welcome back: repeat last numbers with 1 extra RIR, no set to failure', ()
 	});
 
 	// Normal progression from the same history pushes past last time instead
-	const normal = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history).find(
+	const normal = progressiveOverloadMagic(testPlan(), 1, 100, history).find(
 		(exercise) => exercise.name === 'Barbell rows'
 	)!;
 	expect(normal.sets.some((set, idx) => set.reps! > lastTime[idx].reps || set.load! > 20)).toBe(true);
@@ -246,7 +244,7 @@ test('history in lb, exercise now in kg: suggestion moves to real kg weights, sa
 		{ reps: 11, load: toKg(90, 'LB'), RIR: 3 }
 	];
 	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime, 100, 'LB')] };
-	const output = progressiveOverloadMagic(testMesocycle, 1, 100, 0, history);
+	const output = progressiveOverloadMagic(testPlan(), 1, 100, history);
 	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
 
 	expect(rows.weightUnit).toEqual('KG');
@@ -260,10 +258,8 @@ test('history in lb, exercise now in kg: suggestion moves to real kg weights, sa
 });
 
 test('switching an exercise to lb mid-workout: done sets keep their weight, the rest snap', () => {
-	const exercise = testMesocycle.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find(
-		(ex) => ex.name === 'Barbell rows'
-	)!;
-	const inProgress = createWorkoutExerciseInProgressFromMesocycleExerciseTemplate({ ...exercise, sets: 2 });
+	const exercise = testRoutines[0].exercises.find((ex) => ex.name === 'Barbell rows')!;
+	const inProgress = createWorkoutExerciseInProgressFromRoutineExercise({ ...exercise, sets: 2 });
 	inProgress.sets[0] = { ...inProgress.sets[0], reps: 12, load: 40, RIR: 2, completed: true };
 	inProgress.sets[1] = { ...inProgress.sets[1], reps: 12, load: 40, RIR: 2, completed: false };
 
@@ -285,16 +281,16 @@ const buildingDumbbells: WeightSetLike = {
 
 /** The test block with Barbell rows at 8–12 reps using a weight set, no set to failure */
 function blockWithWeightSet(weightSetId: string | null = buildingDumbbells.id) {
-	const block = structuredClone(testMesocycle);
-	block.lastSetToFailure = false;
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	const block = testPlan();
+	block.settings.lastSetToFailure = false;
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	Object.assign(rows, { repRangeStart: 8, repRangeEnd: 12, weightSetId });
 	return block;
 }
 
 function rowsSuggestion(lastTime: TestSet[], weightSets: WeightSetLike[]) {
 	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', lastTime)] };
-	const output = progressiveOverloadMagic(blockWithWeightSet(), 1, 100, 0, history, 'normal', weightSets);
+	const output = progressiveOverloadMagic(blockWithWeightSet(), 1, 100, history, 'normal', weightSets);
 	return output.find((exercise) => exercise.name === 'Barbell rows')!;
 }
 
@@ -368,11 +364,9 @@ test('weight sets: a weight the gym lacks becomes one it has, with reps adjusted
 });
 
 test('weight sets: switching units uses the weight set in the new unit', () => {
-	const exercise = blockWithWeightSet('club-db').mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find(
-		(ex) => ex.name === 'Barbell rows'
-	)!;
+	const exercise = blockWithWeightSet('club-db').exercises.find((ex) => ex.name === 'Barbell rows')!;
 	const clubDumbbells: WeightSetLike = { id: 'club-db', name: 'Club', unit: 'LB', weights: [80, 95, 110] };
-	const inProgress = createWorkoutExerciseInProgressFromMesocycleExerciseTemplate({ ...exercise, sets: 1 });
+	const inProgress = createWorkoutExerciseInProgressFromRoutineExercise({ ...exercise, sets: 1 });
 	inProgress.sets[0] = { ...inProgress.sets[0], reps: 10, load: 40, RIR: 2, completed: false };
 
 	// 40 kg = 88.2 lb: not on 5 lb steps here, but one of the club's weights
@@ -392,13 +386,13 @@ test('weight sets: an assisted machine counts help as a negative load, and less 
 
 	// Assisted pull-ups at 20 kg of help, past the top of the 8–12 range: next is 15 kg of help
 	const block = blockWithWeightSet('assist');
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	rows.bodyweightFraction = 1;
 	const history: ExerciseHistory = {
 		'Barbell rows': [performance('Barbell rows', sets(-20, 15, 15, 15), 100)]
 	};
 	history['Barbell rows'][0].exercise.bodyweightFraction = 1;
-	const output = progressiveOverloadMagic(block, 1, 100, 0, history, 'normal', [assist]);
+	const output = progressiveOverloadMagic(block, 1, 100, history, 'normal', [assist]);
 	const suggestion = output.find((exercise) => exercise.name === 'Barbell rows')!;
 	suggestion.sets.forEach((set) => expect(set.load).toEqual(-15));
 });
@@ -418,10 +412,10 @@ function levelSuggestion(
 	plan: { weeklyRIR: number[]; week: number } = { weeklyRIR: [3], week: 1 }
 ) {
 	const block = blockWithWeightSet(hotelChestPress.id);
-	block.weeklyRIR = plan.weeklyRIR;
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	block.settings.weeklyRIR = plan.weeklyRIR;
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL', setType, changeType: null });
-	const output = progressiveOverloadMagic(block, plan.week, 100, 0, { 'Barbell rows': history }, 'normal', [
+	const output = progressiveOverloadMagic(block, plan.week, 100, { 'Barbell rows': history }, 'normal', [
 		hotelChestPress
 	]);
 	return output.find((exercise) => exercise.name === 'Barbell rows')!;
@@ -486,7 +480,7 @@ test('levels: only compared with level sessions, and never with weights', () => 
 
 	// And a weights exercise ignores level sessions
 	const history: ExerciseHistory = { 'Barbell rows': [levelPerformance(levelSets(7, 12, 12, 12))] };
-	const weights = progressiveOverloadMagic(blockWithWeightSet(null), 1, 100, 0, history);
+	const weights = progressiveOverloadMagic(blockWithWeightSet(null), 1, 100, history);
 	weights.find((exercise) => exercise.name === 'Barbell rows')!.sets.forEach((set) => expect(set.load).toBeUndefined());
 
 	// Levels don't count towards kg volume
@@ -569,14 +563,13 @@ function repsOnlySuggestion(
 	} = {}
 ) {
 	const block = blockWithWeightSet(options.weightSetId ?? null);
-	block.weeklyRIR = options.plan?.weeklyRIR ?? [3];
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	block.settings.weeklyRIR = options.plan?.weeklyRIR ?? [3];
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	if (options.routineSets) rows.sets = options.routineSets;
 	const output = progressiveOverloadMagic(
 		block,
 		options.plan?.week ?? 1,
 		100,
-		0,
 		{ 'Barbell rows': history },
 		options.mode ?? 'normal',
 		options.weightSets ?? [],
@@ -705,14 +698,13 @@ test('reps only: a level exercise keeps its own rule; the at-max check', () => {
 	// Reps only doesn't stop a level machine going up a level
 	const levels = levelSuggestion([levelPerformance(levelSets(7, 15, 15, 15))]);
 	const block = blockWithWeightSet(hotelChestPress.id);
-	block.weeklyRIR = [3];
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	block.settings.weeklyRIR = [3];
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL' });
 	const withRepsOnly = progressiveOverloadMagic(
 		block,
 		1,
 		100,
-		0,
 		{ 'Barbell rows': [levelPerformance(levelSets(7, 15, 15, 15))] },
 		'normal',
 		[hotelChestPress],
@@ -745,8 +737,8 @@ test('levels set on the exercise: its levels apply whatever weight set it has, a
 type MatchSet = TestSet & { miniSets?: number[] };
 function myorepMatchSuggestion(lastTime: MatchSet[], weightSets: WeightSetLike[] = []) {
 	const block = blockWithWeightSet(weightSets[0]?.id ?? null);
-	block.weeklyRIR = [1];
-	const rows = block.mesocycleExerciseSplitDays[0].mesocycleSplitDayExercises.find((ex) => ex.name === 'Barbell rows')!;
+	block.settings.weeklyRIR = [1];
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
 	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 20, setType: 'MyorepMatch', sets: lastTime.length });
 	const past = performance('Barbell rows', lastTime);
 	past.exercise.setType = 'MyorepMatch';
@@ -760,7 +752,7 @@ function myorepMatchSuggestion(lastTime: MatchSet[], weightSets: WeightSetLike[]
 			workoutExerciseSetId: set.id
 		}));
 	});
-	const output = progressiveOverloadMagic(block, 1, 100, 0, { 'Barbell rows': [past] }, 'normal', weightSets);
+	const output = progressiveOverloadMagic(block, 1, 100, { 'Barbell rows': [past] }, 'normal', weightSets);
 	return output.find((exercise) => exercise.name === 'Barbell rows')!;
 }
 const matchSet = (reps: number, ...miniSets: number[]): MatchSet => ({ reps, load: 40, RIR: 1, miniSets });

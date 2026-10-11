@@ -6,16 +6,14 @@ import {
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
-import { testMesocycle } from './data';
+import { testPlan, testRoutines } from './data';
 
 type TestSet = { reps: number; load: number; RIR: number; miniSets?: { reps: number; load: number; RIR: number }[] };
 
 /** A past performance of one of the test block's exercises */
 function performance(name: string, sets: TestSet[], daysAgo: number, userBodyweight = 80): PreviousPerformance {
-	const template = testMesocycle.mesocycleExerciseSplitDays
-		.flatMap((splitDay) => splitDay.mesocycleSplitDayExercises)
-		.find((exercise) => exercise.name === name)!;
-	const { id, mesocycleExerciseSplitDayId, sets: _sets, ...exercise } = template;
+	const template = testRoutines.flatMap((routine) => routine.exercises).find((exercise) => exercise.name === name)!;
+	const { id, sets: _sets, ...exercise } = template;
 	return {
 		oldUserBodyweight: userBodyweight,
 		exercise: {
@@ -52,9 +50,9 @@ const s = (reps: number, load: number, RIR: number, miniSets?: TestSet['miniSets
 
 /** Pull A's suggestions (week 1, 80 kg) after the given history */
 function pullA(history: ExerciseHistory) {
-	const block = structuredClone(testMesocycle);
-	block.lastSetToFailure = false;
-	return progressiveOverloadMagic(block, 1, 80, 0, history).map((exercise) => ({
+	const plan = testPlan();
+	plan.settings.lastSetToFailure = false;
+	return progressiveOverloadMagic(plan, 1, 80, history).map((exercise) => ({
 		name: exercise.name,
 		sets: exercise.sets.map((set) => [set.reps, set.load, set.RIR])
 	}));
