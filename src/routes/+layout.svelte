@@ -2,6 +2,8 @@
 	import { Toaster } from '$lib/components/ui/sonner';
 	import { ModeWatcher } from 'mode-watcher';
 	import { onMount } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
+	import { updated } from '$app/stores';
 	import { pwaInfo } from 'virtual:pwa-info';
 	import '../app.pcss';
 	import DesktopLayout from './(components)/layout/DesktopLayout.svelte';
@@ -16,6 +18,13 @@
 	const { children } = $props();
 	const webManifestLink = pwaInfo ? pwaInfo.webManifest.linkTag : '';
 	let isMobile: undefined | boolean = $state(undefined);
+
+	// A newer version is live: once a page change has gone through (guards included), reload into it.
+	// A plain reload keeps everything saved on this device, like a workout in progress: this must
+	// never clear storage (that's only the old "Update app" dialog, which keeps the workout too)
+	afterNavigate(({ type }) => {
+		if (type !== 'enter' && $updated) location.reload();
+	});
 
 	onMount(() => {
 		isMobile = window.innerWidth < 1024;

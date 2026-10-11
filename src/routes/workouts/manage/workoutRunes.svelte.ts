@@ -3,17 +3,20 @@ import { get } from 'svelte/store';
 import { levelSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
 import { isLevelUnit } from '$lib/utils/weightUnits';
-import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
+import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
 import { trpc } from '$lib/trpc/client';
 import {
 	type WorkoutExerciseInProgress,
 	type WorkoutExerciseWithSets,
 	convertExerciseLoads,
-	createWorkoutExerciseInProgressFromMesocycleExerciseTemplate
+	createWorkoutExerciseInProgressFromRoutineExercise
 } from '$lib/utils/workoutUtils';
 import type { Prisma } from '@prisma/client';
 import type { FullWorkoutWithMesoData } from '../[workoutId]/+page.server';
+
+/** Where a saved workout that couldn't be opened is kept */
+const WORKOUT_BACKUP_KEY = 'workoutRunes:backup';
 
 export type PreviousWorkoutData =
 	RouterOutputs['workouts']['getWorkoutExercisesWithPreviousData']['previousWorkoutData'];
@@ -31,28 +34,44 @@ function createWorkoutRunes() {
 	let editSnapshot: string | null = $state(null);
 
 	let editingExerciseIndex: number | undefined = $state();
-	let editingExercise: MesocycleExerciseTemplateWithoutIdsOrIndex | undefined = $state();
+	let editingExercise: RoutineExerciseTemplate | undefined = $state();
 
 	let exerciseHistorySheetOpen = $state(false);
 	let exerciseHistorySheetName: string | undefined = $state();
 	let exerciseWarmUpDialogOpen = $state(false);
 	let exerciseWarmUpDialogExercise: WorkoutExerciseInProgress | undefined = $state();
 
+	/** A saved workout couldn't be opened (kept as a backup): told once the page is up */
+	let savedWorkoutUnreadable = false;
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('workoutRunes');
-		if (savedState)
-			({
-				workoutData,
-				workoutExercises,
-				editingWorkoutId = null,
-				editSnapshot = null,
-				previousWorkoutData,
-				repsOnly = {},
-				lastActivityAt = null
-			} = JSON.parse(savedState));
+		if (savedState) {
+			try {
+				const saved = JSON.parse(savedState);
+				// A workout needs its details and its list of exercises (either may be null between workouts)
+				if (typeof saved !== 'object' || saved === null || !('workoutData' in saved)) throw new Error();
+				if (saved.workoutData !== null && !Array.isArray(saved.workoutExercises)) throw new Error();
+				({
+					workoutData,
+					workoutExercises,
+					editingWorkoutId = null,
+					editSnapshot = null,
+					previousWorkoutData,
+					repsOnly = {},
+					lastActivityAt = null
+				} = saved);
+			} catch {
+				// Never thrown away silently: kept as it was, under another key, and the person told
+				localStorage.setItem(WORKOUT_BACKUP_KEY, savedState);
+				localStorage.removeItem('workoutRunes');
+				savedWorkoutUnreadable = true;
+			}
+		}
 	}
 
 	function saveStoresToLocalStorage() {
+		// Changing this shape? Version the key (workoutRunes:v2) and move the old one over on load: a
+		// reload (like the automatic update) must never lose a workout in progress
 		localStorage.setItem(
 			'workoutRunes',
 			JSON.stringify({
@@ -125,7 +144,7 @@ function createWorkoutRunes() {
 		return exercise !== undefined;
 	}
 
-	function addExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
+	function addExercise(exercise: RoutineExerciseTemplate) {
 		if (workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name)) return false;
 		// New exercises use their own weight set, else the gym's picked for this workout; and start in
@@ -137,7 +156,7 @@ function createWorkoutRunes() {
 		const weightSetUnit = levels ? 'LEVEL' : weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit;
 		const weightUnit = weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
 		workoutExercises.push({
-			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise),
+			...createWorkoutExerciseInProgressFromRoutineExercise(exercise),
 			weightUnit,
 			weightSetId
 		});
@@ -190,7 +209,7 @@ function createWorkoutRunes() {
 		}
 	}
 
-	function editExercise(exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) {
+	function editExercise(exercise: RoutineExerciseTemplate) {
 		if (!editingExercise || editingExerciseIndex === undefined || workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name, editingExerciseIndex)) return false;
 		const current = workoutExercises[editingExerciseIndex];
@@ -207,7 +226,7 @@ function createWorkoutRunes() {
 			? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
 			: current.sets;
 		workoutExercises[editingExerciseIndex] = {
-			...createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise, sets),
+			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit
 		};
 		saveStoresToLocalStorage();
@@ -318,6 +337,12 @@ function createWorkoutRunes() {
 		},
 		markActivity,
 		hasUnsavedEdits,
+		/** Whether a saved workout couldn't be opened; true only the first time it's asked */
+		takeSavedWorkoutUnreadable() {
+			const unreadable = savedWorkoutUnreadable;
+			savedWorkoutUnreadable = false;
+			return unreadable;
+		},
 		get workoutData() {
 			return workoutData;
 		},

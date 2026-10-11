@@ -5,12 +5,7 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { updateExerciseEverywhere } from '$lib/server/exercises';
-import {
-	findActiveBlockId,
-	relinkExerciseInBlocks,
-	syncBlockFromRoutines,
-	withRoutinesTransaction
-} from '$lib/server/blockCache';
+import { withRoutinesTransaction } from '$lib/server/blockCache';
 import { commonExercisePerMuscleGroup } from '$lib/common/commonExercises';
 import { MuscleGroupSchema } from '$lib/zodSchemas';
 import type { ChangeType, Prisma, SetType } from '@prisma/client';
@@ -308,7 +303,7 @@ export const exercises = t.router({
 			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
 			const { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...shared } = input.details;
 			await withRoutinesTransaction(async (tx) => {
-				await updateExerciseEverywhere(tx, ctx.userId, exercise.id, shared);
+				await updateExerciseEverywhere(tx, exercise.id, shared);
 				await tx.exercise.update({
 					where: { id: exercise.id },
 					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep }
@@ -351,7 +346,6 @@ export const exercises = t.router({
 					});
 					count++;
 				}
-				await syncBlockFromRoutines(tx, ctx.userId);
 				return count;
 			});
 			return { added };
@@ -369,7 +363,6 @@ export const exercises = t.router({
 						exerciseSplitDay: { exerciseSplit: { userId: ctx.userId } }
 					}
 				});
-				await syncBlockFromRoutines(tx, ctx.userId);
 				return count;
 			});
 			return { removed };
@@ -377,21 +370,14 @@ export const exercises = t.router({
 
 	/**
 	 * Removes an exercise from My routines. With workouts it's archived, so they keep it; without
-	 * any, it's gone completely. Finished blocks keep their entry for it, without the link.
+	 * any, it's gone completely.
 	 */
 	delete: t.procedure.input(z.string().cuid2()).mutation(async ({ ctx, input }) => {
 		const exercise = await findOwnExercise(ctx.userId, input);
 		const workoutCount = await prisma.workoutExercise.count({ where: { exerciseId: exercise.id } });
 		await withRoutinesTransaction(async (tx) => {
 			await tx.exerciseTemplate.deleteMany({ where: { exerciseId: exercise.id } });
-			await syncBlockFromRoutines(tx, ctx.userId);
 			if (workoutCount === 0) {
-				// Other blocks keep their entry; the active one no longer has it after the sync
-				await relinkExerciseInBlocks(
-					tx,
-					{ kind: 'unlink', exerciseId: exercise.id },
-					{ activeBlockId: await findActiveBlockId(tx, ctx.userId) }
-				);
 				await tx.exercise.delete({ where: { id: exercise.id } });
 			} else {
 				await tx.exercise.update({ where: { id: exercise.id }, data: { archived: true } });
@@ -439,13 +425,6 @@ export const exercises = t.router({
 				await tx.exerciseTemplate.deleteMany({ where: { id: { in: duplicates.map((entry) => entry.id) } } });
 				await tx.exerciseTemplate.updateMany({ where: { id: { in: moves.map((entry) => entry.id) } }, data: details });
 				await tx.workoutExercise.updateMany({ where: { exerciseId: from.id }, data: details });
-				// Other blocks' entries point at the exercise merged into; the active block follows My routines
-				await relinkExerciseInBlocks(
-					tx,
-					{ kind: 'merge', fromId: from.id, into: details },
-					{ activeBlockId: await findActiveBlockId(tx, ctx.userId) }
-				);
-				await syncBlockFromRoutines(tx, ctx.userId);
 				await tx.exercise.update({ where: { id: into.id }, data: { archived: false } });
 				await tx.exercise.delete({ where: { id: from.id } });
 			});

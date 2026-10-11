@@ -5,7 +5,7 @@ import { MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema } from '$lib/
 import { Prisma } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
-import { ensureMyRoutines, syncBlockFromRoutines, withRoutinesTransaction } from '$lib/server/blockCache';
+import { ensureMyRoutines, withRoutinesTransaction } from '$lib/server/blockCache';
 
 /**
  * A block's own settings. A block is a training period: its routines are My routines, so nothing
@@ -44,10 +44,6 @@ export const mesocycles = t.router({
 				where: { id: input, userId: ctx.userId },
 				include: {
 					exerciseSplit: true,
-					mesocycleExerciseSplitDays: {
-						include: { mesocycleSplitDayExercises: { orderBy: { exerciseIndex: 'asc' } } },
-						orderBy: { dayIndex: 'asc' }
-					},
 					mesocycleCyclicSetChanges: true,
 					workoutsOfMesocycle: {
 						include: {
@@ -112,8 +108,6 @@ export const mesocycles = t.router({
 			await tx.mesocycleCyclicSetChange.createMany({
 				data: input.mesocycleCyclicSetChanges.map((setChange) => ({ ...setChange, mesocycleId }))
 			});
-			// Its routines: a copy of My routines, kept in step from now on
-			await syncBlockFromRoutines(tx, ctx.userId, { mesocycleId });
 		});
 		return { message: 'Mesocycle created successfully' };
 	}),
@@ -168,12 +162,9 @@ export const mesocycles = t.router({
 						where: { id: input.id, userId: ctx.userId },
 						data: { startDate: new Date(), exerciseSplitId }
 					});
-					// It wasn't kept in step before it started: catch up with My routines
-					await syncBlockFromRoutines(tx, ctx.userId, { mesocycleId: input.id });
 					return started;
 				}
-				// A finished block keeps its routines as they were and follows My routines no more.
-				// (There's no way to restart a finished block; one would have to link and sync it again.)
+				// A finished mesocycle is its workouts: it no longer uses My routines
 				return tx.mesocycle.update({
 					where: { id: input.id, userId: ctx.userId },
 					data: { endDate: new Date(), exerciseSplitId: null }

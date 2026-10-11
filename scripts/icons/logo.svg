@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-	<!-- MyFit: a plate-loaded dumbbell with a rising arrow (getting stronger) -->
+	<!-- MyFit: a dumbbell under a dotted route between two stops (training wherever you travel) -->
 	<rect width="120" height="120" rx="28" fill="#2C74BA"/>
-	<path d="M60 52 V20 M46 34 L60 20 L74 34" stroke="#9FD0FF" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+	<path d="M28 50 Q48 16 82 36" stroke="#9FD0FF" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="1 8.5"/>
+	<path d="M26 55.1 C26 55.1 18 47.1 18 42 A8 8 0 0 1 34 42 C34 47.1 26 55.1 26 55.1 Z" fill="#9FD0FF"/>
+	<circle cx="26" cy="42" r="3" fill="#2C74BA"/>
+	<path d="M92 45.7 C92 45.7 80 33.7 80 26 A12 12 0 0 1 104 26 C104 33.7 92 45.7 92 45.7 Z" fill="#9FD0FF"/>
+	<circle cx="92" cy="26" r="4.6" fill="#2C74BA"/>
 	<g fill="#FFFFFF">
-		<rect x="15" y="62" width="11" height="34" rx="2"/>
-		<rect x="27" y="68" width="8" height="22" rx="2"/>
-		<rect x="35" y="75" width="50" height="8" rx="1"/>
-		<rect x="85" y="68" width="8" height="22" rx="2"/>
-		<rect x="94" y="62" width="11" height="34" rx="2"/>
+		<rect x="15" y="66" width="11" height="34" rx="2"/>
+		<rect x="27" y="72" width="8" height="22" rx="2"/>
+		<rect x="35" y="79" width="50" height="8" rx="1"/>
+		<rect x="85" y="72" width="8" height="22" rx="2"/>
+		<rect x="94" y="66" width="11" height="34" rx="2"/>
 	</g>
 </svg>

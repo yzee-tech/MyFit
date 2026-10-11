@@ -1,8 +1,7 @@
-import type { MesocycleExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
-import type { ActiveMesocycleWithProgressionData } from '$lib/trpc/routes/workouts';
+import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
-import { type Prisma } from '@prisma/client';
+import { type Mesocycle, type Prisma } from '@prisma/client';
 import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
 import type { WeightUnit } from './prismaEnums';
 import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
@@ -206,8 +205,8 @@ export type WorkoutExerciseWithSets = Prisma.WorkoutExerciseGetPayload<{
 	include: { sets: { include: { miniSets: true } } };
 }>;
 
-export function createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(
-	exerciseTemplate: MesocycleExerciseTemplateWithoutIdsOrIndex,
+export function createWorkoutExerciseInProgressFromRoutineExercise(
+	exerciseTemplate: RoutineExerciseTemplate,
 	oldSets?: WorkoutExerciseInProgress['sets']
 ): WorkoutExerciseInProgress {
 	const { id, sets, ...exercise } = exerciseTemplate;
@@ -780,18 +779,26 @@ function progressLevels(ex: WorkoutExerciseInProgress, levels: number[] | null):
 	});
 }
 
+/**
+ * What the suggestions work from: the progression settings (the active mesocycle's, else steady ones)
+ * and the exercises of the routine being done, each with its set count
+ */
+export type ProgressionPlan = {
+	settings: Pick<Mesocycle, 'weeklyRIR' | 'startOverloadPercentage' | 'lastSetToFailure' | 'forceRIRMatching'>;
+	exercises: RoutineExerciseTemplate[];
+};
+
 export function progressiveOverloadMagic(
-	mesocycleWithProgressionData: ActiveMesocycleWithProgressionData,
+	plan: ProgressionPlan,
 	cycleNumber: number,
 	userBodyweight: number,
-	splitDayIndex: number,
 	exerciseHistory: ExerciseHistory = {},
 	mode: ProgressionMode = 'normal',
 	weightSets: WeightSetLike[] = [],
 	/** Reps-only exercises by name, with their rep cap (null for none) */
 	repsOnly: RepsOnlySettings = new Map()
 ) {
-	const { mesocycleExerciseSplitDays, ...mesocycle } = mesocycleWithProgressionData;
+	const mesocycle = plan.settings;
 	// Levels keep their own rule, so reps only applies to exercises with weights
 	const isRepsOnly = (ex: WorkoutExerciseInProgress) => repsOnly.has(ex.name) && !isLevelUnit(ex.weightUnit);
 
@@ -800,12 +807,9 @@ export function progressiveOverloadMagic(
 	if (mode === 'deload') currentCycleRIR = DELOAD_RIR;
 	else if (mode === 'welcomeBack') currentCycleRIR = Math.min(weekRIR + 1, DELOAD_RIR);
 	const easySession = mode !== 'normal';
-	// Workouts point at a routine by its position (dayIndex), not its place in the list
-	const todaysSplitDay = mesocycleExerciseSplitDays.find((splitDay) => splitDay.dayIndex === splitDayIndex)!;
-	const workoutExercises = todaysSplitDay.mesocycleSplitDayExercises.map((fullExercise) => {
-		const { mesocycleExerciseSplitDayId, ...exercise } = fullExercise;
-		return createWorkoutExerciseInProgressFromMesocycleExerciseTemplate(exercise);
-	});
+	const workoutExercises = plan.exercises.map((exercise) =>
+		createWorkoutExerciseInProgressFromRoutineExercise(exercise)
+	);
 
 	workoutExercises.forEach((ex) => {
 		// Progressive overload from the last times this exercise was done, in any routine, with the

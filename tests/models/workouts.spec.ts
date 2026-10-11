@@ -514,13 +514,9 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	userData
 }) => {
 	await createSplitAndMesoForTest(page);
-	// "Ask each time" in My routines, and so in the block that follows it
+	// "Ask each time" in My routines, which the mesocycle uses
 	await prisma.exerciseSplitDay.updateMany({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
-		data: { weightUnit: 'ASK' }
-	});
-	await prisma.mesocycleExerciseSplitDay.updateMany({
-		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
 		data: { weightUnit: 'ASK' }
 	});
 
@@ -666,10 +662,6 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 
 	const weightSet = await prisma.weightSet.findFirstOrThrow({ where: { userId: userData.userId } });
 	expect(weightSet.weights).toEqual([5, 6, 7, 8, 9, 10, 14, 20]);
-	const curls = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
-		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
-	});
-	expect(curls.weightSetId).toEqual(weightSet.id);
 	const libraryCurls = await prisma.exerciseTemplate.findFirstOrThrow({
 		where: {
 			name: 'Dumbbell bicep curls',
@@ -692,11 +684,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Delete Building DBs' }).click();
 	await expect(page.getByTestId('weight-set-Building DBs')).toHaveCount(0);
-	// In My routines, and in the block that follows it
-	const unlinked = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
-		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
-	});
-	expect(unlinked.weightSetId).toBeNull();
+	// In My routines, which the mesocycle uses
 	const unlinkedInMyRoutines = await prisma.exerciseTemplate.findFirstOrThrow({ where: { id: libraryCurls.id } });
 	expect(unlinkedInMyRoutines.weightSetId).toBeNull();
 });
@@ -708,10 +696,6 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	await createSplitAndMesoForTest(page);
 	await prisma.exerciseSplitDay.updateMany({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
-		data: { weightUnit: 'ASK' }
-	});
-	await prisma.mesocycleExerciseSplitDay.updateMany({
-		where: { name: 'Pull A', mesocycle: { userId: userData.userId } },
 		data: { weightUnit: 'ASK' }
 	});
 	await prisma.weightSet.create({
@@ -742,8 +726,8 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Update routine' });
 
 	// The routine is used at many gyms, so it doesn't keep this gym's weights
-	const rows = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
-		where: { name: 'Barbell rows', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	const rows = await prisma.exerciseTemplate.findFirstOrThrow({
+		where: { name: 'Barbell rows', exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } }
 	});
 	expect(rows.weightSetId).toBeNull();
 
@@ -812,8 +796,11 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	});
 	expect(logged.weightUnit).toEqual('LEVEL');
 	expect(logged.sets.map((set) => set.load)).toEqual([7, 7, 7]);
-	const routineCurls = await prisma.mesocycleExerciseTemplate.findFirstOrThrow({
-		where: { name: 'Dumbbell bicep curls', mesocycleExerciseSplitDay: { mesocycle: { userId: userData.userId } } }
+	const routineCurls = await prisma.exerciseTemplate.findFirstOrThrow({
+		where: {
+			name: 'Dumbbell bicep curls',
+			exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } }
+		}
 	});
 	expect(routineCurls.weightUnit).toBeNull();
 	expect(routineCurls.weightSetId).toBeNull();
@@ -1109,10 +1096,6 @@ test('add and remove sets; the routine prompt: closing it saves nothing, Update 
 
 	await saveWorkout(page, { changes: ['Barbell rows: 4 sets (routine: 3)'], answer: 'Update routine' });
 	expect(await prisma.workout.count({ where: { userId: userData.userId } })).toEqual(1);
-	const block = await prisma.mesocycleExerciseTemplate.findMany({
-		where: { mesocycleExerciseSplitDay: { name: 'Pull A', mesocycle: { userId: userData.userId } } },
-		orderBy: { exerciseIndex: 'asc' }
-	});
 	const library = await prisma.exerciseTemplate.findMany({
 		where: { exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } },
 		orderBy: { exerciseIndex: 'asc' }
@@ -1121,11 +1104,10 @@ test('add and remove sets; the routine prompt: closing it saves nothing, Update 
 		['Barbell rows', 4],
 		['Face pulls', 2]
 	];
-	expect(block.map((ex) => [ex.name, ex.sets])).toEqual(expected);
 	expect(library.map((ex) => [ex.name, ex.sets])).toEqual(expected);
 });
 
-test('Just this workout leaves the routine; Update routine changes My routines and the block follows', async ({
+test('Just this workout leaves the routine; Update routine changes My routines, and the mesocycle’s next workout', async ({
 	page,
 	userData
 }) => {
@@ -1141,21 +1123,23 @@ test('Just this workout leaves the routine; Update routine changes My routines a
 		await page.getByRole('button', { name: 'Skip and continue' }).click();
 		await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer });
 	};
-	const blockHasPullUps = async () =>
-		(await prisma.mesocycleExerciseTemplate.count({
-			where: { name: 'Pull-ups', mesocycleExerciseSplitDay: { name: 'Pull A', mesocycle: { userId: userData.userId } } }
-		})) === 1;
-
 	const myRoutinesHasPullUps = async () =>
 		(await prisma.exerciseTemplate.count({
 			where: { name: 'Pull-ups', exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } }
 		})) === 1;
 
 	await logPullA('Just this workout');
-	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([true, true]);
+	expect(await myRoutinesHasPullUps()).toBe(true);
 
 	await logPullA('Update routine');
-	expect([await myRoutinesHasPullUps(), await blockHasPullUps()]).toEqual([false, false]);
+	expect(await myRoutinesHasPullUps()).toBe(false);
+	// The mesocycle's next Pull A has no pull-ups
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
+	await expect(page.getByTestId('Pull-ups-menu-button')).toHaveCount(0);
 });
 
 test('workout panel: on Log workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({

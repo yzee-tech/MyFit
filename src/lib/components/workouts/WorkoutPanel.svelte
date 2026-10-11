@@ -38,6 +38,9 @@
 
 	let now = $state(new Date());
 	onMount(() => {
+		if (workoutRunes.takeSavedWorkoutUnreadable()) {
+			toast.error("A workout saved on this device couldn't be opened. It's been kept as a backup");
+		}
 		// An edit of a past workout left without saving (the tab was closed): it ends here
 		if (workoutRunes.editingWorkoutId !== null && !$page.url.pathname.startsWith('/workouts/manage')) {
 			if (workoutRunes.hasUnsavedEdits()) toast.info('Unsaved changes to a past workout were discarded');

@@ -8,7 +8,16 @@
 
 	function updateApp() {
 		updating = true;
-		const fieldsToKeep = ['myfit_terms_accepted', 'discord-dismiss', 'domain-move-dismiss', 'last-used-auth-provider'];
+		// A workout in progress and a routine being edited are kept: losing them is the worst case of an update
+		const fieldsToKeep = [
+			'myfit_terms_accepted',
+			'discord-dismiss',
+			'domain-move-dismiss',
+			'last-used-auth-provider',
+			'workoutRunes',
+			'workoutRunes:backup',
+			'routineEditor'
+		];
 		const preservedValues: Record<string, string | null> = {};
 
 		fieldsToKeep.forEach((field) => {
@@ -29,7 +38,7 @@
 
 <ResponsiveDialog title="Update app?" bind:open={updateDataLossDialog.open}>
 	{#snippet description()}
-		<p>Any unsaved data, like a workout in progress, or an unsaved mesocycle will be lost.</p>
+		<p>A workout in progress and a routine you're editing are kept. An unsaved mesocycle will be lost.</p>
 	{/snippet}
 	<Button disabled={updating} onclick={updateApp} class="gap-2">
 		{#if updating}

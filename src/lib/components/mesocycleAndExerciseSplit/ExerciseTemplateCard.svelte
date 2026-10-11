@@ -9,10 +9,7 @@
 	import EditIcon from 'virtual:icons/lucide/pencil';
 	import DeleteIcon from 'virtual:icons/lucide/trash';
 	import { routineSetCount } from '$lib/utils/routineSets';
-	import type {
-		MesocycleExerciseTemplateWithoutIdsOrIndex,
-		SplitExerciseTemplateWithoutIdsOrIndex
-	} from './commonTypes';
+	import type { RoutineExerciseTemplate, SplitExerciseTemplateWithoutIdsOrIndex } from './commonTypes';
 
 	type ExerciseTemplateCardProps = ReadOnlyProps | EditableProps;
 
@@ -27,7 +24,7 @@
 
 	type ContextProps =
 		| { context: 'exerciseSplit'; exerciseTemplate: SplitExerciseTemplateWithoutIdsOrIndex }
-		| { context: 'mesocycle'; exerciseTemplate: MesocycleExerciseTemplateWithoutIdsOrIndex };
+		| { context: 'mesocycle'; exerciseTemplate: RoutineExerciseTemplate };
 
 	type EditableContextProps =
 		| {
@@ -36,7 +33,7 @@
 		  }
 		| {
 				context: 'mesocycle';
-				setEditingExercise: (exercise: MesocycleExerciseTemplateWithoutIdsOrIndex) => void;
+				setEditingExercise: (exercise: RoutineExerciseTemplate) => void;
 		  };
 
 	let { ...props }: ExerciseTemplateCardProps = $props();
