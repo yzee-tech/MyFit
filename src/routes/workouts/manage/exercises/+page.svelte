@@ -7,6 +7,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import { arraySum } from '$lib/utils.js';
+	import { formatWorkoutClock } from '$lib/utils/workoutLength';
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
@@ -30,6 +31,18 @@
 		data.userSettings.motivationalQuotesEnabled && data.userSettings.quotesDisplayModes.includes('BETWEEN_SETS');
 
 	let workoutData = $derived(workoutRunes.workoutData);
+
+	// The workout's clock and the rest since the last ticked set, for a new workout (not an edit).
+	// lastActivityAt is only ever set by markActivity() on a set or mini-set tick, and cleared only by
+	// resetStores(): unticking a set leaves it, so rest keeps counting from the last tick
+	let now = $state(new Date());
+	$effect(() => {
+		// Only writes `now`, never reads it: reading it here would re-run the effect every second and stack intervals
+		const timer = setInterval(() => (now = new Date()), 1000);
+		return () => clearInterval(timer);
+	});
+	let showClock = $derived(workoutRunes.editingWorkoutId === null && Boolean(workoutData?.startedAt));
+	let lastActivityAt = $derived(workoutRunes.lastActivityAt);
 	let workoutExercises = $derived(workoutRunes.workoutExercises);
 
 	let totalSets = $derived(
@@ -118,7 +131,18 @@
 	}
 </script>
 
-<H3>Exercises</H3>
+<div class="flex items-baseline justify-between gap-2">
+	<H3>Exercises</H3>
+	{#if showClock && workoutData}
+		<span class="text-sm font-semibold tabular-nums" aria-label="Workout time and rest">
+			⏱ <span data-testid="workout-clock">{formatWorkoutClock(workoutData.startedAt, now)}</span>
+			{#if lastActivityAt}
+				<span class="font-normal text-muted-foreground">· Rest</span>
+				<span class="text-primary" data-testid="workout-rest">{formatWorkoutClock(lastActivityAt, now)}</span>
+			{/if}
+		</span>
+	{/if}
+</div>
 
 <!-- Editing a past workout: its date, times and bodyweight are here, not on a page of their own -->
 {#if workoutData !== null && workoutRunes.editingWorkoutId !== null}
