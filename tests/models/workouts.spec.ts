@@ -51,7 +51,7 @@ test('create workout', async ({ page, userData }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
 	);
 });
 
@@ -176,7 +176,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 50 1 2 8 45 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Reps Load (kg) RIR 1 12 10 2 2 10 10 0 1 2 10 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Reps Load (kg) RIR 1 18 10 2 1 12 5 22 16 10 2 1 10 5 2Incline dumbbell press 2 Independent sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Reps Load (kg) RIR 1 14 20 2 2 12 15 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Reps Load (kg) RIR 1 18 180 2 2 12 180 0'
+		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 50 9 1 2 45 8 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Load (kg) Reps RIR 1 10 12 2 2 10 10 0 1 10 2 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Load (kg) Reps RIR 1 10 18 2 1 5 12 22 10 16 2 1 5 10 2Incline dumbbell press 2 Independent sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Load (kg) Reps RIR 1 20 14 2 2 15 12 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Load (kg) Reps RIR 1 180 18 2 2 180 12 0'
 	);
 });
 
@@ -247,10 +247,10 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (kg) RIR 1 12 0 3 2 11 0 3 3 10 0 0'
+		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Load (kg) Reps RIR 1 0 12 3 2 0 11 3 3 0 10 0'
 	);
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell rows 3 Straight sets of 10 to 15 reps Traps Reps Load (kg) RIR 1 15 40 3 2 14 40 3 3 15 40 0'
+		'Barbell rows 3 Straight sets of 10 to 15 reps Traps Load (kg) Reps RIR 1 40 15 3 2 40 14 3 3 40 15 0'
 	);
 });
 
@@ -284,7 +284,7 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Reps Load (kg) RIR 1 9 100 2 2 8 95 1'
+		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
 	);
 });
 
@@ -409,7 +409,7 @@ test('edit a workout', async ({ page }) => {
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Reps Load (kg) RIR 1 7 0 3 2 6 0 3 3 5 0 0'
+		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Load (kg) Reps RIR 1 0 7 3 2 0 6 3 3 0 5 0'
 	);
 });
 
@@ -557,7 +557,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	// History shows what was lifted
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await page.getByRole('tab', { name: 'Exercises' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Reps Load (lb) RIR 1 12 90');
+	await expect(page.getByRole('tabpanel')).toContainText('Load (lb) Reps RIR 1 90 12');
 
 	// Next trip the gym uses kg: 90 lb (40.8 kg) becomes 40 kg
 	await page.goto('/workouts');
@@ -930,6 +930,13 @@ async function fillSet(
 	if (numbers.RIR !== undefined) await page.locator(`[id="${id}-set-${set}-RIR"]`).fill(numbers.RIR);
 }
 const setBox = (page: Page, exercise: string, set: number) => page.getByTestId(`${exercise}-set-${set}-action`);
+/** Removing a set takes two taps on its bin: the first only gets it ready */
+async function removeSet(page: Page, exercise: string, set: number) {
+	const bin = page.getByTestId(`${exercise}-set-${set}-remove`);
+	await bin.click();
+	await expect(bin).toHaveAttribute('data-armed', 'true');
+	await bin.click();
+}
 
 test('first workout with a reps-only exercise: no load to enter, every set ticks, Next and Save work', async ({
 	page,
@@ -1064,14 +1071,14 @@ test('a note about a missing number stays with its set when another set is remov
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
 
 	// Set 1 goes: the old set 3 is now set 2, and the note and outline move with it
-	await page.getByTestId('Barbell rows-set-1-remove').click();
+	await removeSet(page, 'Barbell rows', 1);
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 2: enter load');
 	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toHaveValue('10');
 	await expect(page.locator('[id="Barbell\\ rows-set-2-load"]')).toHaveAttribute('aria-invalid', 'true');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).not.toHaveAttribute('aria-invalid', 'true');
 
 	// Removing the flagged set takes its note away
-	await page.getByTestId('Barbell rows-set-2-remove').click();
+	await removeSet(page, 'Barbell rows', 2);
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveCount(0);
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).not.toHaveAttribute('aria-invalid', 'true');
 });
@@ -1093,7 +1100,7 @@ test('add and remove sets; the routine prompt: closing it saves nothing, Update 
 	await fillSet(page, 'Barbell rows', 3, { reps: '9', load: '40' });
 	await page.getByTestId('Barbell rows-add-set').click();
 	await expect(page.locator('[id="Barbell\\ rows-set-4-reps"]')).toHaveValue('9');
-	await page.getByTestId('Face pulls-set-2-remove').click();
+	await removeSet(page, 'Face pulls', 2);
 	await expect(page.locator('[id="Face\\ pulls-set-3-reps"]')).toHaveCount(0);
 	for (const set of [1, 2, 3, 4]) await fillSet(page, 'Barbell rows', set, { reps: '10', load: '40' });
 	for (const set of [1, 2]) await fillSet(page, 'Face pulls', set, { reps: '15', load: '10' });
@@ -1383,13 +1390,14 @@ test('set row: the remove button is after the tick, hidden on a ticked set, off 
 	const remove = (exercise: string, set: number) => page.getByTestId(`${exercise}-set-${set}-remove`);
 	const tickBox = (await setBox(page, 'Barbell rows', 1).boundingBox())!;
 	const removeBox = (await remove('Barbell rows', 1).boundingBox())!;
-	expect(removeBox.x).toBeGreaterThan(tickBox.x + tickBox.width - 1);
+	// A gap between them, so a tap meant for the tick doesn't land on the bin
+	expect(removeBox.x - (tickBox.x + tickBox.width)).toBeGreaterThanOrEqual(8);
 
 	// Removed with a note about a missing number; Undo puts it back, numbers and note too
 	await fillSet(page, 'Barbell rows', 3, { reps: '10', RIR: '1' });
 	await setBox(page, 'Barbell rows', 3).click();
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
-	await remove('Barbell rows', 3).click();
+	await removeSet(page, 'Barbell rows', 3);
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveCount(0);
 	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
 	await page.getByRole('status').filter({ hasText: 'Set 3 removed' }).getByRole('button', { name: 'Undo' }).click();
@@ -1403,11 +1411,76 @@ test('set row: the remove button is after the tick, hidden on a ticked set, off 
 	await setBox(page, 'Barbell rows', 1).click();
 	await expect(remove('Barbell rows', 1)).toBeVisible();
 
-	// The last set can't be removed
-	await remove('Face pulls', 3).click();
-	await remove('Face pulls', 2).click();
+	// The last set can't be removed: its bin is off, and even taps that reach it (sent straight to the
+	// button) neither get it ready nor remove it
+	await removeSet(page, 'Face pulls', 3);
+	await removeSet(page, 'Face pulls', 2);
 	await expect(remove('Face pulls', 1)).toBeDisabled();
+	await remove('Face pulls', 1).dispatchEvent('click');
+	await expect(remove('Face pulls', 1)).toHaveAttribute('data-armed', 'false');
+	await remove('Face pulls', 1).dispatchEvent('click');
+	await expect(page.locator('[id="Face\\ pulls-set-1-reps"]')).toBeVisible();
 	await expectSetsFitPhone(page);
+});
+
+test('removing a set: one tap only gets the bin ready (red); any other tap, a tick or 3 seconds put it back', async ({
+	page
+}) => {
+	await page.clock.install();
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+
+	const bin = (set: number) => page.getByTestId(`Barbell rows-set-${set}-remove`);
+	const reps = (set: number) => page.locator(`[id="Barbell\\ rows-set-${set}-reps"]`);
+	await expect(reps(3)).toBeVisible();
+
+	// One tap: still there, the bin red and saying what the next tap does
+	await bin(3).click();
+	await expect(reps(3)).toBeVisible();
+	await expect(bin(3)).toHaveAttribute('data-armed', 'true');
+	await expect(bin(3)).toHaveAccessibleName('Tap again to remove set 3 of Barbell rows');
+	await expect(bin(3)).toHaveClass(/bg-destructive/);
+
+	// 3 seconds on, it's back to normal: the next tap only gets it ready again
+	await page.clock.fastForward(3100);
+	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
+	await expect(bin(3)).toHaveAccessibleName('Remove set 3 of Barbell rows');
+	await bin(3).click();
+	await expect(reps(3)).toBeVisible();
+
+	// A tap anywhere else puts it back, typing too
+	await page.getByRole('heading', { name: 'Exercises', level: 3 }).click();
+	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
+	await bin(3).click();
+	await reps(1).press('5');
+	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
+
+	// Another set's bin gets that one ready instead
+	await bin(3).click();
+	await bin(2).click();
+	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
+	await expect(bin(2)).toHaveAttribute('data-armed', 'true');
+	await expect(reps(3)).toBeVisible();
+
+	// Ticking the set puts it back, and a ticked set can't be removed: untick it and its bin starts over
+	await page.getByRole('heading', { name: 'Exercises', level: 3 }).click();
+	await fillSet(page, 'Barbell rows', 2, { reps: '10', load: '40', RIR: '2' });
+	await bin(2).click();
+	await expect(bin(2)).toHaveAttribute('data-armed', 'true');
+	await setBox(page, 'Barbell rows', 2).click();
+	await expect(bin(2)).toBeHidden();
+	await setBox(page, 'Barbell rows', 2).click();
+	await expect(bin(2)).toHaveAttribute('data-armed', 'false');
+	await bin(2).click();
+	await expect(reps(2)).toHaveValue('10');
+
+	// Two taps remove it, with Undo
+	await bin(2).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Set 2 removed' })).toBeVisible();
+	await expect(reps(3)).toHaveCount(0);
 });
 
 test('workout length on the list and the workout page; over 3 hours, “check times?” opens Edit', async ({
