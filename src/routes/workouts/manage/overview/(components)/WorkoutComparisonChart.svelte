@@ -24,6 +24,8 @@
 
 	let { previousWorkoutData, currentWorkoutData }: PropsType = $props();
 	let chartCanvas: HTMLCanvasElement;
+	// No legend: the picker under the chart names it
+	const chartOptions = { plugins: { legend: { display: false } } };
 	let chart: Chart<'bar', number[], string>;
 
 	const chartTypes = ['Work volume', 'Sets'] as const;
@@ -68,7 +70,8 @@
 							data: [previousWorkoutVolume, currentWorkoutVolume]
 						}
 					]
-				}
+				},
+				options: chartOptions
 			});
 		} else {
 			const previousWorkoutSets = previousWorkoutData.exercises.reduce((sets, exercise) => {
@@ -87,7 +90,8 @@
 							data: [previousWorkoutSets, currentWorkoutSets]
 						}
 					]
-				}
+				},
+				options: chartOptions
 			});
 		}
 	});

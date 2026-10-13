@@ -293,7 +293,13 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 test('drop sets: mini-sets line up under the load, reps and RIR boxes', async ({ page, userData }) => {
 	await setUpLastTime(userData.userId);
 	await startTestDay(page);
+	// A bin got ready to remove a set goes back to normal when a mini-set is added
+	const bin = page.getByTestId('Lateral raises-set-2-remove');
+	await bin.click();
+	await expect(bin).toHaveAttribute('data-armed', 'true');
 	await page.getByLabel('add-mini-set-to-set-1-of-Lateral raises').click();
+	await expect(bin).toHaveAttribute('data-armed', 'false');
+	await expect(box(page, 'Lateral raises', 2, 'reps')).toBeVisible();
 	for (const field of ['load', 'reps', 'RIR'] as const) {
 		const setBox = (await box(page, 'Lateral raises', 1, field).boundingBox())!;
 		const miniBox = (await page.locator(`[id="Lateral\\ raises-set-1-mini-set-1-${field}"]`).boundingBox())!;
@@ -333,4 +339,39 @@ test('editing a past workout: no "Previous" column and no reps hint', async ({ p
 	await box(page, 'Barbell rows', 1, 'load').fill('65');
 	await expect(hint(page, 'Barbell rows', 1)).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Adjust reps to the new load' })).toHaveCount(0);
+});
+
+test('past sets read weight, reps, RIR, like the workout screen: workout page, History and Stats', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	// Set 1 of last time's rows: 60 kg × 10 at RIR 2
+	const rowsOrder = /Load \(kg\)\s*Reps\s*RIR\s*1\s*60\s*10\s*2/;
+
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByRole('tab', { name: 'Exercises' }).click();
+	await expect(page.getByRole('tabpanel')).toContainText(rowsOrder);
+
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.getByLabel('add-exercise').click();
+	await pickExercise(page, 'Barbell rows');
+	await page.getByLabel('Sets').fill('3');
+	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	await expect(page.getByRole('dialog').filter({ hasText: 'History' })).toContainText(rowsOrder);
+
+	await page.goto('/stats?tab=exercises');
+	await expect(async () => {
+		await page.getByRole('combobox').filter({ hasText: 'Search for an exercise' }).click();
+		await expect(page.getByPlaceholder('Type here')).toBeVisible({ timeout: 1000 });
+	}).toPass();
+	await page.getByPlaceholder('Type here').fill('Barbell rows');
+	await page.getByRole('option', { name: 'Barbell rows' }).click();
+	await expect(page.locator('main')).toContainText(rowsOrder);
 });

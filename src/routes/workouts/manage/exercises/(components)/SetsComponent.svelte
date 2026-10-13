@@ -116,10 +116,40 @@
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
-	/** Removes a set that isn't done yet (a ticked set is done: untick it first), with a way back */
+	// The set whose bin was tapped once: a second tap on it removes the set. Next to the tick, so one
+	// tap only gets it ready. Any other tap or key, or a few seconds, and it's back to normal
+	let armedSet: WorkoutExerciseSet | null = $state.raw(null);
+	$effect(() => {
+		if (!armedSet) return;
+		const disarm = (e: Event) => {
+			if (!(e.target instanceof Element && e.target.closest('[data-armed="true"]'))) armedSet = null;
+		};
+		const timer = setTimeout(() => (armedSet = null), 3000);
+		// On the press, not the click: the click would come after the bin's own tap
+		document.addEventListener('pointerdown', disarm, true);
+		document.addEventListener('keydown', disarm, true);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('pointerdown', disarm, true);
+			document.removeEventListener('keydown', disarm, true);
+		};
+	});
+
+	/**
+	 * Removes a set that isn't done yet (a ticked set is done: untick it first), with a way back. The
+	 * first tap only gets it ready; the second removes it, if it's still that set and still removable
+	 */
 	function removeSet(idx: number) {
 		const set = exercise.sets[idx];
-		if (exercise.sets.length <= 1 || !set || set.completed) return;
+		if (exercise.sets.length <= 1 || !set || set.completed) {
+			armedSet = null;
+			return;
+		}
+		if (armedSet !== set) {
+			armedSet = set;
+			return;
+		}
+		armedSet = null;
 		const originalLoad = originalSetLoads[idx];
 		// Its note about missing numbers comes back with it
 		const wasTried = triedToTick.delete(set);
@@ -338,11 +368,12 @@
 	}
 </script>
 
-<!-- Set | Previous | load | Reps | RIR | tick | remove. The spare width is shared: Previous gets a part, the boxes the rest -->
+<!-- Set | Previous | load | Reps | RIR | tick | remove. The spare width is shared: Previous gets a part, the boxes the rest.
+     The remove column is wider than its bin, which sits at its far side: a gap from the tick -->
 <div
 	class="grid items-center gap-1 {editing
-		? 'grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.25rem_1.5rem]'
-		: 'grid-cols-[1.5rem_minmax(3rem,0.9fr)_minmax(3.25rem,1fr)_minmax(2.75rem,0.85fr)_minmax(2.25rem,0.7fr)_2.25rem_1.5rem] md:grid-cols-[2rem_minmax(5rem,1fr)_6rem_5rem_4rem_2.25rem_2.25rem]'}"
+		? 'grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem]'
+		: 'grid-cols-[1.5rem_minmax(3rem,0.9fr)_minmax(3.25rem,1fr)_minmax(2.75rem,0.85fr)_minmax(2.25rem,0.7fr)_2.25rem_2rem] md:grid-cols-[2rem_minmax(5rem,1fr)_6rem_5rem_4rem_2.25rem_2.25rem]'}"
 	data-testid="{exercise.name}-sets"
 >
 	<!-- Headings sit on the bottom line, so a stacked "KG / (BW)" lines up with the others -->
@@ -494,16 +525,22 @@
 					<CheckIcon />
 				{/if}
 			</Button>
-			<!-- Less often needed than the tick, so after it. A ticked set is done: its space stays, the button doesn't -->
+			<!-- Less often needed than the tick, so after it. A ticked set is done: its space stays, the button doesn't.
+			     Red once tapped: tap again to remove -->
 			<Button
-				class="h-9 w-6 p-0.5 text-muted-foreground {set.completed ? 'invisible' : ''}"
+				class="h-9 w-6 justify-self-end p-0.5 {armedSet === set ? '' : 'text-muted-foreground'} {set.completed
+					? 'invisible'
+					: ''}"
 				aria-hidden={set.completed}
-				aria-label="Remove set {idx + 1} of {exercise.name}"
+				aria-label={armedSet === set
+					? `Tap again to remove set ${idx + 1} of ${exercise.name}`
+					: `Remove set ${idx + 1} of ${exercise.name}`}
+				data-armed={armedSet === set}
 				data-testid="{exercise.name}-set-{idx + 1}-remove"
 				disabled={exercise.sets.length <= 1 || set.completed}
 				onclick={() => removeSet(idx)}
 				tabindex={set.completed ? -1 : undefined}
-				variant="ghost"
+				variant={armedSet === set ? 'destructive' : 'ghost'}
 			>
 				<TrashIcon class="h-4 w-4" />
 			</Button>
