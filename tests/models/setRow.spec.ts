@@ -293,7 +293,13 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 test('drop sets: mini-sets line up under the load, reps and RIR boxes', async ({ page, userData }) => {
 	await setUpLastTime(userData.userId);
 	await startTestDay(page);
+	// A bin got ready to remove a set goes back to normal when a mini-set is added
+	const bin = page.getByTestId('Lateral raises-set-2-remove');
+	await bin.click();
+	await expect(bin).toHaveAttribute('data-armed', 'true');
 	await page.getByLabel('add-mini-set-to-set-1-of-Lateral raises').click();
+	await expect(bin).toHaveAttribute('data-armed', 'false');
+	await expect(box(page, 'Lateral raises', 2, 'reps')).toBeVisible();
 	for (const field of ['load', 'reps', 'RIR'] as const) {
 		const setBox = (await box(page, 'Lateral raises', 1, field).boundingBox())!;
 		const miniBox = (await page.locator(`[id="Lateral\\ raises-set-1-mini-set-1-${field}"]`).boundingBox())!;

@@ -1458,6 +1458,13 @@ test('removing a set: one tap only gets the bin ready (red); any other tap, a ti
 	await reps(1).press('5');
 	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
 
+	// Adding a set puts it back too
+	await bin(3).click();
+	await page.getByTestId('Barbell rows-add-set').click();
+	await expect(bin(3)).toHaveAttribute('data-armed', 'false');
+	await removeSet(page, 'Barbell rows', 4);
+	await expect(reps(4)).toHaveCount(0);
+
 	// Another set's bin gets that one ready instead
 	await bin(3).click();
 	await bin(2).click();
