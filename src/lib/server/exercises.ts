@@ -6,7 +6,6 @@
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
 import type { MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
-import { withRoutinesTransaction } from './blockCache';
 
 /** The details that belong to the exercise itself, not to a routine or a workout */
 export type ExerciseDetails = {
@@ -104,17 +103,4 @@ export function linkToExercise<T extends ExerciseDetails>(item: T, byName: Map<s
 		customMuscleGroup: exercise.customMuscleGroup,
 		bodyweightFraction: exercise.bodyweightFraction
 	};
-}
-
-/** Renames an exercise everywhere: routines, blocks and past workouts all follow */
-export async function renameExercise(userId: string, oldName: string, newName: string) {
-	const trimmed = newName.trim();
-	if (!trimmed) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a name' });
-	const exercise = await prisma.exercise.findUnique({ where: { userId_name: { userId, name: oldName } } });
-	if (!exercise) throw new TRPCError({ code: 'NOT_FOUND', message: `Exercise ${oldName} not found` });
-	if (trimmed === oldName) return exercise;
-	const clash = await prisma.exercise.findUnique({ where: { userId_name: { userId, name: trimmed } } });
-	if (clash) throw new TRPCError({ code: 'CONFLICT', message: `An exercise called ${trimmed} already exists` });
-	await withRoutinesTransaction((tx) => updateExerciseEverywhere(tx, exercise.id, { name: trimmed }));
-	return exercise;
 }

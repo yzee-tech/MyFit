@@ -108,8 +108,16 @@
 		note = suggestion.note ?? '';
 	}
 
+	// Spaces get past `required` but aren't a name
+	let triedBlankName = $state(false);
+	let nameIsBlank = $derived(triedBlankName && !name.trim());
+
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
+		if (!name.trim()) {
+			triedBlankName = true;
+			return;
+		}
 		if (!targetMuscleGroup) return;
 		saving = true;
 		try {
@@ -137,7 +145,18 @@
 <form class="grid gap-4" onsubmit={submit}>
 	<div class="grid gap-1.5">
 		<Label for="exercise-form-name">Name</Label>
-		<Input id="exercise-form-name" maxlength={100} placeholder="e.g. Incline DB press" required bind:value={name} />
+		<Input
+			id="exercise-form-name"
+			class={nameIsBlank ? 'border-destructive' : ''}
+			aria-invalid={nameIsBlank}
+			maxlength={100}
+			placeholder="e.g. Incline DB press"
+			required
+			bind:value={name}
+		/>
+		{#if nameIsBlank}
+			<p class="text-sm text-destructive" data-testid="exercise-form-name-missing" role="alert">Enter a name</p>
+		{/if}
 		{#if existingMatches.length > 0}
 			<div class="mt-1 grid gap-1" data-testid="existing-exercise-matches">
 				<span class="text-xs font-medium">Already on your list</span>
