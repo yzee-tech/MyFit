@@ -63,6 +63,16 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	expect(await prisma.exercise.count({ where: { userId: userData.userId, name: 'Cable lateral raises' } })).toEqual(1);
 });
 
+/** Exercises › the exercise › ☰ › Edit: a new name, then Save */
+async function renameOnExercisesPage(page: Page, from: string, to: string) {
+	await page.goto('/exercises');
+	await page.getByRole('link', { name: new RegExp(`^${from}`) }).click();
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByLabel('Name', { exact: true }).fill(to);
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+}
+
 test('renaming an exercise renames it everywhere and keeps its progression', async ({ page, userData }) => {
 	await page.goto('/exercise-splits');
 	await createMesocycle(page);
@@ -87,15 +97,19 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByRole('button', { name: 'Next' }).click();
 	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
 
-	// Rename it on Stats › Exercises (an old link still gets there)
+	// Stats › Exercises shows it, with no way to rename it there (an old link still gets there)
 	await page.goto('/exercise-stats');
 	await openExerciseSearch(page);
 	await page.getByPlaceholder('Type here').fill('Barbell rows');
 	await page.getByRole('option', { name: 'Barbell rows' }).click();
-	await page.getByLabel('Rename exercise').click();
-	await page.getByLabel('New name').fill('Bent-over rows');
-	await page.getByRole('button', { name: 'Rename', exact: true }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Renamed 1 exercises' })).toBeVisible();
+	await expect(page.getByRole('combobox').filter({ hasText: 'Barbell rows' })).toBeVisible();
+	await expect(page.getByLabel('Rename exercise')).toHaveCount(0);
+	await expect(page.getByText('Bulk rename')).toHaveCount(0);
+
+	// Rename it on its page: Exercises › the exercise › Edit
+	await renameOnExercisesPage(page, 'Barbell rows', 'Bent-over rows');
+	await expect(page.getByRole('status').filter({ hasText: 'Exercise saved everywhere' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Bent-over rows' })).toBeVisible();
 
 	// My routines and the past workout have the new name
 	const renamed = await prisma.exercise.findUniqueOrThrow({
@@ -125,16 +139,19 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await expect(page.locator('[id="Bent-over\\ rows-set-1-load"]')).toHaveValue('40');
 
 	// A name that's taken is refused, rather than mixing two exercises
-	await page.goto('/stats?tab=exercises');
-	await openExerciseSearch(page);
-	await page.getByPlaceholder('Type here').fill('Bent-over rows');
-	await page.getByRole('option', { name: 'Bent-over rows' }).click();
-	await page.getByLabel('Rename exercise').click();
-	await page.getByLabel('New name').fill('Pull-ups');
-	await page.getByRole('button', { name: 'Rename', exact: true }).click();
+	await renameOnExercisesPage(page, 'Bent-over rows', 'Pull-ups');
 	await expect(
 		page.getByRole('status').filter({ hasText: 'An exercise called Pull-ups already exists' })
 	).toBeVisible();
+
+	// Only spaces isn't a name: it says so, and nothing is saved
+	await page.getByLabel('Name', { exact: true }).fill('   ');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-form-name-missing')).toHaveText('Enter a name');
+	await expect(page.getByLabel('Name', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+	await page.getByLabel('Name', { exact: true }).fill('Bent-over rows');
+	await expect(page.getByTestId('exercise-form-name-missing')).toHaveCount(0);
+	expect(await prisma.exercise.count({ where: { userId: userData.userId, name: 'Bent-over rows' } })).toEqual(1);
 });
 
 test('Exercises page: an exercise outside any routine, added to routines, removed, deleted', async ({

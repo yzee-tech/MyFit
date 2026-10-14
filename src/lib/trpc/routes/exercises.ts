@@ -178,6 +178,10 @@ async function findOwnExercise(userId: string, id: string) {
 	return exercise;
 }
 
+/**
+ * The one check that a name is free, for creating and renaming. Kept in this file on purpose: a second
+ * copy elsewhere would let the two drift apart
+ */
 async function assertNameFree(userId: string, name: string, exceptId?: string) {
 	const clash = await prisma.exercise.findUnique({ where: { userId_name: { userId, name } } });
 	if (clash && clash.id !== exceptId) {

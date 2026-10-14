@@ -1,13 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { untrack } from 'svelte';
-	import { TRPCClientError } from '@trpc/client';
-	import { invalidateAll } from '$app/navigation';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { RangeCalendar } from '$lib/components/ui/range-calendar/index.js';
 	import * as Select from '$lib/components/ui/select';
@@ -18,11 +14,9 @@
 	import { DateFormatter, getLocalTimeZone } from '@internationalized/date';
 	import type { DateRange, Selected } from 'bits-ui';
 	import type { InfiniteEvent } from 'svelte-infinite-loading';
-	import { toast } from 'svelte-sonner';
 	import CalendarIcon from 'virtual:icons/lucide/calendar';
 	import ChevronsUpDown from 'virtual:icons/lucide/chevrons-up-down';
 	import FilterIcon from 'virtual:icons/lucide/filter';
-	import RenameIcon from 'virtual:icons/lucide/folder-pen';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import WorkoutExerciseCard from '../workouts/[workoutId]/(components)/WorkoutExerciseCard.svelte';
 	import ExerciseStatsChart from './ExerciseStatsChart.svelte';
@@ -36,10 +30,6 @@
 
 	let { data }: { data: { exerciseList: Promise<BasicExerciseData[]> } } = $props();
 	let exercisesByMuscleGroup = $state<{ group: string; exercises: BasicExerciseData[] }[]>();
-
-	let renameExerciseOpen = $state(false);
-	let newExerciseName = $state<string>();
-	let renamingExercise = $state(false);
 
 	let searchText = $state('');
 	// Opening it before the page is ready left it blank, so it needed two taps: it starts closed
@@ -87,7 +77,6 @@
 		searchText = '';
 		searchOpen = false;
 		exerciseInstances = [];
-		renameExerciseOpen = false;
 		loadExercises().then(() => {
 			// Opened from an exercise's page
 			const requested = untrack(() => $page.url.searchParams.get('exercise'));
@@ -139,23 +128,6 @@
 		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
 		if (newExercisesFound.length < 10) infiniteEvent.detail.complete();
 	}
-
-	async function renameExercise(e: SubmitEvent) {
-		e.preventDefault();
-		renamingExercise = true;
-		try {
-			// Renames it everywhere: routines, blocks and past workouts
-			const { count } = await trpc().users.renameExercises.mutate({
-				oldName: selectedExercise!,
-				newName: newExerciseName!
-			});
-			toast.success(`Renamed ${count} exercises`);
-			await invalidateAll();
-		} catch (error) {
-			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to rename');
-		}
-		renamingExercise = false;
-	}
 </script>
 
 <div class="flex gap-1">
@@ -191,34 +163,6 @@
 					{/if}
 				</Command.List>
 			</Command.Root>
-		</Popover.Content>
-	</Popover.Root>
-	<Popover.Root bind:open={renameExerciseOpen}>
-		<Popover.Trigger asChild let:builder>
-			<Button
-				builders={[builder]}
-				size="icon"
-				variant="secondary"
-				aria-label="Rename exercise"
-				class="shrink-0"
-				disabled={selectedExercise === undefined}
-			>
-				<RenameIcon />
-			</Button>
-		</Popover.Trigger>
-		<Popover.Content class="w-fit">
-			<span class="font-semibold">Bulk rename to</span>
-			<form class="my-2 flex w-full max-w-sm flex-col gap-1.5" onsubmit={renameExercise}>
-				<Label for="new-name">New name</Label>
-				<Input required id="new-name" placeholder="Type here" bind:value={newExerciseName} />
-				<Button size="sm" type="submit" disabled={renamingExercise}>
-					{#if renamingExercise}
-						<LoaderCircle class="animate-spin" />
-					{:else}
-						Rename
-					{/if}
-				</Button>
-			</form>
 		</Popover.Content>
 	</Popover.Root>
 	<Popover.Root>

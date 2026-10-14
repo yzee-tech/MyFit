@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { t } from '$lib/trpc/t';
 import { prisma } from '$lib/prisma';
-import { renameExercise } from '$lib/server/exercises';
 import { QuotesDisplayModeSchema } from '$lib/zodSchemas';
 
 export const users = t.router({
@@ -29,15 +28,6 @@ export const users = t.router({
 		};
 		return entityCounts;
 	}),
-
-	/** Renames an exercise everywhere: routines, blocks and past workouts */
-	renameExercises: t.procedure
-		.input(z.object({ oldName: z.string(), newName: z.string() }))
-		.mutation(async ({ ctx, input }) => {
-			const exercise = await renameExercise(ctx.userId, input.oldName, input.newName);
-			const count = await prisma.workoutExercise.count({ where: { exerciseId: exercise.id } });
-			return { count };
-		}),
 
 	getUserSettings: t.procedure.query(async ({ ctx }) => {
 		const userSettings = await prisma.userSettings.findUnique({
