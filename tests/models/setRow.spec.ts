@@ -324,6 +324,70 @@ test('an exercise added during a workout gets its "Previous" too', async ({ page
 	await expect(previous(page, 'Barbell rows', 3)).toHaveText('–');
 });
 
+test('suggested numbers look lighter until typed, copied in, or the set is ticked; kept after a reload and a unit switch', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const suggested = (set: number, field: 'load' | 'reps' | 'RIR') =>
+		box(page, 'Barbell rows', set, field).getAttribute('data-suggested');
+	const expectSuggested = async (set: number, field: 'load' | 'reps' | 'RIR', value: boolean) =>
+		expect(box(page, 'Barbell rows', set, field)).toHaveAttribute('data-suggested', String(value));
+
+	// Suggestions to start with, in the lighter colour; an empty box (last time's set 3 was skipped) isn't one
+	for (const set of [1, 2])
+		for (const field of ['load', 'reps', 'RIR'] as const) await expectSuggested(set, field, true);
+	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveClass(/(^|\s)text-muted-foreground(\s|$)/);
+	await expect(box(page, 'Barbell rows', 3, 'load')).toHaveValue('');
+	await expectSuggested(3, 'load', false);
+
+	// Typing in a box makes that box the person's, not the rest of the set
+	await box(page, 'Barbell rows', 1, 'reps').fill('11');
+	await expectSuggested(1, 'reps', false);
+	await expectSuggested(1, 'load', true);
+	await expect(box(page, 'Barbell rows', 1, 'reps')).not.toHaveClass(/(^|\s)text-muted-foreground(\s|$)/);
+
+	// Last time's numbers, copied on purpose: weight and reps
+	await previous(page, 'Barbell rows', 2).click();
+	await expectSuggested(2, 'load', false);
+	await expectSuggested(2, 'reps', false);
+	await expectSuggested(2, 'RIR', true);
+
+	// A ticked set reads as done; unticked, its marks are as they were
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	for (const field of ['load', 'reps', 'RIR'] as const) await expectSuggested(1, field, false);
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await expectSuggested(1, 'load', true);
+	await expectSuggested(1, 'reps', false);
+	await expectSuggested(1, 'RIR', true);
+
+	// A new weight, then the reps hint's Use: both the person's
+	const pullUps = (field: 'load' | 'reps' | 'RIR') => box(page, 'Pull-ups', 1, field);
+	await expect(pullUps('reps')).toHaveAttribute('data-suggested', 'true');
+	await pullUps('load').fill('20');
+	await hint(page, 'Pull-ups', 1).getByRole('button').click();
+	await expect(pullUps('load')).toHaveAttribute('data-suggested', 'false');
+	await expect(pullUps('reps')).toHaveAttribute('data-suggested', 'false');
+	await expect(pullUps('RIR')).toHaveAttribute('data-suggested', 'true');
+
+	// Kept on the phone: a reload brings the same marks back
+	await page.reload();
+	await expectSuggested(1, 'reps', false);
+	await expectSuggested(1, 'load', true);
+	await expectSuggested(2, 'load', false);
+	await expectSuggested(2, 'RIR', true);
+	await expect(pullUps('reps')).toHaveAttribute('data-suggested', 'false');
+
+	// Switching the unit converts the numbers and keeps the marks
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
+	await expectSuggested(1, 'reps', false);
+	await expectSuggested(1, 'load', true);
+	await expectSuggested(2, 'load', false);
+	expect(await suggested(2, 'RIR')).toBe('true');
+});
+
 test('editing a past workout: no "Previous" column and no reps hint', async ({ page, userData }) => {
 	const workout = await setUpLastTime(userData.userId);
 	await page.goto(`/workouts/${workout.id}`);
@@ -332,6 +396,8 @@ test('editing a past workout: no "Previous" column and no reps hint', async ({ p
 	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
 	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveValue('60');
 	await expect(page.getByTestId('Barbell rows-sets')).toContainText('Set KG Reps RIR');
+	// Its numbers are the record: none look like suggestions
+	await expect(page.locator('[data-suggested="true"]')).toHaveCount(0);
 	await expect(page.getByTestId('Barbell rows-sets')).not.toContainText('Previous');
 	await expect(previous(page, 'Barbell rows', 1)).toHaveCount(0);
 	// A weight fixed after the fact: no guess at the reps

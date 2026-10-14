@@ -145,11 +145,19 @@ export function getWorkoutVolume(workout: Workout) {
 	return arraySum(workout.workoutExercises.map((exercise) => getExerciseVolume(exercise, workout.userBodyweight)));
 }
 
+/** A set's boxes that can hold a suggestion */
+export type SetField = 'reps' | 'load' | 'RIR';
+
 type SetInProgress = {
 	reps: number | undefined;
 	load: number | undefined;
 	RIR: number | undefined;
 	completed: boolean;
+	/**
+	 * Boxes the person made theirs (typed in, or copied from last time, a reps hint or History). The
+	 * others still hold the app's suggestion and look lighter. Only on the phone: not saved
+	 */
+	chosen?: SetField[];
 };
 
 export type PreviousPerformance = {

@@ -20,7 +20,8 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 	const exercisesInKg = workoutRunes.workoutExercises.map((ex) => convertExerciseLoads(ex, 'toKg'));
 	const workoutExercisesSets = exercisesInKg.map((ex) => {
 		return ex.sets.map((_set, idx) => {
-			const { completed, ...set } = _set;
+			// Ticks and which boxes were typed are for the workout screen only: the set schema is strict
+			const { completed, chosen, ...set } = _set;
 			if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
 			return { ...set, setIndex: idx };
 		});

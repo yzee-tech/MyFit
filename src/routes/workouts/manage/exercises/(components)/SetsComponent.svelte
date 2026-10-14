@@ -11,6 +11,7 @@
 	import {
 		cleanupInProgressMiniSets,
 		solveBergerFormula,
+		type SetField,
 		type WorkoutExerciseInProgress
 	} from '$lib/utils/workoutUtils';
 	import CheckIcon from 'virtual:icons/lucide/check';
@@ -259,6 +260,27 @@
 
 	// Editing a past workout: its numbers are the record, so no "last time" and no reps hints
 	let editing = $derived(workoutRunes.editingWorkoutId !== null);
+
+	/**
+	 * A box still holding the app's suggestion: lighter until it's typed in, copied in on purpose, or
+	 * the set is ticked (ticking only changes the look: unticked, the marks are as they were)
+	 */
+	function isSuggested(set: WorkoutExerciseSet, field: SetField) {
+		if (editing || set.completed || set.skipped || typeof set[field] !== 'number') return false;
+		return !set.chosen?.includes(field);
+	}
+
+	/** The box is the person's now: typed in, or copied in on purpose */
+	function markChosen(set: WorkoutExerciseSet, ...fields: SetField[]) {
+		// A past workout's numbers are all real already
+		if (editing) return;
+		const chosen = new Set([...(set.chosen ?? []), ...fields]);
+		if (chosen.size === set.chosen?.length) return;
+		set.chosen = [...chosen];
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+	}
+	const suggestedClass = (set: WorkoutExerciseSet, field: SetField) =>
+		isSuggested(set, field) ? 'text-muted-foreground' : '';
 	let loadKind: LoadKind = $derived(
 		repsOnly
 			? 'repsOnly'
@@ -293,6 +315,7 @@
 			// Last time's reps go with last time's weight: nothing to adjust
 			originalSetLoads[idx] = previous.load;
 		}
+		markChosen(set, ...(hasLoadBox(idx) ? (['reps', 'load'] as const) : (['reps'] as const)));
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -361,6 +384,7 @@
 		if (!hint) return;
 		for (const [i, reps] of hint.reps) {
 			exercise.sets[i].reps = reps;
+			markChosen(exercise.sets[i], 'reps');
 			originalSetLoads[i] = hint.load;
 		}
 		originalSetLoads[idx] = hint.load;
@@ -472,8 +496,10 @@
 				{:else if idx === 0 || !isSameLoadExercise}
 					<Input
 						id="{exercise.name}-set-{idx + 1}-load"
-						class="{boxClass} {isMissing(idx, 'load') ? 'border-destructive' : ''}"
+						class="{boxClass} {suggestedClass(set, 'load')} {isMissing(idx, 'load') ? 'border-destructive' : ''}"
 						aria-invalid={isMissing(idx, 'load')}
+						data-suggested={isSuggested(set, 'load')}
+						oninput={() => markChosen(set, 'load')}
 						disabled={set.completed}
 						aria-label={isLevels ? `Set ${idx + 1} level` : undefined}
 						min={isLevels ? 1 : exercise.bodyweightFraction ? undefined : 0.25}
@@ -487,8 +513,10 @@
 				{/if}
 				<Input
 					id="{exercise.name}-set-{idx + 1}-reps"
-					class="{boxClass} {isMissing(idx, 'reps') ? 'border-destructive' : ''}"
+					class="{boxClass} {suggestedClass(set, 'reps')} {isMissing(idx, 'reps') ? 'border-destructive' : ''}"
 					aria-invalid={isMissing(idx, 'reps')}
+					data-suggested={isSuggested(set, 'reps')}
+					oninput={() => markChosen(set, 'reps')}
 					disabled={set.completed}
 					min={1}
 					type="number"
@@ -496,8 +524,10 @@
 				/>
 				<Input
 					id="{exercise.name}-set-{idx + 1}-RIR"
-					class="{boxClass} {isMissing(idx, 'RIR') ? 'border-destructive' : ''}"
+					class="{boxClass} {suggestedClass(set, 'RIR')} {isMissing(idx, 'RIR') ? 'border-destructive' : ''}"
 					aria-invalid={isMissing(idx, 'RIR')}
+					data-suggested={isSuggested(set, 'RIR')}
+					oninput={() => markChosen(set, 'RIR')}
 					disabled={set.completed}
 					type="number"
 					bind:value={set.RIR}
