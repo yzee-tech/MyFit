@@ -127,10 +127,38 @@ test('Stats overview: workouts, time, volume and sets for the last 30 days again
 	const muscles = page.getByTestId('stats-muscles').getByRole('listitem');
 	await expect(muscles).toHaveText(['Side delts 4 · 0', 'Soleus 1 · 0', 'Lats 0 · 2']);
 
+	// Progress over the 30 days: one bar a day; the totals match the cards
+	await expect(page.getByTestId('stats-progress-chart')).toHaveAttribute('data-bars', '30');
+	await expect(page.getByTestId('stats-progress')).toContainText('2 h 5 min in the last 30 days');
+	await page.getByRole('radio', { name: 'Volume' }).click();
+	await expect(page.getByRole('radio', { name: 'Volume' })).toHaveAttribute('aria-checked', 'true');
+	await expect(page.getByTestId('stats-progress-total')).toHaveText('1,140 kg');
+	// 15 + 15 + 12 + 12 + 20 (the skipped set doesn't count)
+	await page.getByRole('radio', { name: 'Reps' }).click();
+	await expect(page.getByTestId('stats-progress-total')).toHaveText('74 reps');
+
 	// The last 7 days: only the latest two
 	await page.getByLabel('Last 7 days').click();
 	await expect(page.getByTestId('stats-workouts-current')).toHaveText('2');
 	await expect(page.getByTestId('stats-sets-current')).toHaveText('3');
+	await expect(page.getByTestId('stats-progress-chart')).toHaveAttribute('data-bars', '7');
+	await expect(page.getByTestId('stats-progress-total')).toHaveText('44 reps');
+
+	// The year so far, against the same dates last year (none then)
+	const daysAgo = [10, 3, 2, 40].map((days) => new Date(Date.now() - days * 86400000));
+	const thisYear = daysAgo.filter((date) => date.getFullYear() === new Date().getFullYear()).length;
+	await page.getByLabel('Year to date').click();
+	await expect(page.getByTestId('stats-workouts-current')).toHaveText(String(thisYear));
+	await expect(page.getByTestId('stats-workouts-previous')).toHaveText('0 before');
+	await expect(page.getByTestId('stats-workouts-previous')).toHaveAttribute('title', 'The same dates last year');
+
+	// All time: every workout, nothing to compare with
+	await page.getByLabel('All time').click();
+	await expect(page.getByTestId('stats-workouts-current')).toHaveText('4');
+	await expect(page.getByTestId('stats-workouts-previous')).toHaveCount(0);
+	await expect(page.getByTestId('stats-progress')).toContainText('in all time');
+	await expect(muscles).toHaveText(['Side delts 4', 'Lats 2', 'Soleus 1']);
+	await expect(page.getByText('now · before')).toHaveCount(0);
 });
 
 test('exercise stats: each workout once, reps-only exercises chart reps, and old links still work', async ({

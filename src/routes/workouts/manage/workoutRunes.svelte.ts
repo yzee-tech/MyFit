@@ -70,8 +70,10 @@ function createWorkoutRunes() {
 	}
 
 	function saveStoresToLocalStorage() {
-		// Changing this shape? Version the key (workoutRunes:v2) and move the old one over on load: a
-		// reload (like the automatic update) must never lose a workout in progress
+		// A breaking change to this shape (a field renamed, removed or retyped) needs a versioned key
+		// (workoutRunes:v2) and the old one moved over on load: a reload (like the automatic update) must
+		// never lose a workout in progress. An optional field read with a default (like a set's `chosen`)
+		// doesn't
 		localStorage.setItem(
 			'workoutRunes',
 			JSON.stringify({
@@ -282,6 +284,10 @@ function createWorkoutRunes() {
 				...historySet,
 				load: sameKindOfLoad ? historySet.load : exerciseToEdit.sets[i].load,
 				completed: false,
+				// Copied on purpose: these are the person's numbers now, not suggestions
+				chosen: sameKindOfLoad
+					? ['reps', 'load', 'RIR']
+					: ['reps', 'RIR', ...(exerciseToEdit.sets[i].chosen?.includes('load') ? (['load'] as const) : [])],
 				miniSets: historySet.miniSets.map((miniSet) => {
 					const { id, workoutExerciseSetId, ...restOfTheMiniSet } = miniSet;
 					return { ...restOfTheMiniSet, completed: false };
