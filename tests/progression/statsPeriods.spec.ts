@@ -28,17 +28,51 @@ function workout(startedAt: Date, minutes: number, sets: { reps: number; load: n
 // Wednesday 15 October 2026, 18:00 local time
 const now = new Date(2026, 9, 15, 18, 0);
 
-test('periods: days against the days before, the year so far against the same dates last year, all time alone', () => {
-	const month = statsRanges(30, now);
-	expect(month.current.from).toEqual(new Date(now.getTime() - 30 * 86400000));
-	expect(month.previous!.to).toEqual(month.current.from);
+test('periods: calendar days from midnight against the days before, the year against the same dates last year, all time alone', () => {
+	const week = statsRanges(7, now);
+	// Today and the 6 days before: from midnight on Friday 9 October
+	expect(week.current).toEqual({ from: new Date(2026, 9, 9), to: now });
+	expect(week.previous).toEqual({ from: new Date(2026, 9, 2), to: new Date(2026, 9, 9) });
+	expect(statsRanges(30, now).current.from).toEqual(new Date(2026, 8, 16));
 
-	const yearStart = new Date(2026, 0, 1);
-	const ytd = statsRanges('ytd', now, yearStart);
-	expect(ytd.current).toEqual({ from: yearStart, to: now });
+	const ytd = statsRanges('ytd', now);
+	expect(ytd.current).toEqual({ from: new Date(2026, 0, 1), to: now });
 	expect(ytd.previous).toEqual({ from: new Date(2025, 0, 1), to: new Date(2025, 9, 15, 18, 0) });
 
 	expect(statsRanges('all', now)).toEqual({ current: { from: null, to: now }, previous: null });
+});
+
+test('a week with a clock change is still 7 calendar days, each from midnight', () => {
+	const zone = process.env.TZ;
+	// The UK's clocks go back on Sunday 25 October 2026
+	process.env.TZ = 'Europe/London';
+	try {
+		const later = new Date(2026, 9, 28, 12, 0);
+		const { current, previous } = statsRanges(7, later);
+		expect([current.from!.getDate(), current.from!.getHours()]).toEqual([22, 0]);
+		expect([previous!.from!.getDate(), previous!.from!.getHours()]).toEqual([15, 0]);
+		expect(progressBars([], 7, current).map((bar) => bar.start.getDate())).toEqual([22, 23, 24, 25, 26, 27, 28]);
+	} finally {
+		process.env.TZ = zone;
+	}
+});
+
+test('the edges: the cards and the chart count the same workouts', () => {
+	const workouts = [
+		// 6 days ago, just after midnight: the first day of the 7
+		workout(new Date(2026, 9, 9, 0, 30), 30, [{ reps: 10, load: 50 }]),
+		// 7 days ago, late in the day (later than now's time of day): the week before
+		workout(new Date(2026, 9, 8, 23, 30), 40, [{ reps: 10, load: 50 }]),
+		workout(new Date(2026, 9, 15, 7, 0), 60, [{ reps: 10, load: 50 }])
+	];
+	const ranges = statsRanges(7, now);
+	const overview = overviewStats(workouts, ranges);
+	expect(overview.current.workouts).toBe(2);
+	expect(overview.previous!.workouts).toBe(1);
+	const bars = progressBars(overview.progress, 7, ranges.current);
+	expect(bars).toHaveLength(7);
+	expect(bars.reduce((sum, bar) => sum + bar.minutes, 0)).toBe(overview.current.minutes);
+	expect(bars[0].minutes).toBe(30);
 });
 
 test('all time: everything counts, nothing to compare with', () => {
@@ -71,16 +105,17 @@ test('bars: by day for 7 and 30 days, by week from Monday for 90 days and the ye
 		progressPoint(workout(new Date(2026, 9, 13, 7), 30, [{ reps: 10, load: 50 }])),
 		progressPoint(workout(new Date(2026, 6, 20, 7), 40, [{ reps: 10, load: 50 }]))
 	];
+	const bars = (period: 7 | 30 | 90 | 'ytd' | 'all') => progressBars(points, period, statsRanges(period, now).current);
 
-	const week = progressBars(points, 7, now);
+	const week = bars(7);
 	expect(week).toHaveLength(7);
 	expect(week[0].start).toEqual(new Date(2026, 9, 9));
 	expect(week.map((bar) => bar.minutes)).toEqual([0, 0, 0, 0, 30, 0, 60]);
 
-	expect(progressBars(points, 30, now)).toHaveLength(30);
+	expect(bars(30)).toHaveLength(30);
 
-	// 90 days back is Friday 17 July: weeks from Monday 13 July to Monday 12 October
-	const quarter = progressBars(points, 90, now);
+	// 90 days from Saturday 18 July: weeks from Monday 13 July to Monday 12 October
+	const quarter = bars(90);
 	expect(quarter[0].start).toEqual(new Date(2026, 6, 13));
 	expect(quarter.at(-1)!.start).toEqual(new Date(2026, 9, 12));
 	expect(quarter).toHaveLength(14);
@@ -88,12 +123,11 @@ test('bars: by day for 7 and 30 days, by week from Monday for 90 days and the ye
 	expect(quarter.at(-1)!.minutes).toBe(90);
 
 	// The year so far: from the week of 1 January (Thursday → Monday 29 December 2025)
-	const year = progressBars(points, 'ytd', now, new Date(2026, 0, 1));
-	expect(year[0].start).toEqual(new Date(2025, 11, 29));
+	expect(bars('ytd')[0].start).toEqual(new Date(2025, 11, 29));
 
 	// All time: from the first workout's month
-	const all = progressBars(points, 'all', now);
+	const all = bars('all');
 	expect(all.map((bar) => bar.start.getMonth())).toEqual([6, 7, 8, 9]);
 	expect(all.map((bar) => bar.minutes)).toEqual([40, 0, 0, 90]);
-	expect(progressBars([], 'all', now)).toHaveLength(1);
+	expect(progressBars([], 'all', statsRanges('all', now).current)).toHaveLength(1);
 });

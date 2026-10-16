@@ -65,11 +65,13 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 	await page.waitForURL('/exercise-splits/edit?new');
 	await expect(page.getByRole('heading', { level: 2 })).toHaveText('New routine');
 
-	// Needs a name and an exercise
-	await page.getByRole('main').getByRole('button', { name: 'Update', exact: true }).click();
+	// A new routine is saved, not updated; it needs a name and an exercise
+	const saveButton = page.getByRole('main').getByRole('button', { name: 'Save', exact: true });
+	await expect(page.getByRole('main').getByRole('button', { name: 'Update', exact: true })).toHaveCount(0);
+	await saveButton.click();
 	await expect(page.getByRole('status').filter({ hasText: 'Give the routine a name' })).toBeVisible();
 	await page.getByLabel('Name', { exact: true }).fill('Pull');
-	await page.getByRole('main').getByRole('button', { name: 'Update', exact: true }).click();
+	await saveButton.click();
 	await expect(page.getByRole('status').filter({ hasText: 'Add at least one exercise' })).toBeVisible();
 
 	// A new exercise, made from the picker
@@ -91,6 +93,14 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 	await page.locator('#exercise-set-decrement').fill('5');
 	await page.getByPlaceholder('For this routine').fill('Seat on 4');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
+
+	// Once saved it's being edited: Update from now on
+	await saveButton.click();
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	await page.waitForURL('/exercise-splits/edit?routine=Pull');
+	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Edit routine');
+	await expect(page.getByRole('main').getByRole('button', { name: 'Update', exact: true })).toBeVisible();
+	await expect(saveButton).toHaveCount(0);
 
 	await saveRoutine(page);
 	await expect(page.getByRole('heading', { level: 2 })).toHaveText('My routines');
@@ -325,7 +335,8 @@ test('the current mesocycle uses My routines: a rename, set counts, overrides, a
 	// Rename Pull A, 4 sets of rows with their own overload
 	await editRoutine(page, 'Pull A');
 	await page.getByLabel('Name', { exact: true }).fill('Hotel – Pull');
-	await expect(page.getByTestId('block-follows-routines')).toBeVisible();
+	// No note about the block: My routines is the one place routines live
+	await expect(page.getByTestId('block-follows-routines')).toHaveCount(0);
 	await editExercise(page, 'Barbell rows', async () => {
 		await page.locator('#exercise-sets').fill('4');
 		await page.getByRole('button', { name: 'Overrides' }).click();
@@ -486,4 +497,64 @@ test('weight sets live under My routines: from its menu, from a routine being ed
 	await page.goto('/settings');
 	await expect(page.getByRole('main')).not.toContainText('Weight sets');
 	await expect(page.getByRole('button', { name: 'Add weight set' })).toHaveCount(0);
+});
+
+test('weight sets: Edit buttons line up, and the form opens under the set being edited, in view', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	const range = (from: number, to: number, step: number) =>
+		Array.from({ length: Math.round((to - from) / step) + 1 }, (_, i) => from + i * step);
+	await prisma.weightSet.createMany({
+		data: [
+			{ userId, name: 'Anytime Fitness cable stack with a long name', unit: 'LB', weights: range(10, 200, 10) },
+			{ userId, name: 'Assisted pull-up', unit: 'KG', weights: range(5, 50, 5), isAssistance: true },
+			{ userId, name: 'Home', unit: 'KG', weights: [5, 10] },
+			{ userId, name: 'Hotel dumbbells', unit: 'KG', weights: range(2.5, 30, 2.5) }
+		]
+	});
+	await page.setViewportSize({ width: 390, height: 640 });
+	await page.goto('/exercise-splits/weight-sets');
+	const card = (name: string) => page.getByTestId(`weight-set-${name}`);
+	const names = ['Anytime Fitness cable stack with a long name', 'Assisted pull-up', 'Home', 'Hotel dumbbells'];
+
+	// Every card's Edit and ✕ sit in the same place, the long name wraps instead
+	const editX = await Promise.all(
+		names.map(async (name) => (await card(name).getByRole('button', { name: 'Edit' }).boundingBox())!.x)
+	);
+	expect(new Set(editX.map(Math.round)).size).toBe(1);
+
+	// Edit opens the form right under that card, on screen
+	const form = page.locator('form').filter({ has: page.locator('#weight-set-name') });
+	const below = async (name: string) => {
+		const cardBox = (await card(name).boundingBox())!;
+		const formBox = (await form.boundingBox())!;
+		expect(formBox.y).toBeGreaterThan(cardBox.y + cardBox.height - 1);
+		expect(formBox.y - (cardBox.y + cardBox.height)).toBeLessThan(16);
+	};
+	await card('Assisted pull-up').getByRole('button', { name: 'Edit' }).click();
+	await expect(page.locator('#weight-set-name')).toHaveValue('Assisted pull-up');
+	await below('Assisted pull-up');
+	await expect(page.locator('#weight-set-name')).toBeInViewport();
+
+	// Another card's Edit moves it there: one open at a time
+	await card('Hotel dumbbells').getByRole('button', { name: 'Edit' }).click();
+	await expect(page.locator('#weight-set-name')).toHaveValue('Hotel dumbbells');
+	await expect(form).toHaveCount(1);
+	await below('Hotel dumbbells');
+	await expect(page.locator('#weight-set-name')).toBeInViewport();
+
+	// Saving still works from there
+	await page.locator('#weight-set-name').fill('Hotel DBs');
+	await page.getByRole('button', { name: 'Save weight set' }).click();
+	await expect(card('Hotel DBs')).toContainText('2.5–30 by 2.5 kg');
+	await expect(form).toHaveCount(0);
+
+	// A new one opens by the Add button, after the list
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await expect(page.locator('#weight-set-name')).toHaveValue('');
+	await below('Hotel DBs');
+	await page.getByRole('button', { name: 'Cancel' }).click();
+	await expect(form).toHaveCount(0);
 });
