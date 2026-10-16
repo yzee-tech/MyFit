@@ -97,10 +97,9 @@ export function periodStats(workouts: StatsWorkout[]): PeriodStats {
 export const STATS_PERIODS = [7, 30, 90, 'ytd', 'all'] as const;
 export type StatsPeriod = (typeof STATS_PERIODS)[number];
 
+/** From `from` (included; null: the first workout) up to `to` (not included) */
 export type StatsRange = { from: Date | null; to: Date };
 export type StatsRanges = { current: StatsRange; previous: StatsRange | null };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The same moment a year earlier (29 February becomes 28 February) */
 function yearEarlier(date: Date) {
@@ -110,23 +109,33 @@ function yearEarlier(date: Date) {
 	return earlier;
 }
 
+/** `days` calendar days earlier, at the same time of day (a day with a clock change still counts as one) */
+function daysEarlier(date: Date, days: number) {
+	const earlier = new Date(date);
+	earlier.setDate(earlier.getDate() - days);
+	return earlier;
+}
+
 /**
- * What a period covers, and what it's compared with: the same number of days before it; for the year
- * so far, the same dates last year (from the person's own 1 January, `yearStart`); all time, nothing
+ * What a period covers and what it's compared with, in the time zone of the device it runs on, up to
+ * `now`: the last 7, 30 or 90 calendar days (today and the days before, from midnight) against the same
+ * number of days before them; the year so far against the same dates last year; all time alone.
+ * Worked out on the person's phone, whose clock also stamps their workouts, and sent to the server, so
+ * the cards and the chart cover exactly the same workouts
  */
-export function statsRanges(period: StatsPeriod, now: Date, yearStart?: Date): StatsRanges {
+export function statsRanges(period: StatsPeriod, now: Date): StatsRanges {
 	if (period === 'all') return { current: { from: null, to: now }, previous: null };
 	if (period === 'ytd') {
-		const from = yearStart ?? new Date(now.getFullYear(), 0, 1);
+		const from = new Date(now.getFullYear(), 0, 1);
 		return { current: { from, to: now }, previous: { from: yearEarlier(from), to: yearEarlier(now) } };
 	}
-	const from = new Date(now.getTime() - period * DAY_MS);
-	return { current: { from, to: now }, previous: { from: new Date(from.getTime() - period * DAY_MS), to: from } };
+	const from = daysEarlier(startOfDay(now), period - 1);
+	return { current: { from, to: now }, previous: { from: daysEarlier(from, period), to: from } };
 }
 
 const inRange = (workout: StatsWorkout, range: StatsRange) => {
 	const at = new Date(workout.startedAt).getTime();
-	return (range.from === null || at > range.from.getTime()) && at <= range.to.getTime();
+	return (range.from === null || at >= range.from.getTime()) && at < range.to.getTime();
 };
 
 /** One workout's totals, for the progress chart */
@@ -179,10 +188,10 @@ export function progressBarSize(period: StatsPeriod): 'day' | 'week' | 'month' {
 
 /**
  * The progress chart's bars, in local time, oldest first: one per day, week (from Monday) or month,
- * from the period's start (all time: the first workout's month) to now. Bars without a workout are 0,
- * so time reads evenly
+ * over the same range as the cards (all time: from the first workout's month). Bars without a workout
+ * are 0, so time reads evenly
  */
-export function progressBars(points: ProgressPoint[], period: StatsPeriod, now: Date, yearStart?: Date): ProgressBar[] {
+export function progressBars(points: ProgressPoint[], period: StatsPeriod, range: StatsRange): ProgressBar[] {
 	const size = progressBarSize(period);
 	const startOf = size === 'day' ? startOfDay : size === 'week' ? startOfWeek : startOfMonth;
 	const next = (date: Date) => {
@@ -193,14 +202,12 @@ export function progressBars(points: ProgressPoint[], period: StatsPeriod, now: 
 		return after;
 	};
 	const times = points.map((point) => new Date(point.startedAt).getTime());
-	let from: Date;
-	if (period === 'all') from = times.length > 0 ? new Date(Math.min(...times)) : now;
-	else if (period === 'ytd') from = yearStart ?? new Date(now.getFullYear(), 0, 1);
-	// The last 7 days are today and the 6 before
-	else from = new Date(now.getTime() - (period - 1) * DAY_MS);
+	const end = range.to;
+	// All time has no start: the bars begin at the first workout (its month), or are just this month
+	const from = range.from ?? (times.length > 0 ? new Date(Math.min(...times)) : end);
 
 	const bars: ProgressBar[] = [];
-	for (let start = startOf(from); start.getTime() <= now.getTime(); start = next(start)) {
+	for (let start = startOf(from); start.getTime() <= end.getTime(); start = next(start)) {
 		bars.push({ start, end: next(start), minutes: 0, volume: 0, reps: 0 });
 	}
 	points.forEach((point, idx) => {

@@ -30,6 +30,11 @@
 	let rangeStep: number | undefined = $state();
 	let singleWeight: number | undefined = $state();
 
+	/** Brings the form into view when it opens, wherever on the page that is */
+	function scrollIntoView(node: HTMLElement) {
+		node.scrollIntoView({ block: 'nearest' });
+	}
+
 	function startEditing(weightSet?: WeightSetLike) {
 		draft = weightSet
 			? {
@@ -97,6 +102,120 @@
 	}
 </script>
 
+<!-- Opens where it was asked for: under the weight set being edited, or by the Add button for a new one -->
+{#snippet draftForm()}
+	{#if draft}
+		<form class="grid gap-4 rounded-md border p-4" onsubmit={saveDraft} use:scrollIntoView>
+			<div class="grid gap-1.5">
+				<Label for="weight-set-name">Name</Label>
+				<Input
+					id="weight-set-name"
+					maxlength={60}
+					placeholder="e.g. Building – Dumbbells"
+					required
+					bind:value={draft.name}
+				/>
+			</div>
+			<div class="flex items-center justify-between gap-4">
+				<span class="text-sm font-medium" id="weight-set-unit-label">Unit</span>
+				<ToggleGroup.Root
+					aria-labelledby="weight-set-unit-label"
+					onValueChange={(value) => {
+						if (draft && (value === 'KG' || value === 'LB')) draft.unit = value;
+					}}
+					type="single"
+					value={draft.unit}
+					variant="outline"
+				>
+					<ToggleGroup.Item aria-label="Weight set in kilograms" value="KG">kg</ToggleGroup.Item>
+					<ToggleGroup.Item aria-label="Weight set in pounds" value="LB">lb</ToggleGroup.Item>
+				</ToggleGroup.Root>
+			</div>
+			<div class="flex items-start justify-between gap-4">
+				<div class="grid gap-0.5">
+					<Label for="weight-set-assistance">Assisted machine</Label>
+					<span class="text-xs text-muted-foreground">
+						The weights are help, e.g. an assisted pull-up machine's 5–50 kg. Logged as negative loads.
+					</span>
+				</div>
+				<Switch id="weight-set-assistance" bind:checked={draft.isAssistance} />
+			</div>
+
+			<div class="grid gap-1.5">
+				<span class="text-sm font-medium">Add a range</span>
+				<div class="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2">
+					<div class="grid gap-1">
+						<Label class="text-xs text-muted-foreground" for="weight-set-range-from">From</Label>
+						<Input id="weight-set-range-from" min={0} step="any" type="number" bind:value={rangeFrom} />
+					</div>
+					<div class="grid gap-1">
+						<Label class="text-xs text-muted-foreground" for="weight-set-range-to">To</Label>
+						<Input id="weight-set-range-to" min={0} step="any" type="number" bind:value={rangeTo} />
+					</div>
+					<div class="grid gap-1">
+						<Label class="text-xs text-muted-foreground" for="weight-set-range-step">Every</Label>
+						<Input id="weight-set-range-step" min={0} step="any" type="number" bind:value={rangeStep} />
+					</div>
+					<Button aria-label="Add range" onclick={addRange} size="icon" type="button" variant="secondary">
+						<AddIcon />
+					</Button>
+				</div>
+			</div>
+			<div class="grid gap-1.5">
+				<Label for="weight-set-single">Add one weight</Label>
+				<div class="flex gap-2">
+					<Input
+						id="weight-set-single"
+						min={0}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addSingleWeight();
+							}
+						}}
+						step="any"
+						type="number"
+						bind:value={singleWeight}
+					/>
+					<Button aria-label="Add weight" onclick={addSingleWeight} size="icon" type="button" variant="secondary">
+						<AddIcon />
+					</Button>
+				</div>
+			</div>
+
+			<div class="grid gap-1.5">
+				<span class="text-sm font-medium">
+					Weights ({unitLabel(draft.unit)})
+				</span>
+				<div class="flex flex-wrap gap-1" data-testid="weight-set-draft-weights">
+					{#each draft.weights as weight (weight)}
+						<Button
+							aria-label="Remove {weight}"
+							class="h-7 gap-1 px-2"
+							onclick={() => {
+								if (draft) draft.weights = draft.weights.filter((w) => w !== weight);
+							}}
+							size="sm"
+							type="button"
+							variant="outline"
+						>
+							{weight}
+							<XIcon class="h-3 w-3" />
+						</Button>
+					{:else}
+						<span class="text-sm text-muted-foreground">None yet: add a range or single weights above</span>
+					{/each}
+				</div>
+			</div>
+
+			<div class="flex justify-end gap-2">
+				<Button onclick={() => (draft = null)} type="button" variant="outline">Cancel</Button>
+				<Button disabled={saving} type="submit">Save weight set</Button>
+			</div>
+		</form>
+	{/if}
+{/snippet}
+
 <Card.Root class="w-full">
 	<Card.Header>
 		<Card.Title>Weight sets</Card.Title>
@@ -113,8 +232,10 @@
 					<span class="font-medium">{weightSet.name}</span>
 					<span class="text-sm text-muted-foreground">{describeWeightSet(weightSet)}</span>
 				</div>
-				<Button onclick={() => startEditing(weightSet)} size="sm" variant="outline">Edit</Button>
+				<!-- A fixed size, so a long name wraps and every card's buttons line up -->
+				<Button class="shrink-0" onclick={() => startEditing(weightSet)} size="sm" variant="outline">Edit</Button>
 				<Button
+					class="shrink-0"
 					aria-label="Delete {weightSet.name}"
 					onclick={() => deleteWeightSet(weightSet)}
 					size="icon"
@@ -123,121 +244,17 @@
 					<XIcon />
 				</Button>
 			</div>
+			{#if draft?.id === weightSet.id}
+				{@render draftForm()}
+			{/if}
 		{:else}
 			{#if !draft}
 				<div class="rounded-md bg-muted/50 p-4 text-center text-sm text-muted-foreground">No weight sets yet</div>
 			{/if}
 		{/each}
 
-		{#if draft}
-			<form class="mt-2 grid gap-4 rounded-md border p-4" onsubmit={saveDraft}>
-				<div class="grid gap-1.5">
-					<Label for="weight-set-name">Name</Label>
-					<Input
-						id="weight-set-name"
-						maxlength={60}
-						placeholder="e.g. Building – Dumbbells"
-						required
-						bind:value={draft.name}
-					/>
-				</div>
-				<div class="flex items-center justify-between gap-4">
-					<span class="text-sm font-medium" id="weight-set-unit-label">Unit</span>
-					<ToggleGroup.Root
-						aria-labelledby="weight-set-unit-label"
-						onValueChange={(value) => {
-							if (draft && (value === 'KG' || value === 'LB')) draft.unit = value;
-						}}
-						type="single"
-						value={draft.unit}
-						variant="outline"
-					>
-						<ToggleGroup.Item aria-label="Weight set in kilograms" value="KG">kg</ToggleGroup.Item>
-						<ToggleGroup.Item aria-label="Weight set in pounds" value="LB">lb</ToggleGroup.Item>
-					</ToggleGroup.Root>
-				</div>
-				<div class="flex items-start justify-between gap-4">
-					<div class="grid gap-0.5">
-						<Label for="weight-set-assistance">Assisted machine</Label>
-						<span class="text-xs text-muted-foreground">
-							The weights are help, e.g. an assisted pull-up machine's 5–50 kg. Logged as negative loads.
-						</span>
-					</div>
-					<Switch id="weight-set-assistance" bind:checked={draft.isAssistance} />
-				</div>
-
-				<div class="grid gap-1.5">
-					<span class="text-sm font-medium">Add a range</span>
-					<div class="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2">
-						<div class="grid gap-1">
-							<Label class="text-xs text-muted-foreground" for="weight-set-range-from">From</Label>
-							<Input id="weight-set-range-from" min={0} step="any" type="number" bind:value={rangeFrom} />
-						</div>
-						<div class="grid gap-1">
-							<Label class="text-xs text-muted-foreground" for="weight-set-range-to">To</Label>
-							<Input id="weight-set-range-to" min={0} step="any" type="number" bind:value={rangeTo} />
-						</div>
-						<div class="grid gap-1">
-							<Label class="text-xs text-muted-foreground" for="weight-set-range-step">Every</Label>
-							<Input id="weight-set-range-step" min={0} step="any" type="number" bind:value={rangeStep} />
-						</div>
-						<Button aria-label="Add range" onclick={addRange} size="icon" type="button" variant="secondary">
-							<AddIcon />
-						</Button>
-					</div>
-				</div>
-				<div class="grid gap-1.5">
-					<Label for="weight-set-single">Add one weight</Label>
-					<div class="flex gap-2">
-						<Input
-							id="weight-set-single"
-							min={0}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									e.preventDefault();
-									addSingleWeight();
-								}
-							}}
-							step="any"
-							type="number"
-							bind:value={singleWeight}
-						/>
-						<Button aria-label="Add weight" onclick={addSingleWeight} size="icon" type="button" variant="secondary">
-							<AddIcon />
-						</Button>
-					</div>
-				</div>
-
-				<div class="grid gap-1.5">
-					<span class="text-sm font-medium">
-						Weights ({unitLabel(draft.unit)})
-					</span>
-					<div class="flex flex-wrap gap-1" data-testid="weight-set-draft-weights">
-						{#each draft.weights as weight (weight)}
-							<Button
-								aria-label="Remove {weight}"
-								class="h-7 gap-1 px-2"
-								onclick={() => {
-									if (draft) draft.weights = draft.weights.filter((w) => w !== weight);
-								}}
-								size="sm"
-								type="button"
-								variant="outline"
-							>
-								{weight}
-								<XIcon class="h-3 w-3" />
-							</Button>
-						{:else}
-							<span class="text-sm text-muted-foreground">None yet: add a range or single weights above</span>
-						{/each}
-					</div>
-				</div>
-
-				<div class="flex justify-end gap-2">
-					<Button onclick={() => (draft = null)} type="button" variant="outline">Cancel</Button>
-					<Button disabled={saving} type="submit">Save weight set</Button>
-				</div>
-			</form>
+		{#if draft && !draft.id}
+			{@render draftForm()}
 		{/if}
 	</Card.Content>
 	{#if !draft}

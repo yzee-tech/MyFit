@@ -71,9 +71,15 @@ export async function editRoutine(page: Page, name: string) {
 	await expect(page.getByLabel('Name', { exact: true })).toHaveValue(name);
 }
 
-/** Updates the routine being edited (it stays open), then goes Back to My routines: nothing left to ask */
+/**
+ * Saves the routine being edited (Save for a new one, Update for one already saved; it stays open),
+ * then goes Back to My routines: nothing left to ask
+ */
 export async function saveRoutine(page: Page) {
-	await page.getByRole('main').getByRole('button', { name: 'Update', exact: true }).click();
+	await page
+		.getByRole('main')
+		.getByRole('button', { name: /^(Save|Update)$/ })
+		.click();
 	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
 	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/edit');
 	await page.getByRole('main').getByRole('button', { name: 'Back', exact: true }).click();

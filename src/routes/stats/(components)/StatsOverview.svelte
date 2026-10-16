@@ -11,6 +11,8 @@
 		progressBars,
 		progressBarSize,
 		STATS_PERIODS,
+		statsRanges,
+		type StatsRanges,
 		type ProgressMeasure,
 		type StatsPeriod
 	} from '$lib/utils/stats';
@@ -50,17 +52,32 @@
 
 	let period = $state<StatsPeriod>(30);
 	let overview: Overview | undefined = $state();
-	// The person's own 1 January, for the year so far
-	const yearStart = () => new Date(new Date().getFullYear(), 0, 1);
+	// The period's boundaries, worked out here (this phone's midnight and clock) and used by both the
+	// cards and the chart, so they always cover the same workouts
+	let ranges: StatsRanges | undefined = $state();
 
 	$effect(() => {
 		const picked = period;
+		const pickedRanges = statsRanges(picked, new Date());
 		overview = undefined;
+		const { current, previous } = pickedRanges;
 		trpc()
-			.stats.overview.query(picked === 'ytd' ? { period: picked, yearStart: yearStart() } : { period: picked })
+			.stats.overview.query(
+				picked === 'all'
+					? { period: picked, currentTo: current.to }
+					: {
+							period: picked,
+							currentFrom: current.from!,
+							currentTo: current.to,
+							previousFrom: previous!.from!,
+							previousTo: previous!.to
+						}
+			)
 			.then((result) => {
 				// Still the period picked
-				if (picked === period) overview = result;
+				if (picked !== period) return;
+				ranges = pickedRanges;
+				overview = result;
 			});
 	});
 
@@ -207,9 +224,7 @@
 		{ value: 'reps', label: 'Reps' }
 	];
 	let measure: ProgressMeasure = $state('minutes');
-	let bars = $derived(
-		overview ? progressBars(overview.progress, period, new Date(), period === 'ytd' ? yearStart() : undefined) : []
-	);
+	let bars = $derived(overview && ranges ? progressBars(overview.progress, period, ranges.current) : []);
 	let progressTotal = $derived(bars.reduce((sum, bar) => sum + bar[measure], 0));
 
 	function formatMeasure(value: number) {

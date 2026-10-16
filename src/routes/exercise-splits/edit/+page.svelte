@@ -290,16 +290,14 @@
 		/>
 	</div>
 
-	<p class="mt-2 text-sm text-muted-foreground" data-testid="block-follows-routines">
-		Your current block uses this routine as soon as you update.
-	</p>
 	<div class="mt-2 grid grid-cols-2 gap-1">
 		<Button onclick={back} variant="secondary">Back</Button>
 		<Button disabled={saving} onclick={() => save()}>
 			{#if saving}
 				<LoaderCircle class="animate-spin" />
 			{:else}
-				Update
+				<!-- A new routine is saved; after that it's an edit, and the page shows it as one -->
+				{isNew ? 'Save' : 'Update'}
 			{/if}
 		</Button>
 	</div>

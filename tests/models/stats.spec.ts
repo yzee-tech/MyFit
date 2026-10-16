@@ -161,6 +161,35 @@ test('Stats overview: workouts, time, volume and sets for the last 30 days again
 	await expect(page.getByText('now · before')).toHaveCount(0);
 });
 
+test('the last 7 days are today and the 6 calendar days before: the cards and the chart count the same workouts', async ({
+	page,
+	userData
+}) => {
+	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
+	// The page's clock stays at midday today, so passing midnight during the test can't move the days
+	const midday = new Date();
+	midday.setHours(12, 0, 0, 0);
+	await page.clock.setFixedTime(midday);
+	const at = (daysBack: number, hours: number, minutes: number) => {
+		const date = new Date(midday);
+		date.setDate(date.getDate() - daysBack);
+		date.setHours(hours, minutes, 0, 0);
+		return (Date.now() - date.getTime()) / DAY;
+	};
+	// The first of the 7 days, just after midnight: counted
+	await seedWorkout(userData.userId, at(6, 0, 30), 30, raises([{ reps: 10, load: 10 }]));
+	// The day before, late in the evening: the week before, whatever the time now
+	await seedWorkout(userData.userId, at(7, 23, 30), 45, raises([{ reps: 10, load: 10 }]));
+
+	await page.goto('/stats');
+	await page.getByLabel('Last 7 days').click();
+	await expect(page.getByTestId('stats-workouts-current')).toHaveText('1');
+	await expect(page.getByTestId('stats-workouts-previous')).toHaveText('1 before');
+	await expect(page.getByTestId('stats-duration-current')).toHaveText('30 min');
+	await expect(page.getByTestId('stats-progress-chart')).toHaveAttribute('data-bars', '7');
+	await expect(page.getByTestId('stats-progress-total')).toHaveText('30 min');
+});
+
 test('exercise stats: each workout once, reps-only exercises chart reps, and old links still work', async ({
 	page,
 	userData
