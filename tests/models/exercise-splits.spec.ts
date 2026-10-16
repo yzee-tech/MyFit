@@ -98,7 +98,8 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 	await saveButton.click();
 	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
 	await page.waitForURL('/exercise-splits/edit?routine=Pull');
-	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Edit routine');
+	// (The exercise pop-up may still be closing: look in the page itself)
+	await expect(page.getByRole('main').getByRole('heading', { level: 2, name: 'Edit routine' })).toBeVisible();
 	await expect(page.getByRole('main').getByRole('button', { name: 'Update', exact: true })).toBeVisible();
 	await expect(saveButton).toHaveCount(0);
 
