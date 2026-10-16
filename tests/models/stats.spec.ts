@@ -166,8 +166,12 @@ test('the last 7 days are today and the 6 calendar days before: the cards and th
 	userData
 }) => {
 	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
+	// The page's clock stays at midday today, so passing midnight during the test can't move the days
+	const midday = new Date();
+	midday.setHours(12, 0, 0, 0);
+	await page.clock.setFixedTime(midday);
 	const at = (daysBack: number, hours: number, minutes: number) => {
-		const date = new Date();
+		const date = new Date(midday);
 		date.setDate(date.getDate() - daysBack);
 		date.setHours(hours, minutes, 0, 0);
 		return (Date.now() - date.getTime()) / DAY;

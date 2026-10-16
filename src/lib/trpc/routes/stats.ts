@@ -24,7 +24,9 @@ const overviewInput = z
 		z.strictObject({ period: z.literal('all'), currentTo: date })
 	])
 	.superRefine((input, ctx) => {
-		// A sanity bound on the phone's clock, not a second clock
+		// A deliberate limit, not a second clock: the phone's clock is trusted (it stamps the workouts),
+		// within a day of the server's. Time zones are at most 14 hours apart, so a phone set right is
+		// always inside it; one a day or more ahead is wrong, and its Stats would count future workouts
 		if (+input.currentTo > Date.now() + DAY_MS) ctx.addIssue({ code: 'custom', message: 'currentTo is in the future' });
 		if (input.period === 'all') return;
 		// The windows follow each other: before ends where (or before) the period starts

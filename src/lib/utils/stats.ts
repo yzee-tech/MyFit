@@ -203,6 +203,7 @@ export function progressBars(points: ProgressPoint[], period: StatsPeriod, range
 	};
 	const times = points.map((point) => new Date(point.startedAt).getTime());
 	const end = range.to;
+	// All time has no start: the bars begin at the first workout (its month), or are just this month
 	const from = range.from ?? (times.length > 0 ? new Date(Math.min(...times)) : end);
 
 	const bars: ProgressBar[] = [];
