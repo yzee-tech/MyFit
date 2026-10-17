@@ -386,6 +386,26 @@ test('old links open My routines: a routine library, and the old all-routines ed
 	}
 });
 
+test('an exercise never done and in no routine starts as Independent, 8–15 reps (not a built-in range)', async ({
+	page,
+	userData
+}) => {
+	// A built-in name (Down sets of 5 to 10 there): that range isn't used
+	await prisma.exercise.create({
+		data: { userId: userData.userId, name: 'Barbell squats', targetMuscleGroup: 'Quads' }
+	});
+	await page.goto('/exercise-splits/edit?new');
+	await page.getByLabel('Name', { exact: true }).fill('Legs');
+	await page.getByLabel('add-exercise').click();
+	await pickExercise(page, 'Barbell squats');
+	await expect(page.locator('button').filter({ hasText: 'Independent' })).toBeVisible();
+	await expect(page.locator('#exercise-rep-range-start')).toHaveValue('8');
+	await expect(page.locator('#exercise-rep-range-end')).toHaveValue('15');
+	await page.getByLabel('Sets').fill('3');
+	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await expect(page.getByRole('main').getByText(/^3 independent sets of 8 to 15 reps$/i)).toBeVisible();
+});
+
 test('adding an exercise by picking it in a new routine', async ({ page, userData }) => {
 	await prisma.exercise.create({ data: { userId: userData.userId, name: 'Squats', targetMuscleGroup: 'Quads' } });
 	await page.getByRole('link', { name: 'New routine' }).click();

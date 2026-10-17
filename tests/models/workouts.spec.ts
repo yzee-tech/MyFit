@@ -4,7 +4,8 @@ import {
 	createExercises,
 	createMesocycle,
 	createTemplateExerciseSplit,
-	pickExercise,
+	editWorkoutExercise,
+	quickAdd,
 	pickRoutine,
 	saveWorkout
 } from './commonFunctions';
@@ -28,12 +29,12 @@ test('create workout', async ({ page, userData }) => {
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell bench press');
+	await quickAdd(page, ['Barbell bench press']);
+	await editWorkoutExercise(page, 'Barbell bench press');
 	// Never done before: it starts as Independent
 	await expect(page.locator('button').filter({ hasText: 'Independent' })).toBeVisible();
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-reps"]').fill('9');
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('100');
@@ -75,12 +76,12 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell bench press');
+	await quickAdd(page, ['Barbell bench press']);
+	await editWorkoutExercise(page, 'Barbell bench press');
 	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Down', exact: true }).click();
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-reps"]').fill('9');
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('50');
@@ -91,12 +92,12 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByTestId('Barbell bench press-set-1-action').click();
 	await page.getByTestId('Barbell bench press-set-2-action').click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Dumbbell bicep curls');
+	await quickAdd(page, ['Dumbbell bicep curls']);
+	await editWorkoutExercise(page, 'Dumbbell bicep curls');
 	await page.getByLabel('Sets').fill('2');
 	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Myorep match' }).first().click();
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]').fill('12');
 	await page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]').fill('10');
@@ -113,15 +114,15 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByTestId('Dumbbell bicep curls-set-2-action').click();
 	await page.getByTestId('Dumbbell bicep curls-set-2-mini-set-1-action').click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Leaning dumbbell lateral raises');
+	await quickAdd(page, ['Leaning dumbbell lateral raises']);
+	await editWorkoutExercise(page, 'Leaning dumbbell lateral raises');
 	await page.getByLabel('Sets').fill('2');
 	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Drop' }).click();
 	await page.locator('button').filter({ hasText: 'Pick one' }).click();
 	await page.getByRole('option', { name: 'Absolute load' }).click();
 	await page.locator('#exercise-set-decrement').fill('5');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Leaning\\ dumbbell\\ lateral\\ raises-set-1-reps"]').fill('18');
 	await page.locator('[id="Leaning\\ dumbbell\\ lateral\\ raises-set-1-load"]').fill('10');
@@ -142,11 +143,11 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByTestId('Leaning dumbbell lateral raises-set-2-action').click();
 	await page.getByTestId('Leaning dumbbell lateral raises-set-2-mini-set-1-action').click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Incline dumbbell press');
+	await quickAdd(page, ['Incline dumbbell press']);
+	await editWorkoutExercise(page, 'Incline dumbbell press');
 	await expect(page.locator('button').filter({ hasText: 'Independent' })).toBeVisible();
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Incline\\ dumbbell\\ press-set-1-reps"]').fill('14');
 	await page.locator('[id="Incline\\ dumbbell\\ press-set-1-load"]').fill('20');
@@ -157,12 +158,12 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByTestId('Incline dumbbell press-set-1-action').click();
 	await page.getByTestId('Incline dumbbell press-set-2-action').click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Leg press');
+	await quickAdd(page, ['Leg press']);
+	await editWorkoutExercise(page, 'Leg press');
 	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Myorep', exact: true }).click();
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Leg\\ press-set-1-reps"]').fill('18');
 	await page.locator('[id="Leg\\ press-set-1-load"]').fill('180');
@@ -267,10 +268,10 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell bench press');
+	await quickAdd(page, ['Barbell bench press']);
+	await editWorkoutExercise(page, 'Barbell bench press');
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-reps"]').fill('9');
 	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('100');
@@ -846,10 +847,10 @@ test('save a blank workout as a routine: added to My routines, a taken name gets
 	await page.getByRole('button', { name: 'Next' }).click();
 
 	const addExercise = async (name: string, sets: number, load: string) => {
-		await page.getByLabel('add-exercise').click();
-		await pickExercise(page, name);
+		await quickAdd(page, [name]);
+		await editWorkoutExercise(page, name);
 		await page.getByLabel('Sets').fill(String(sets));
-		await page.getByRole('button', { name: 'Add exercise' }).click();
+		await page.getByRole('button', { name: 'Update' }).click();
 		const id = name.replace(' ', '\\ ');
 		for (let set = 1; set <= sets; set++) {
 			await page.locator(`[id="${id}-set-${set}-reps"]`).fill('10');
@@ -1784,15 +1785,18 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	await page.waitForURL(/manage\/exercises/);
 	await expect(page.getByTestId('workout-routine-name')).toHaveText(/^(Morning|Noon|Afternoon|Evening) workout$/);
 
-	// Empty workout: the big button instead of "No exercises added"; it opens the add form
+	// Empty workout: the big button instead of "No exercises added"; it opens Quick add
 	const big = page.getByTestId('add-exercise-big');
 	await expect(big).toBeVisible();
 	await expect(page.getByText('No exercises added')).toHaveCount(0);
 	await big.click();
-	await pickExercise(page, 'Face pulls');
-	await page.getByLabel('Sets').fill('3');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await sheet.getByRole('checkbox', { name: 'Face pulls', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Add 1 exercise' }).click();
 	await expect(page.getByTestId('Face pulls-sets')).toBeVisible();
+	// 1 set to start; two more
+	await page.getByTestId('Face pulls-add-set').click();
+	await page.getByTestId('Face pulls-add-set').click();
 	// Under the exercise now; not while reordering
 	const cardBox = (await page.getByTestId('Face pulls-sets').boundingBox())!;
 	expect((await big.boundingBox())!.y).toBeGreaterThan(cardBox.y + cardBox.height);
@@ -1821,4 +1825,96 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	await expect(box(2, 'load')).toHaveValue('15');
 	await expect(box(3, 'load')).toHaveValue('20');
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
+});
+
+test('Quick add: several at once in the order ticked, 1 set each, from the last time or Independent 8–15', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, ['Barbell rows', 'Hammer curls', 'Face pulls']);
+	const rows = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Barbell rows' } } });
+	// Barbell rows last time: Straight sets of 6 to 10 at 60 kg
+	const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: yesterday,
+			endedAt: new Date(yesterday.getTime() + 45 * 60000),
+			workoutExercises: {
+				create: {
+					exerciseIndex: 0,
+					exerciseId: rows.id,
+					name: 'Barbell rows',
+					targetMuscleGroup: rows.targetMuscleGroup,
+					setType: 'Straight',
+					repRangeStart: 6,
+					repRangeEnd: 10,
+					weightUnit: 'KG',
+					sets: {
+						create: [0, 1].map((setIndex) => ({ setIndex, load: 60, reps: 8, RIR: 2, skipped: false }))
+					}
+				}
+			}
+		}
+	});
+
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+
+	// The small + opens it too; each says what it starts with
+	await page.getByLabel('add-exercise').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await expect(sheet.getByTestId('Barbell rows-starts-with')).toHaveText('Last time: Straight · 6–10 reps');
+	await expect(sheet.getByTestId('Hammer curls-starts-with')).toHaveText('New: Independent · 8–15 reps');
+	await expect(sheet.getByRole('button', { name: 'Add exercises' })).toBeDisabled();
+	await sheet.getByRole('checkbox', { name: 'Hammer curls' }).click();
+	await sheet.getByRole('checkbox', { name: 'Barbell rows' }).click();
+	await sheet.getByRole('checkbox', { name: 'Face pulls' }).click();
+	await sheet.getByRole('checkbox', { name: 'Face pulls' }).click();
+	await sheet.getByRole('button', { name: 'Add 2 exercises' }).click();
+	await expect(sheet).toHaveCount(0);
+
+	// In the order ticked, 1 set each; a blank workout's cards count sets only
+	await expect(page.getByTestId(/-summary$/)).toHaveText(['1 set', '1 set']);
+	expect(await page.getByTestId(/-summary$/).evaluateAll((spans) => spans.map((span) => span.dataset.testid))).toEqual([
+		'Hammer curls-summary',
+		'Barbell rows-summary'
+	]);
+	// Done before: last time's numbers, suggested; never done: empty
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('60');
+	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveAttribute('data-suggested', 'true');
+	await expect(page.locator('[id="Hammer\\ curls-set-1-load"]')).toHaveValue('');
+	await page.getByTestId('Hammer curls-add-set').click();
+	await expect(page.getByTestId('Hammer curls-summary')).toHaveText('2 sets');
+
+	// Open again: those in the workout can't be ticked twice
+	await page.getByTestId('add-exercise-big').click();
+	await expect(sheet.getByRole('checkbox', { name: 'Barbell rows' })).toBeDisabled();
+	await expect(sheet.getByTestId('Barbell rows-starts-with')).toHaveText('In this workout');
+	await expect(sheet.getByRole('checkbox', { name: 'Face pulls' })).toBeEnabled();
+	await page.keyboard.press('Escape');
+	await expect(sheet).toHaveCount(0);
+
+	// The rest is in ⋯ → Edit: the set type and reps it started with
+	await editWorkoutExercise(page, 'Barbell rows');
+	await expect(page.locator('button').filter({ hasText: 'Straight' })).toBeVisible();
+	await expect(page.locator('#exercise-rep-range-start')).toHaveValue('6');
+	await expect(page.locator('#exercise-rep-range-end')).toHaveValue('10');
+	await expect(page.getByLabel('Sets')).toHaveValue('1');
+});
+
+test('Quick add in a routine workout: the card still shows the set type and reps', async ({ page, userData }) => {
+	await createSplitAndMesoForTest(page);
+	await createExercises(userData.userId, [{ name: 'Quick add curl', targetMuscleGroup: 'Biceps' }]);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await quickAdd(page, ['Quick add curl']);
+	await expect(page.getByTestId('Quick add curl-summary')).toHaveText(/^1\s+independent sets of\s+8 to 15 reps$/i);
 });

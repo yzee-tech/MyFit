@@ -5,7 +5,8 @@ import {
 	createMesocycle,
 	createTemplateExerciseSplit,
 	editRoutine,
-	pickExercise,
+	editWorkoutExercise,
+	quickAdd,
 	pickRoutine,
 	saveRoutine,
 	saveWorkout
@@ -190,6 +191,10 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 		'Push A'
 	]);
 	expect(exercise.exerciseTemplates[0].sets).toBeGreaterThan(0);
+	// Never done and in no routine before: Independent, 8–15 reps
+	for (const entry of exercise.exerciseTemplates) {
+		expect([entry.setType, entry.repRangeStart, entry.repRangeEnd]).toEqual(['V2', 8, 15]);
+	}
 
 	// Remove it from Pull B
 	await page.getByRole('button', { name: 'Remove from routines' }).click();
@@ -323,10 +328,10 @@ test('blank workout: pick exercises as you go, suggested from last time', async 
 	await expect(page.getByRole('main')).toContainText('This gym uses');
 	await page.getByRole('button', { name: 'Next' }).click();
 
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell rows');
+	await quickAdd(page, ['Barbell rows']);
+	await editWorkoutExercise(page, 'Barbell rows');
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 	// Last time 40 kg × 12, so it starts from there
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).not.toHaveValue('');
@@ -355,12 +360,12 @@ test('bodyweight exercises: help as a negative load, with what it counts as; ass
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Assisted pull-ups');
+	await quickAdd(page, ['Assisted pull-ups']);
+	await editWorkoutExercise(page, 'Assisted pull-ups');
 	await page.getByLabel('Sets').fill('1');
 	await page.getByLabel('Weights available').click();
 	await page.getByRole('option', { name: 'Hotel assist machine (kg)' }).click();
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 
 	await expect(page.getByRole('main')).toContainText('KG (BW)');
 	await page.locator('[id="Assisted\\ pull-ups-set-1-reps"]').fill('10');
@@ -511,10 +516,10 @@ test('reps only: replaces the bodyweight share (with a warning), and suggestions
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Sit-ups');
+	await quickAdd(page, ['Sit-ups']);
+	await editWorkoutExercise(page, 'Sit-ups');
 	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(page.locator('[id="Sit-ups-set-1-reps"]')).toHaveValue('13');
 	await expect(page.locator('[id="Sit-ups-set-2-reps"]')).toHaveValue('13');
 	// No load to enter for a reps-only exercise

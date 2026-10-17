@@ -23,11 +23,12 @@
 	import EditWorkoutDetails from './(components)/EditWorkoutDetails.svelte';
 	import { page } from '$app/stores';
 	import QuotesDialog from './(components)/QuotesDialog.svelte';
+	import QuickAddSheet from './(components)/QuickAddSheet.svelte';
 	import { blankWorkoutName } from '$lib/utils/workoutNames';
 
 	let { data } = $props();
 	let reordering = $state(false);
-	let exerciseDrawer: ReturnType<typeof AddEditExerciseDrawer> | undefined = $state();
+	let quickAdd: ReturnType<typeof QuickAddSheet> | undefined = $state();
 	let comparing = $state(false);
 
 	const shouldShowQuote =
@@ -207,12 +208,12 @@
 				{/if}
 			</Button>
 			<AddEditExerciseDrawer
-				bind:this={exerciseDrawer}
 				addExercise={workoutRunes.addExercise}
 				context="workout"
 				editExercise={workoutRunes.editExercise}
 				editingExercise={workoutRunes.editingExercise}
 				mesocycle={workoutData.workoutOfMesocycle?.mesocycle}
+				onAdd={() => quickAdd?.openSheet()}
 				setEditingExercise={workoutRunes.setEditingExercise}
 			/>
 			{#if totalSets !== null && completedSets !== null}
@@ -239,7 +240,7 @@
 						class="mt-2 h-12 w-full shrink-0 gap-2 border-2 border-dashed border-primary bg-primary/5 font-semibold text-primary hover:bg-primary/10 hover:text-primary"
 						aria-label="Add an exercise"
 						data-testid="add-exercise-big"
-						onclick={() => exerciseDrawer?.openToAdd()}
+						onclick={() => quickAdd?.openSheet()}
 						variant="ghost"
 					>
 						<AddIcon class="h-4 w-4" /> Add exercise
@@ -288,6 +289,7 @@
 
 <ExerciseHistorySheet />
 <WarmUpDialog />
+<QuickAddSheet bind:this={quickAdd} />
 
 {#if shouldShowQuote && completedSets}
 	<QuotesDialog {completedSets} />

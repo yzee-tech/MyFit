@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
 import { solveBergerFormula } from '../../src/lib/utils/workoutUtils';
-import { pickExercise, pickRoutine } from './commonFunctions';
+import { editWorkoutExercise, pickRoutine, quickAdd } from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -315,10 +315,10 @@ test('an exercise added during a workout gets its "Previous" too', async ({ page
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell rows');
+	await quickAdd(page, ['Barbell rows']);
+	await editWorkoutExercise(page, 'Barbell rows');
 	await page.getByLabel('Sets').fill('3');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(previous(page, 'Barbell rows', 1)).toHaveText('60 × 10');
 	await expect(previous(page, 'Barbell rows', 2)).toHaveText('60 × 9');
 	await expect(previous(page, 'Barbell rows', 3)).toHaveText('–');
@@ -424,10 +424,10 @@ test('past sets read weight, reps, RIR, like the workout screen: workout page, H
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Barbell rows');
+	await quickAdd(page, ['Barbell rows']);
+	await editWorkoutExercise(page, 'Barbell rows');
 	await page.getByLabel('Sets').fill('3');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
 	await page.getByTestId('Barbell rows-menu-button').click();
 	await page.getByRole('menuitem', { name: 'History' }).click();
 	await expect(page.getByRole('dialog').filter({ hasText: 'History' })).toContainText(rowsOrder);

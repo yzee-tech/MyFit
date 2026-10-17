@@ -51,6 +51,8 @@
 		| ({
 				context: 'workout';
 				mesocycle?: Mesocycle;
+				/** Its + button opens Quick add instead; this drawer is then only for ⋯ → Edit */
+				onAdd?: () => void;
 		  } & CommonProps<RoutineExerciseTemplate & { isUserExercise?: boolean }>);
 
 	type NonUndefined<T> = T extends undefined ? never : T;
@@ -180,12 +182,6 @@
 		currentExercise = structuredClone(defaultExercise);
 	}
 
-	/** Opens it to add an exercise, as its own + button does (for a bigger button elsewhere on the page) */
-	export function openToAdd() {
-		resetDrawerState();
-		open = true;
-	}
-
 	function submitForm(e: SubmitEvent) {
 		e.preventDefault();
 		let result = false;
@@ -229,11 +225,17 @@
 </script>
 
 <Sheet.Root closeOnOutsideClick={false} onOpenChange={(o) => !o && props.setEditingExercise(undefined)} bind:open>
-	<Sheet.Trigger asChild let:builder>
-		<Button aria-label="add-exercise" builders={[builder]} onclick={resetDrawerState} size="icon" variant="outline">
+	{#if props.context === 'workout' && props.onAdd}
+		<Button aria-label="add-exercise" onclick={props.onAdd} size="icon" variant="outline">
 			<AddIcon />
 		</Button>
-	</Sheet.Trigger>
+	{:else}
+		<Sheet.Trigger asChild let:builder>
+			<Button aria-label="add-exercise" builders={[builder]} onclick={resetDrawerState} size="icon" variant="outline">
+				<AddIcon />
+			</Button>
+		</Sheet.Trigger>
+	{/if}
 	<Sheet.Content class="w-11/12 overflow-y-auto px-4" side="right">
 		<Sheet.Header>
 			<Sheet.Title>{mode} exercise</Sheet.Title>
