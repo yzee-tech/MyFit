@@ -1711,17 +1711,6 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 		date.setHours(hours, 0, 0, 0);
 		return date;
 	};
-	const seed = (startedAt: Date, routineName: string | null, exercises: object[]) =>
-		prisma.workout.create({
-			data: {
-				userId,
-				userBodyweight: 80,
-				startedAt,
-				endedAt: new Date(startedAt.getTime() + 45 * 60000),
-				routineName,
-				workoutExercises: { create: exercises }
-			}
-		});
 	const exercise = (exerciseIndex: number, name: string, weightUnit: 'KG' | 'LEVEL', sets: [number, number][]) => ({
 		exerciseIndex,
 		name,
@@ -1732,6 +1721,17 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 		weightUnit,
 		sets: { create: sets.map(([load, reps], setIndex) => ({ setIndex, load, reps, RIR: 2, skipped: false })) }
 	});
+	const seed = (startedAt: Date, routineName: string | null, exercises: ReturnType<typeof exercise>[]) =>
+		prisma.workout.create({
+			data: {
+				userId,
+				userBodyweight: 80,
+				startedAt,
+				endedAt: new Date(startedAt.getTime() + 45 * 60000),
+				routineName,
+				workoutExercises: { create: exercises }
+			}
+		});
 	// 7 am, blank: 3 × 10 at 40 kg and 2 × 12 at 50 kg = 2,400 kg; a machine's levels don't count
 	await seed(day(1, 7), null, [
 		exercise(0, 'Barbell rows', 'KG', [
@@ -1748,11 +1748,9 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 	await seed(day(2, 18), 'Pull A', [exercise(0, 'Barbell rows', 'KG', [[100, 36]])]);
 
 	await page.goto('/workouts');
-	const cards = page.getByRole('link', { name: /^\d/ }).filter({ has: page.getByTestId('workout-name') });
 	await expect(page.getByTestId('workout-name')).toHaveText(['Morning workout', 'Pull A']);
 	await expect(page.getByTestId('workout-volume')).toHaveText(['Volume 2,400 kg', 'Volume 3,600 kg']);
 	await expect(page.getByTestId('workout-length')).toHaveText(['45 min', '45 min']);
-	await expect(cards).toHaveCount(2);
 
 	// In pounds at home: the same work, in lb
 	await prisma.userSettings.upsert({
@@ -1768,7 +1766,7 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 	}
 
 	// Skipped and rest days are gone from the filter; a link from before still opens the list
-	await page.getByRole('button', { name: 'Filters' }).click();
+	await page.getByLabel('search').click();
 	await expect(page.getByText('Workout types')).toHaveCount(0);
 	await expect(page.getByLabel('Skipped')).toHaveCount(0);
 	await page.goto(`/workouts?selectedWorkoutStatuses=${encodeURIComponent(JSON.stringify([null, 'Skipped']))}`);

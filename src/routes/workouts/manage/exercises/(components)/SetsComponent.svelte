@@ -282,11 +282,21 @@
 	const suggestedClass = (set: WorkoutExerciseSet, field: SetField) =>
 		isSuggested(set, field) ? 'text-muted-foreground' : '';
 
-	/** A suggestion is meant to be typed over: tapping its box selects it (after the tap places the caret) */
+	// A suggestion is meant to be typed over: focusing its box selects it. A tap's release would place the
+	// caret and undo that, so the release right after the focus is cancelled
+	let selectedOnFocus: HTMLInputElement | null = null;
 	function selectIfSuggested(e: FocusEvent, set: WorkoutExerciseSet, field: SetField) {
 		const input = e.currentTarget as HTMLInputElement;
-		if (isSuggested(set, field)) setTimeout(() => input.select(), 0);
+		if (isSuggested(set, field)) {
+			input.select();
+			selectedOnFocus = input;
+		}
 		if (exercise.sets[0] === set) set1Before[field] = set[field];
+	}
+	function keepSelection(e: MouseEvent) {
+		if (selectedOnFocus !== e.currentTarget) return;
+		e.preventDefault();
+		selectedOnFocus = null;
 	}
 
 	// Set 1's numbers as typed are a starting point for the sets after it. A later box takes them when it's
@@ -545,6 +555,7 @@
 						aria-invalid={isMissing(idx, 'load')}
 						data-suggested={isSuggested(set, 'load')}
 						onfocus={(e) => selectIfSuggested(e, set, 'load')}
+						onmouseup={keepSelection}
 						oninput={() => typed(set, idx, 'load')}
 						disabled={set.completed}
 						aria-label={isLevels ? `Set ${idx + 1} level` : undefined}
@@ -563,6 +574,7 @@
 					aria-invalid={isMissing(idx, 'reps')}
 					data-suggested={isSuggested(set, 'reps')}
 					onfocus={(e) => selectIfSuggested(e, set, 'reps')}
+					onmouseup={keepSelection}
 					oninput={() => typed(set, idx, 'reps')}
 					disabled={set.completed}
 					min={1}
@@ -575,6 +587,7 @@
 					aria-invalid={isMissing(idx, 'RIR')}
 					data-suggested={isSuggested(set, 'RIR')}
 					onfocus={(e) => selectIfSuggested(e, set, 'RIR')}
+					onmouseup={keepSelection}
 					oninput={() => typed(set, idx, 'RIR')}
 					disabled={set.completed}
 					type="number"
