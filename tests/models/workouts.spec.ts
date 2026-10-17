@@ -54,7 +54,7 @@ test('create workout', async ({ page, userData }) => {
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
+		'Barbell bench press 2 Independent sets of 8 to 15 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
 	);
 });
 
@@ -80,6 +80,9 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await editWorkoutExercise(page, 'Barbell bench press');
 	await page.locator('button').filter({ hasText: 'Independent' }).click();
 	await page.getByRole('option', { name: 'Down', exact: true }).click();
+	await page.locator('button').filter({ hasText: 'Pick one' }).click();
+	await page.getByRole('option', { name: 'Absolute load' }).click();
+	await page.locator('#exercise-set-decrement').fill('5');
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Update' }).click();
 
@@ -181,7 +184,7 @@ test('create workout with all set types', async ({ page, userData }) => {
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('main')).toContainText(
-		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 50 9 1 2 45 8 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Load (kg) Reps RIR 1 10 12 2 2 10 10 0 1 10 2 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Load (kg) Reps RIR 1 10 18 2 1 5 12 22 10 16 2 1 5 10 2Incline dumbbell press 2 Independent sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Load (kg) Reps RIR 1 20 14 2 2 15 12 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Load (kg) Reps RIR 1 180 18 2 2 180 12 0'
+		'Barbell bench press 2 Down sets of 8 to 15 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 50 9 1 2 45 8 1 Dumbbell bicep curls 2 Myorep match sets of 8 to 15 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Load (kg) Reps RIR 1 10 12 2 2 10 10 0 1 10 2 0Leaning dumbbell lateral raises 2 Drop sets of 8 to 15 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Load (kg) Reps RIR 1 10 18 2 1 5 12 22 10 16 2 1 5 10 2Incline dumbbell press 2 Independent sets of 8 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Load (kg) Reps RIR 1 20 14 2 2 15 12 1 Leg press 2 Myorep sets of 8 to 15 reps BW Quads Feet high for quad focus, push up, control return. Load (kg) Reps RIR 1 180 18 2 2 180 12 0'
 	);
 });
 
@@ -291,7 +294,7 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
+		'Barbell bench press 2 Independent sets of 8 to 15 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
 	);
 });
 
@@ -1912,6 +1915,7 @@ test('Quick add in a routine workout: the card still shows the set type and reps
 	await createSplitAndMesoForTest(page);
 	await createExercises(userData.userId, [{ name: 'Quick add curl', targetMuscleGroup: 'Biceps' }]);
 	await page.getByLabel('create-workout').click();
+	await pickRoutine(page, 'Push A');
 	await page.getByPlaceholder('Type here').fill('80');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/manage\/exercises/);

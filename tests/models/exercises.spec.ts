@@ -517,10 +517,9 @@ test('reps only: replaces the bodyweight share (with a warning), and suggestions
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await quickAdd(page, ['Sit-ups']);
-	await editWorkoutExercise(page, 'Sit-ups');
-	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(page.locator('[id="Sit-ups-set-1-reps"]')).toHaveValue('13');
+	// A second set starts from the first
+	await page.getByTestId('Sit-ups-add-set').click();
 	await expect(page.locator('[id="Sit-ups-set-2-reps"]')).toHaveValue('13');
 	// No load to enter for a reps-only exercise
 	await expect(page.locator('[id="Sit-ups-set-1-load"]')).toHaveCount(0);

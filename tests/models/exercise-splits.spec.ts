@@ -403,7 +403,7 @@ test('an exercise never done and in no routine starts as Independent, 8–15 rep
 	await expect(page.locator('#exercise-rep-range-end')).toHaveValue('15');
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
-	await expect(page.getByRole('main').getByText(/^3 independent sets of 8 to 15 reps$/i)).toBeVisible();
+	await expect(page.getByRole('main').getByText(/3\s+independent sets of\s+8 to 15 reps/i)).toBeVisible();
 });
 
 test('adding an exercise by picking it in a new routine', async ({ page, userData }) => {
