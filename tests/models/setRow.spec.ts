@@ -441,3 +441,31 @@ test('past sets read weight, reps, RIR, like the workout screen: workout page, H
 	await page.getByRole('option', { name: 'Barbell rows' }).click();
 	await expect(page.locator('main')).toContainText(rowsOrder);
 });
+
+test('a tap on a suggestion selects it, so typing replaces it; typing set 1 never overwrites the suggestions below', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const reps2 = box(page, 'Barbell rows', 2, 'reps');
+	const load2 = await box(page, 'Barbell rows', 2, 'load').inputValue();
+	await expect(reps2).toHaveAttribute('data-suggested', 'true');
+	expect(await reps2.inputValue()).not.toBe('');
+
+	// Typed straight over, no deleting first
+	await reps2.click();
+	await page.keyboard.type('7');
+	await expect(reps2).toHaveValue('7');
+	await expect(reps2).toHaveAttribute('data-suggested', 'false');
+
+	// A typed box behaves as any box: a tap doesn't select it
+	await reps2.click();
+	await page.keyboard.press('End');
+	await page.keyboard.type('1');
+	await expect(reps2).toHaveValue('71');
+
+	// Set 1's new weight stays in set 1: set 2 keeps its own suggestion
+	await box(page, 'Barbell rows', 1, 'load').fill('70');
+	await expect(box(page, 'Barbell rows', 2, 'load')).toHaveValue(load2);
+});

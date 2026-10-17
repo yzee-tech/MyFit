@@ -48,7 +48,9 @@ test('create workout', async ({ page, userData }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
+	await expect(page.getByRole('tabpanel')).toContainText(
+		/Mesocycle No mesocycle (Morning|Noon|Afternoon|Evening) workout User bodyweight 100 kg/
+	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
@@ -173,7 +175,9 @@ test('create workout with all set types', async ({ page, userData }) => {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Save' }).click();
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
+	await expect(page.getByRole('tabpanel')).toContainText(
+		/Mesocycle No mesocycle (Morning|Noon|Afternoon|Evening) workout User bodyweight 100 kg/
+	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('main')).toContainText(
 		'Barbell bench press 2 Down sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 50 9 1 2 45 8 1 Dumbbell bicep curls 2 Myorep match sets of 10 to 20 reps Biceps Hold dumbbells at sides, curl up, squeeze biceps, lower slow. Load (kg) Reps RIR 1 10 12 2 2 10 10 0 1 10 2 0Leaning dumbbell lateral raises 2 Drop sets of 10 to 20 reps Side delts Lean slightly, raise dumbbells to shoulder height. Control descent. Load (kg) Reps RIR 1 10 18 2 1 5 12 22 10 16 2 1 5 10 2Incline dumbbell press 2 Independent sets of 10 to 15 reps Chest Bench at 30-45 degrees, elbows tucked. Press dumbbells up, control descent. Load (kg) Reps RIR 1 20 14 2 2 15 12 1 Leg press 2 Myorep sets of 10 to 20 reps BW Quads Feet high for quad focus, push up, control return. Load (kg) Reps RIR 1 180 18 2 2 180 12 0'
@@ -281,7 +285,9 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle No mesocycle User bodyweight 100 kg');
+	await expect(page.getByRole('tabpanel')).toContainText(
+		/Mesocycle No mesocycle (Morning|Noon|Afternoon|Evening) workout User bodyweight 100 kg/
+	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Barbell bench press 2 Independent sets of 5 to 10 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
@@ -1691,4 +1697,128 @@ test('an edit left without saving (tab closed) is cleared on the next visit, wit
 	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
 	await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
 	expect(await savedFirstSetReps(workout.id)).toBe(10);
+});
+
+test('Workouts list: two lines, a blank workout named by its time, the volume in full; no skipped or rest day filter', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.workout.deleteMany({ where: { userId } });
+	const day = (back: number, hours: number) => {
+		const date = new Date();
+		date.setDate(date.getDate() - back);
+		date.setHours(hours, 0, 0, 0);
+		return date;
+	};
+	const exercise = (exerciseIndex: number, name: string, weightUnit: 'KG' | 'LEVEL', sets: [number, number][]) => ({
+		exerciseIndex,
+		name,
+		targetMuscleGroup: 'Traps' as const,
+		setType: 'Straight' as const,
+		repRangeStart: 8,
+		repRangeEnd: 12,
+		weightUnit,
+		sets: { create: sets.map(([load, reps], setIndex) => ({ setIndex, load, reps, RIR: 2, skipped: false })) }
+	});
+	const seed = (startedAt: Date, routineName: string | null, exercises: ReturnType<typeof exercise>[]) =>
+		prisma.workout.create({
+			data: {
+				userId,
+				userBodyweight: 80,
+				startedAt,
+				endedAt: new Date(startedAt.getTime() + 45 * 60000),
+				routineName,
+				workoutExercises: { create: exercises }
+			}
+		});
+	// 7 am, blank: 3 × 10 at 40 kg and 2 × 12 at 50 kg = 2,400 kg; a machine's levels don't count
+	await seed(day(1, 7), null, [
+		exercise(0, 'Barbell rows', 'KG', [
+			[40, 10],
+			[40, 10],
+			[40, 10]
+		]),
+		exercise(1, 'Face pulls', 'KG', [
+			[50, 12],
+			[50, 12]
+		]),
+		exercise(2, 'Leg press', 'LEVEL', [[8, 15]])
+	]);
+	await seed(day(2, 18), 'Pull A', [exercise(0, 'Barbell rows', 'KG', [[100, 36]])]);
+
+	await page.goto('/workouts');
+	await expect(page.getByTestId('workout-name')).toHaveText(['Morning workout', 'Pull A']);
+	await expect(page.getByTestId('workout-volume')).toHaveText(['Volume 2,400 kg', 'Volume 3,600 kg']);
+	await expect(page.getByTestId('workout-length')).toHaveText(['45 min', '45 min']);
+
+	// In pounds at home: the same work, in lb
+	await prisma.userSettings.upsert({
+		where: { userId },
+		create: { userId, homeWeightUnit: 'LB' },
+		update: { homeWeightUnit: 'LB' }
+	});
+	try {
+		await page.reload();
+		await expect(page.getByTestId('workout-volume').first()).toHaveText('Volume 5,291 lb');
+	} finally {
+		await prisma.userSettings.update({ where: { userId }, data: { homeWeightUnit: 'KG' } });
+	}
+
+	// Skipped and rest days are gone from the filter; a link from before still opens the list
+	await page.getByLabel('search').click();
+	await expect(page.getByText('Workout types')).toHaveCount(0);
+	await expect(page.getByLabel('Skipped')).toHaveCount(0);
+	await page.goto(`/workouts?selectedWorkoutStatuses=${encodeURIComponent(JSON.stringify([null, 'Skipped']))}`);
+	await expect(page.getByTestId('workout-name')).toHaveText(['Morning workout', 'Pull A']);
+});
+
+test('a big Add exercise button under the exercises; set 1 typed is copied into later empty sets, which follow it until typed in', async ({
+	page
+}) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await expect(page.getByTestId('workout-routine-name')).toHaveText(/^(Morning|Noon|Afternoon|Evening) workout$/);
+
+	// Empty workout: the big button instead of "No exercises added"; it opens the add form
+	const big = page.getByTestId('add-exercise-big');
+	await expect(big).toBeVisible();
+	await expect(page.getByText('No exercises added')).toHaveCount(0);
+	await big.click();
+	await pickExercise(page, 'Face pulls');
+	await page.getByLabel('Sets').fill('3');
+	await page.getByRole('button', { name: 'Add exercise' }).click();
+	await expect(page.getByTestId('Face pulls-sets')).toBeVisible();
+	// Under the exercise now; not while reordering
+	const cardBox = (await page.getByTestId('Face pulls-sets').boundingBox())!;
+	expect((await big.boundingBox())!.y).toBeGreaterThan(cardBox.y + cardBox.height);
+	await page.getByLabel('reorder-toggle').click();
+	await expect(big).toHaveCount(0);
+	await page.getByLabel('reorder-toggle').click();
+
+	const box = (set: number, field: 'load' | 'reps' | 'RIR') => page.locator(`[id="Face\\ pulls-set-${set}-${field}"]`);
+	// Never done before: nothing suggested. Set 1 typed → sets 2 and 3 get it, lighter
+	await box(1, 'load').fill('15');
+	await box(1, 'reps').fill('12');
+	await box(1, 'RIR').fill('2');
+	for (const set of [2, 3]) {
+		await expect(box(set, 'load')).toHaveValue('15');
+		await expect(box(set, 'reps')).toHaveValue('12');
+		await expect(box(set, 'RIR')).toHaveValue('2');
+		await expect(box(set, 'load')).toHaveAttribute('data-suggested', 'true');
+	}
+	// Set 1 changed: the copies follow
+	await box(1, 'load').fill('17.5');
+	await expect(box(2, 'load')).toHaveValue('17.5');
+	await expect(box(3, 'load')).toHaveValue('17.5');
+	// A box typed in is the person's: set 1 no longer reaches it
+	await box(3, 'load').fill('20');
+	await box(1, 'load').fill('15');
+	await expect(box(2, 'load')).toHaveValue('15');
+	await expect(box(3, 'load')).toHaveValue('20');
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
 });

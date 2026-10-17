@@ -31,7 +31,10 @@ function getSetCapacity(set: VolumeSet, userBodyweight: number, bodyweightFracti
 
 /** Volume in kg of the sets done (not skipped); a machine's levels aren't weights, so they count 0 */
 export function getExerciseVolume(
-	workoutExercise: Pick<WorkoutExercise, 'weightUnit' | 'bodyweightFraction'> & {
+	// Plain fields, not the router's types: the workouts list (a router procedure) uses this too
+	workoutExercise: {
+		weightUnit?: WeightUnit | null;
+		bodyweightFraction?: number | null;
 		sets: (VolumeSet & { skipped?: boolean })[];
 	},
 	userBodyweight: number
@@ -40,7 +43,7 @@ export function getExerciseVolume(
 	return arraySum(
 		workoutExercise.sets
 			.filter((set) => !set.skipped)
-			.map((set) => getSetVolume(set, userBodyweight, workoutExercise.bodyweightFraction))
+			.map((set) => getSetVolume(set, userBodyweight, workoutExercise.bodyweightFraction ?? null))
 	);
 }
 

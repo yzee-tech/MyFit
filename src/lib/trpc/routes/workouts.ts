@@ -9,6 +9,7 @@ import {
 	comparablePerformances,
 	convertExerciseLoads,
 	getBlockWeek,
+	getExerciseVolume,
 	isDeloadWeek,
 	NO_BLOCK_PROGRESSION,
 	progressiveOverloadMagic,
@@ -284,6 +285,8 @@ const loadWorkoutsSchema = z.strictObject({
 		.object({
 			startDate: z.date().optional(),
 			endDate: z.date().optional(),
+			// No longer a filter (skipped and rest days are gone): still accepted from a saved filter or an
+			// app from before, and ignored
 			selectedWorkoutStatuses: z.array(z.union([z.literal('RestDay'), z.literal('Skipped'), z.null()])).optional(),
 			selectedMesocycles: z.array(z.union([z.string(), z.null()])).optional()
 		})
@@ -305,19 +308,6 @@ export const workouts = t.router({
 			whereClause = { ...whereClause, startedAt: { lte: endDate } };
 		}
 
-		if (filters?.selectedWorkoutStatuses) {
-			const orClause: Prisma.WorkoutWhereInput['OR'] = [
-				{ workoutOfMesocycle: { workoutStatus: { in: filters.selectedWorkoutStatuses.filter((m) => m !== null) } } }
-			];
-
-			if (filters.selectedWorkoutStatuses.includes(null)) {
-				orClause.push({ workoutOfMesocycle: { workoutStatus: { equals: null } } });
-				orClause.push({ workoutOfMesocycle: null });
-			}
-
-			andConditions.push({ OR: orClause });
-		}
-
 		if (filters?.selectedMesocycles) {
 			const orClause: Prisma.WorkoutWhereInput['OR'] = [
 				{ workoutOfMesocycle: { mesocycle: { name: { in: filters.selectedMesocycles.filter((m) => m !== null) } } } }
@@ -332,7 +322,7 @@ export const workouts = t.router({
 
 		whereClause = { ...whereClause, AND: andConditions };
 
-		return prisma.workout.findMany({
+		const workouts = await prisma.workout.findMany({
 			where: whereClause,
 			orderBy: { startedAt: 'desc' },
 			include: {
@@ -342,12 +332,27 @@ export const workouts = t.router({
 							select: { id: true, name: true }
 						}
 					}
+				},
+				workoutExercises: {
+					select: {
+						bodyweightFraction: true,
+						weightUnit: true,
+						sets: { select: { reps: true, load: true, RIR: true, skipped: true, miniSets: true } }
+					}
 				}
 			},
 			cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 			skip: input.cursorId !== undefined ? 1 : 0,
 			take: 10
 		});
+		// Each card shows its volume (kg, like the Stats card: levels don't count); the sets stay here
+		return workouts.map(({ workoutExercises, ...workout }) => ({
+			...workout,
+			volume: workoutExercises.reduce(
+				(total, exercise) => total + getExerciseVolume(exercise, workout.userBodyweight),
+				0
+			)
+		}));
 	}),
 
 	getFilterData: t.procedure.query(async ({ ctx }) => {
@@ -686,8 +691,7 @@ export const workouts = t.router({
 	 */
 	previewRoutineChanges: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
 		const { workoutOfMesocycle } = input.workoutData;
-		// A skipped block workout keeps the plan; a blank workout has no routine
-		if (workoutOfMesocycle && workoutOfMesocycle.workoutStatus !== null) return null;
+		// A blank workout has no routine
 		if (!workoutOfMesocycle && !routineNameOf(input.workoutData)) return null;
 		const routine = await findWorkoutRoutine(ctx.userId, routineNameOf(input.workoutData));
 		// Removed from My routines during the workout: nothing to update
@@ -767,8 +771,7 @@ export const workouts = t.router({
 		];
 
 		// Only when chosen: the routine in My routines becomes what this workout did, and the block follows
-		const skipped = workoutOfMesocycle !== undefined && workoutOfMesocycle.workoutStatus !== null;
-		const routine = input.updateRoutine && !skipped ? await findWorkoutRoutine(ctx.userId, routineName) : null;
+		const routine = input.updateRoutine ? await findWorkoutRoutine(ctx.userId, routineName) : null;
 		if (!routine) {
 			await prisma.$transaction(transactionQueries);
 			return { message: 'Workout created successfully', workoutId: workout.id as string };

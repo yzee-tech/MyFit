@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { formatWorkoutLength } from '$lib/utils/workoutLength';
+	import { fromKg, unitLabel } from '$lib/utils/weightUnits';
+	import { workoutName } from '$lib/utils/workoutNames';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
@@ -7,7 +9,6 @@
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterInputs, RouterOutputs } from '$lib/trpc/router.js';
-	import type { WorkoutStatus } from '@prisma/client';
 	import type { DateRange } from 'bits-ui';
 	import { type InfiniteLoadingEvents } from 'svelte-infinite-loading';
 	import AddIcon from 'virtual:icons/lucide/plus';
@@ -18,6 +19,12 @@
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 
 	let { data } = $props();
+
+	/** A workout's volume in the home unit, in full, e.g. "3,659 kg" */
+	function formatVolume(kg: number) {
+		const unit = $page.data.homeWeightUnit ?? 'KG';
+		return `${Math.round(fromKg(kg, unit)).toLocaleString()} ${unitLabel(unit)}`;
+	}
 	let workouts: RouterOutputs['workouts']['load'] = $state([]);
 	let currentFilters = $derived(getCurrentFilters());
 
@@ -26,7 +33,6 @@
 		const startDate = $page.url.searchParams.get('startDate');
 		const endDate = $page.url.searchParams.get('endDate');
 		const selectedMesocycles = $page.url.searchParams.get('selectedMesocycles');
-		const selectedWorkoutStatuses = $page.url.searchParams.get('selectedWorkoutStatuses');
 
 		if (startDate) {
 			currentFilters.startDate = new Date(startDate);
@@ -36,9 +42,6 @@
 		}
 		if (selectedMesocycles) {
 			currentFilters.selectedMesocycles = JSON.parse(selectedMesocycles);
-		}
-		if (selectedWorkoutStatuses) {
-			currentFilters.selectedWorkoutStatuses = JSON.parse(selectedWorkoutStatuses);
 		}
 
 		return currentFilters;
@@ -67,11 +70,7 @@
 		goto('/workouts/manage/start');
 	}
 
-	function setFilters(
-		selectedDateRange: DateRange,
-		selectedMesocycles: (string | null)[],
-		selectedWorkoutStatus: (WorkoutStatus | null)[]
-	) {
+	function setFilters(selectedDateRange: DateRange, selectedMesocycles: (string | null)[]) {
 		const newURL = new URL($page.url);
 
 		if (selectedDateRange.start) {
@@ -92,11 +91,8 @@
 			newURL.searchParams.delete('selectedMesocycles');
 		}
 
-		if (selectedWorkoutStatus.length) {
-			newURL.searchParams.set('selectedWorkoutStatuses', JSON.stringify(selectedWorkoutStatus));
-		} else {
-			newURL.searchParams.delete('selectedWorkoutStatuses');
-		}
+		// Skipped and rest days are gone: an old link's filter on them goes too
+		newURL.searchParams.delete('selectedWorkoutStatuses');
 
 		if (newURL.toString() === $page.url.toString()) return;
 		workouts = [];
@@ -122,33 +118,43 @@
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
 		{#each workouts as workout}
 			{@const { workoutOfMesocycle } = workout}
+			{@const status = workoutOfMesocycle?.workoutStatus ?? null}
+			<!-- Date and name, then length and volume. Skipped and rest days (only in old history) say so -->
 			<Button
-				class="flex h-12 items-center gap-2 rounded-md border bg-card p-2"
+				class="flex h-auto flex-col items-stretch gap-0.5 rounded-md border bg-card p-2 font-normal"
 				href="/workouts/{workout.id}"
 				variant="outline"
 			>
-				<span class="mr-auto flex items-baseline gap-2">
-					<span class="text-lg font-semibold">
+				<span class="flex items-baseline justify-between gap-2">
+					<span class="whitespace-nowrap text-lg font-semibold">
 						{workout.startedAt.toLocaleDateString(undefined, {
 							day: '2-digit',
 							month: 'long'
 						})}
 					</span>
-					<span class="text-sm text-muted-foreground" data-testid="workout-length">
-						{formatWorkoutLength(workout.startedAt, workout.endedAt)}
+					<span class="flex min-w-0 items-center gap-1 text-muted-foreground">
+						{#if workout.note}
+							<StickyNoteIcon class="shrink-0" />
+						{/if}
+						<span class="truncate" data-testid="workout-name">
+							{#if status === 'RestDay'}
+								Rest
+							{:else}
+								{workoutName(workout)}{status === 'Skipped' ? ' (skipped)' : ''}
+							{/if}
+						</span>
 					</span>
 				</span>
-				{#if workout.note}
-					<StickyNoteIcon class="text-muted-foreground" />
-				{/if}
-				{#if workoutOfMesocycle}
-					<span class="truncate text-right text-muted-foreground">
-						{workoutOfMesocycle.workoutStatus === 'RestDay' ? 'Rest' : (workout.routineName ?? '')}
-						{workoutOfMesocycle.workoutStatus === 'Skipped' ? '(skipped)' : ''}
-					</span>
-				{:else if workout.routineName}
-					<span class="truncate text-right text-muted-foreground">{workout.routineName}</span>
-				{/if}
+				<span class="flex gap-4 text-sm text-muted-foreground">
+					{#if status === null}
+						<span data-testid="workout-length">{formatWorkoutLength(workout.startedAt, workout.endedAt)}</span>
+						<span data-testid="workout-volume">
+							Volume <span class="font-medium text-foreground">{formatVolume(workout.volume)}</span>
+						</span>
+					{:else}
+						<span>{status === 'RestDay' ? 'Rest day' : 'Skipped'}</span>
+					{/if}
+				</span>
 			</Button>
 		{/each}
 		<DefaultInfiniteLoader {loadMore} identifier={currentFilters} entityPlural="workouts" />

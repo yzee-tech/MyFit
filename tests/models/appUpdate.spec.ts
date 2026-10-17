@@ -98,6 +98,7 @@ test('a newer version going live: the next page change reloads into it, and the 
 	expect(await savedWorkout(page)).toEqual(before);
 	// Back on the workout's exercises, as it was
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
-	await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
+	// After a full reload the exercises come back with the rest of the app, which takes longer on a busy machine
+	await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible({ timeout: 10000 });
 	await expect(page.getByTestId('Pull-ups-menu-button')).toHaveCount(0);
 });

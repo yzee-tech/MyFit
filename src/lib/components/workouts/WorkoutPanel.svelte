@@ -9,6 +9,7 @@
 	import ChevronUpIcon from 'virtual:icons/lucide/chevron-up';
 	import TrashIcon from 'virtual:icons/lucide/trash-2';
 	import { workoutRunes } from '../../../routes/workouts/manage/workoutRunes.svelte';
+	import { blankWorkoutName } from '$lib/utils/workoutNames';
 
 	/** After this long, a workout most likely wasn't finished: ask to finish or discard it */
 	const NUDGE_AFTER_MINUTES = 2 * 60;
@@ -29,7 +30,7 @@
 	let routineLabel = $derived(
 		workoutRunes.workoutData?.routineName ??
 			workoutRunes.workoutData?.workoutOfMesocycle?.splitDayName ??
-			'Blank workout'
+			(workoutRunes.workoutData ? blankWorkoutName(workoutRunes.workoutData.startedAt) : 'Blank workout')
 	);
 	// The exercise being done: the first with a set neither ticked nor skipped
 	let currentExercise = $derived(
