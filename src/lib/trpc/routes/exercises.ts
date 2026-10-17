@@ -6,7 +6,6 @@ import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { updateExerciseEverywhere } from '$lib/server/exercises';
 import { withRoutinesTransaction } from '$lib/server/blockCache';
-import { commonExercisePerMuscleGroup } from '$lib/common/commonExercises';
 import { MuscleGroupSchema } from '$lib/zodSchemas';
 import type { ChangeType, Prisma, SetType } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
@@ -74,11 +73,11 @@ type RoutineSettings = {
 	topRepRangeEnd: number | null;
 };
 
-/** Routine settings for an exercise with no routine or workout to copy them from */
+/** Routine settings for an exercise with no routine or workout to copy them from: Independent, 8–15 */
 const DEFAULT_ROUTINE_SETTINGS: RoutineSettings = {
 	setType: 'V2',
 	repRangeStart: 8,
-	repRangeEnd: 12,
+	repRangeEnd: 15,
 	changeType: null,
 	changeAmount: null,
 	topRepRangeStart: null,
@@ -111,29 +110,14 @@ async function getRoutineSettings(userId: string, exerciseIds: string[]) {
 			select: routineSettingsSelect
 		})
 	]);
-	const settings = new Map<string, RoutineSettings>();
-	for (const { exerciseId, ...rest } of [...fromMyRoutines, ...fromWorkouts]) {
-		if (exerciseId) settings.set(exerciseId, rest);
+	const settings = new Map<string, RoutineSettings & { from: 'workout' | 'routine' }>();
+	for (const { exerciseId, ...rest } of fromMyRoutines) {
+		if (exerciseId) settings.set(exerciseId, { ...rest, from: 'routine' });
+	}
+	for (const { exerciseId, ...rest } of fromWorkouts) {
+		if (exerciseId) settings.set(exerciseId, { ...rest, from: 'workout' });
 	}
 	return settings;
-}
-
-/** A built-in exercise's usual sets and reps, for one of yours with the same name that isn't used yet */
-function builtInRoutineSettings(name: string): RoutineSettings | undefined {
-	const builtIn = commonExercisePerMuscleGroup
-		.flatMap((group) => group.exercises)
-		.find((exercise) => exercise.name === name);
-	if (!builtIn) return undefined;
-	// Its rep range only: with no history, every exercise starts as Independent
-	return {
-		setType: DEFAULT_ROUTINE_SETTINGS.setType,
-		repRangeStart: builtIn.repRangeStart,
-		repRangeEnd: builtIn.repRangeEnd,
-		changeType: builtIn.changeType ?? null,
-		changeAmount: builtIn.changeAmount ?? null,
-		topRepRangeStart: builtIn.topRepRangeStart ?? null,
-		topRepRangeEnd: builtIn.topRepRangeEnd ?? null
-	};
 }
 
 /**
@@ -242,10 +226,11 @@ export const exercises = t.router({
 			ctx.userId,
 			available.map((exercise) => exercise.id)
 		);
-		return available.map((exercise) => ({
-			...exercise,
-			routineSettings: settings.get(exercise.id) ?? builtInRoutineSettings(exercise.name) ?? DEFAULT_ROUTINE_SETTINGS
-		}));
+		return available.map((exercise) => {
+			const { from, ...routineSettings } = settings.get(exercise.id) ?? { ...DEFAULT_ROUTINE_SETTINGS, from: null };
+			// Where they came from: its last workout, a routine in My routines, or neither (the defaults)
+			return { ...exercise, routineSettings, settingsFrom: from };
+		});
 	}),
 
 	/** One exercise: its details, the routines using it and its history */
@@ -321,8 +306,10 @@ export const exercises = t.router({
 		.input(z.strictObject({ exerciseId: z.string().cuid2(), routineIds: z.array(z.string().cuid2()) }))
 		.mutation(async ({ ctx, input }) => {
 			const exercise = await findOwnExercise(ctx.userId, input.exerciseId);
-			const settings = (await getRoutineSettings(ctx.userId, [exercise.id])).get(exercise.id) ??
-				builtInRoutineSettings(exercise.name) ?? { ...DEFAULT_ROUTINE_SETTINGS };
+			const { from, ...settings } = (await getRoutineSettings(ctx.userId, [exercise.id])).get(exercise.id) ?? {
+				...DEFAULT_ROUTINE_SETTINGS,
+				from: null
+			};
 			const details = {
 				exerciseId: exercise.id,
 				name: exercise.name,

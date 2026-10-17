@@ -49,6 +49,24 @@ export async function pickExercise(page: Page, name: string) {
 	await page.getByRole('option', { name, exact: true }).click();
 }
 
+/** Adds exercises to the workout in progress with Quick add, ticked in this order: 1 set each */
+export async function quickAdd(page: Page, names: string[]) {
+	await page.getByLabel('add-exercise').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	for (const name of names) {
+		await sheet.getByPlaceholder('Search your exercises').fill(name);
+		await sheet.getByRole('checkbox', { name, exact: true }).click();
+	}
+	await sheet.getByRole('button', { name: /^Add \d+ exercises?$/ }).click();
+	await expect(sheet).toHaveCount(0);
+}
+
+/** Opens an exercise of the workout in progress in its full editor (⋯ → Edit) */
+export async function editWorkoutExercise(page: Page, name: string) {
+	await page.getByTestId(`${name}-menu-button`).click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+}
+
 /** Adds a template's routines to My routines (from the My routines page) */
 export async function createTemplateExerciseSplit(page: Page, template = 'Pull Push Legs 6 routines') {
 	await page.getByLabel('my-routines-options').click();
