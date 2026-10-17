@@ -22,6 +22,7 @@
 	import { invalidate, goto } from '$app/navigation';
 	import { TRPCClientError } from '@trpc/client';
 	import { workoutRunes } from '../../manage/workoutRunes.svelte';
+	import { workoutName } from '$lib/utils/workoutNames';
 
 	type PropsType = { workout: FullWorkoutWithMesoData };
 	let { workout }: PropsType = $props();
@@ -150,9 +151,7 @@
 			{:else}
 				<div class="flex items-center justify-between">
 					<span class="font-semibold">No mesocycle</span>
-					{#if workout.routineName}
-						<Badge class="whitespace-nowrap" variant="secondary">{workout.routineName}</Badge>
-					{/if}
+					<Badge class="whitespace-nowrap" variant="secondary">{workoutName(workout)}</Badge>
 				</div>
 			{/if}
 		</div>

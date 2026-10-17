@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import AddEditExerciseDrawer from '$lib/components/mesocycleAndExerciseSplit/AddEditExerciseDrawer.svelte';
+	import AddIcon from 'virtual:icons/lucide/plus';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import Progress from '$lib/components/ui/progress/progress.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -22,9 +23,11 @@
 	import EditWorkoutDetails from './(components)/EditWorkoutDetails.svelte';
 	import { page } from '$app/stores';
 	import QuotesDialog from './(components)/QuotesDialog.svelte';
+	import { blankWorkoutName } from '$lib/utils/workoutNames';
 
 	let { data } = $props();
 	let reordering = $state(false);
+	let exerciseDrawer: ReturnType<typeof AddEditExerciseDrawer> | undefined = $state();
 	let comparing = $state(false);
 
 	const shouldShowQuote =
@@ -169,12 +172,11 @@
 				<span class="text-lg font-semibold" data-testid="workout-routine-name">{workoutData.routineName}</span>
 				<span class="text-sm text-muted-foreground">{getFormattedDate(workoutData.startedAt)}</span>
 			{:else}
-				<span class="text-lg font-semibold">
-					{getFormattedDate(workoutData.startedAt)}
+				<!-- A blank workout: named after the time it started -->
+				<span class="text-lg font-semibold" data-testid="workout-routine-name">
+					{blankWorkoutName(workoutData.startedAt)}
 				</span>
-				<p class="text-sm text-muted-foreground">
-					{workoutRunes.editingWorkoutId === null ? 'Without mesocycle' : 'Edit mode'}
-				</p>
+				<span class="text-sm text-muted-foreground">{getFormattedDate(workoutData.startedAt)}</span>
 			{/if}
 		</div>
 		<div class="grid grid-cols-3 gap-1">
@@ -205,6 +207,7 @@
 				{/if}
 			</Button>
 			<AddEditExerciseDrawer
+				bind:this={exerciseDrawer}
 				addExercise={workoutRunes.addExercise}
 				context="workout"
 				editExercise={workoutRunes.editExercise}
@@ -228,7 +231,22 @@
 	</div>
 {:else}
 	<div class="mt-2 flex h-px grow flex-col overflow-y-auto">
-		<DndComponent {comparing} {reordering} bind:itemList={workoutRunes.workoutExercises} />
+		<DndComponent {comparing} {reordering} bind:itemList={workoutRunes.workoutExercises}>
+			{#snippet footer()}
+				<!-- The main way to add one: big, under the exercises (the small + above stays) -->
+				{#if !reordering && !comparing}
+					<Button
+						class="mt-2 h-12 w-full shrink-0 gap-2 border-2 border-dashed border-primary bg-primary/5 font-semibold text-primary hover:bg-primary/10 hover:text-primary"
+						aria-label="Add an exercise"
+						data-testid="add-exercise-big"
+						onclick={() => exerciseDrawer?.openToAdd()}
+						variant="ghost"
+					>
+						<AddIcon class="h-4 w-4" /> Add exercise
+					</Button>
+				{/if}
+			{/snippet}
+		</DndComponent>
 	</div>
 {/if}
 

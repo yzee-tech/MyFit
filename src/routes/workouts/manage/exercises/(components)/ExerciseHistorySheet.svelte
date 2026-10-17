@@ -11,6 +11,7 @@
 	import { workoutRunes } from '../../workoutRunes.svelte';
 	import type { InfiniteEvent } from 'svelte-infinite-loading';
 	import ExerciseStatsChart from '../../../../stats/ExerciseStatsChart.svelte';
+	import { workoutName } from '$lib/utils/workoutNames';
 
 	let exercisesFound: RouterOutputs['workouts']['getExerciseHistory'] = $state([]);
 
@@ -69,7 +70,7 @@
 						<CopyIcon />
 					</Button>
 					<div class="mr-auto flex flex-col">
-						<span class="font-bold">{exercise.workout.routineName}</span>
+						<span class="font-bold">{workoutName(exercise.workout)}</span>
 						<span class="text-xs font-semibold">{wm?.mesocycle.name}</span>
 					</div>
 					<span class="font-semibold text-muted-foreground">

@@ -180,6 +180,12 @@
 		currentExercise = structuredClone(defaultExercise);
 	}
 
+	/** Opens it to add an exercise, as its own + button does (for a bigger button elsewhere on the page) */
+	export function openToAdd() {
+		resetDrawerState();
+		open = true;
+	}
+
 	function submitForm(e: SubmitEvent) {
 		e.preventDefault();
 		let result = false;
