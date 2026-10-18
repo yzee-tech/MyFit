@@ -13,6 +13,8 @@ import {
 	getNextWeightHint,
 	getExerciseVolume,
 	allSetsAtMaxReps,
+	getPerformanceChanges,
+	solveBergerFormula,
 	type ExerciseHistory,
 	type PreviousPerformance
 } from '../../src/lib/utils/workoutUtils';
@@ -131,6 +133,82 @@ test('progression uses the last time an exercise was done, in any routine', () =
 		expect(set.reps).toBeUndefined();
 		expect(set.load).toBeUndefined();
 	});
+});
+
+/** The same performance with some sets skipped (by index) */
+function withSkipped(past: PreviousPerformance, skippedSets: number[]): PreviousPerformance {
+	const sets = past.exercise.sets.map((set, idx) => ({ ...set, skipped: skippedSets.includes(idx) }));
+	return { ...past, exercise: { ...past.exercise, sets } };
+}
+
+// Two workouts of Barbell rows: each set improves by a different amount (+2, +1 and 0 reps), so
+// every set's change is different and an average over the wrong sets shows
+const before = performance('Barbell rows', [
+	{ reps: 12, load: 60, RIR: 2 },
+	{ reps: 10, load: 60, RIR: 2 },
+	{ reps: 8, load: 60, RIR: 2 }
+]);
+const after = performance('Barbell rows', [
+	{ reps: 14, load: 60, RIR: 2 },
+	{ reps: 11, load: 60, RIR: 2 },
+	{ reps: 8, load: 60, RIR: 2 }
+]);
+/** Set idx's change from `before` to `after` (%) */
+const setChange = (idx: number) =>
+	solveBergerFormula({
+		variableToSolve: 'OverloadPercentage',
+		knownValues: {
+			oldSet: { ...before.exercise.sets[idx], miniSets: [] },
+			newSet: { ...after.exercise.sets[idx], miniSets: [] },
+			bodyweightFraction: null,
+			oldUserBodyweight: 100,
+			newUserBodyweight: 100
+		}
+	});
+const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+
+test('performance changes: the average over every set both workouts did, skipped sets left out', () => {
+	// The three changes really differ, so the cases below can tell which sets were counted
+	expect(setChange(0)).toBeGreaterThan(setChange(1));
+	expect(setChange(1)).toBeGreaterThan(setChange(2));
+
+	// Nothing skipped: all three
+	const all = getPerformanceChanges([before, after]);
+	expect(all).toHaveLength(1);
+	expect(all[0]).toBeCloseTo(average([setChange(0), setChange(1), setChange(2)]), 6);
+
+	// A middle set skipped: sets 1 and 3 (it used to stop at the skipped set, counting set 1 only)
+	const middle = getPerformanceChanges([before, withSkipped(after, [1])]);
+	expect(middle).toHaveLength(1);
+	expect(middle[0]).toBeCloseTo(average([setChange(0), setChange(2)]), 6);
+
+	// Set 1 skipped: sets 2 and 3 (it used to compare nothing and give NaN)
+	const first = getPerformanceChanges([withSkipped(before, [0]), after]);
+	expect(first).toHaveLength(1);
+	expect(first[0]).toBeCloseTo(average([setChange(1), setChange(2)]), 6);
+
+	// Every set skipped: the pair is left out, not NaN
+	expect(getPerformanceChanges([before, withSkipped(after, [0, 1, 2])])).toEqual([]);
+});
+
+test('a workout with every set of an exercise skipped still lets the next one add reps', () => {
+	// At week 1's effort (RIR 3), so only the overload target can add reps; the last set goes to
+	// failure in this plan, so only sets 1 and 2 are checked
+	const done = performance('Barbell rows', [
+		{ reps: 11, load: 60, RIR: 3 },
+		{ reps: 11, load: 60, RIR: 3 },
+		{ reps: 11, load: 60, RIR: 3 }
+	]);
+	// Rows done, then skipped completely (out of time), then done again
+	const history: ExerciseHistory = { 'Barbell rows': [done, withSkipped(done, [0, 1, 2]), done] };
+	const rows = progressiveOverloadMagic(testPlan(), 1, 100, history).find(
+		(exercise) => exercise.name === 'Barbell rows'
+	)!;
+	// A skipped workout used to make the target NaN, and then no set got a rep
+	expect(rows.sets.slice(0, 2).map((set) => [set.load, set.reps])).toEqual([
+		[60, 12],
+		[60, 12]
+	]);
 });
 
 test('the routine decides the number of sets, not the last performance', () => {
