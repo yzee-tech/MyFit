@@ -13,6 +13,9 @@ export async function deleteUserData(userId: string) {
 	await prisma.workout.deleteMany({ where: { userId } });
 	await prisma.exercise.deleteMany({ where: { userId } });
 	await prisma.weightSet.deleteMany({ where: { userId } });
+	// Back to the defaults (as a new user has no settings): a test that changes the home unit or
+	// welcome back would otherwise leave it changed for the next test
+	await prisma.userSettings.deleteMany({ where: { userId } });
 }
 
 export * from '@playwright/test';

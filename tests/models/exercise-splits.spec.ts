@@ -58,7 +58,7 @@ async function savedRoutines(userId: string) {
 	}));
 }
 
-test('create a routine from scratch: name and exercises on one page', async ({ page }) => {
+test('create a routine from scratch: name and exercises on one page', async ({ page, userData }) => {
 	await expect(page.getByTestId('my-routines-count')).toHaveText('No routines yet');
 	await expect(page.getByRole('main')).toContainText('Create a routine for each workout you do');
 	await page.getByRole('link', { name: 'New routine' }).click();
@@ -96,8 +96,12 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 
 	// Once saved it's being edited: Update from now on
 	await saveButton.click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	// The message can show twice when the machine is slow; what counts is one routine saved
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' }).first()).toBeVisible({
+		timeout: 10000
+	});
 	await page.waitForURL('/exercise-splits/edit?routine=Pull');
+	expect((await savedRoutines(userData.userId)).map((routine) => routine.name)).toEqual(['Pull']);
 	// (The exercise pop-up may still be closing: look in the page itself)
 	await expect(page.getByRole('main').getByRole('heading', { level: 2, name: 'Edit routine' })).toBeVisible();
 	await expect(page.getByRole('main').getByRole('button', { name: 'Update', exact: true })).toBeVisible();
