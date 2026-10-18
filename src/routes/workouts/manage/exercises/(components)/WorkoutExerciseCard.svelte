@@ -49,6 +49,12 @@
 			suggestionAtMaxReps = allSetsAtMaxReps(exercise, maxReps);
 	});
 	let atMaxReps = $derived(suggestionAtMaxReps === true);
+	// A blank workout counts sets only: the set type and reps are in ⋯ → Edit (none until it's loaded)
+	let blankWorkout = $derived(
+		workoutRunes.workoutData !== null &&
+			!workoutRunes.workoutData.workoutOfMesocycle &&
+			!workoutRunes.workoutData.routineName
+	);
 
 	// Weights this gym has for the exercise; when the next one is a big jump, say how to get there
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
@@ -159,10 +165,14 @@
 		{/if}
 	</div>
 	<div class="flex items-center gap-0.5">
-		<span class="mr-auto text-sm lowercase text-muted-foreground">
-			{exercise.sets.length}
-			{setTypeLabel(exercise.setType)} sets of
-			{exercise.repRangeStart} to {exercise.repRangeEnd} reps
+		<span class="mr-auto text-sm lowercase text-muted-foreground" data-testid="{exercise.name}-summary">
+			{#if blankWorkout}
+				{exercise.sets.length} {exercise.sets.length === 1 ? 'set' : 'sets'}
+			{:else}
+				{exercise.sets.length}
+				{setTypeLabel(exercise.setType)} sets of
+				{exercise.repRangeStart} to {exercise.repRangeEnd} reps
+			{/if}
 		</span>
 		{#if isRepsOnly}
 			<Badge class="whitespace-nowrap" variant="outline">Reps only</Badge>
