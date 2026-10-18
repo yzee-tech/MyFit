@@ -255,7 +255,7 @@
 			Changes apply everywhere it's used, including past workouts.
 		{/snippet}
 		{#if editOpen}
-			<ExerciseForm initial={exercise} onSubmit={saveDetails} pastWorkoutCount={data.workoutCount} submitLabel="Save" />
+			<ExerciseForm initial={exercise} onSubmit={saveDetails} submitLabel="Save" />
 		{/if}
 	</ResponsiveDialog>
 

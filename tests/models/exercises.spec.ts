@@ -483,51 +483,75 @@ test('merging when a workout has both exercises: one entry with all their sets, 
 	expect(await prisma.exercise.count({ where: { id: misspelt.id } })).toEqual(0);
 });
 
-test('reps only: replaces the bodyweight share (with a warning), and suggestions add reps up to the max', async ({
+test('reps only keeps the bodyweight share: suggestions add reps up to the max, and volume still counts the share', async ({
 	page,
 	userData
 }) => {
 	const userId = userData.userId;
-	await createExercises(userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs', bodyweightFraction: 0.4 }]);
-	await logPastWorkout(userId, 'Sit-ups', 0);
-	const situps = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Sit-ups' } } });
+	await createExercises(userId, [{ name: 'Push-ups', targetMuscleGroup: 'Chest', bodyweightFraction: 0.4 }]);
+	// Yesterday at 100 kg bodyweight: 12 reps, no added weight
+	await logPastWorkout(userId, 'Push-ups', 0);
+	const pushups = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Push-ups' } } });
 
-	// Turning on reps only warns about the bodyweight share and hides it; then a max of 13
-	await page.goto(`/exercises/${situps.id}`);
+	// Reps only with a max of 13; the bodyweight share stays on
+	await page.goto(`/exercises/${pushups.id}`);
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await expect(page.getByLabel('Counts bodyweight')).toBeVisible();
 	await page.getByLabel('Reps only').click();
-	await expect(page.getByTestId('reps-only-bodyweight-warning')).toContainText(
-		'counts 40% of your bodyweight. Turning on Reps only removes that, so its 1 past workout will count as 0 volume'
-	);
-	await expect(page.getByLabel('Counts bodyweight')).toBeHidden();
+	await expect(page.getByLabel('Counts bodyweight')).toBeVisible();
+	await expect(page.getByLabel('Counts bodyweight')).toBeChecked();
 	await page.getByLabel('Max reps (optional)').fill('13');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('main')).toContainText('Reps only, max 13');
+	await expect(page.getByRole('main')).toContainText('40% of bodyweight');
 
-	const saved = await prisma.exercise.findUniqueOrThrow({ where: { id: situps.id } });
-	expect(saved).toMatchObject({ repsOnly: true, maxReps: 13, bodyweightFraction: null });
-	const past = await prisma.workoutExercise.findFirstOrThrow({ where: { exerciseId: situps.id } });
-	expect(past.bodyweightFraction).toBeNull();
+	const saved = await prisma.exercise.findUniqueOrThrow({ where: { id: pushups.id } });
+	expect(saved).toMatchObject({ repsOnly: true, maxReps: 13, bodyweightFraction: 0.4 });
+	const past = await prisma.workoutExercise.findFirstOrThrow({ where: { exerciseId: pushups.id } });
+	expect(past.bodyweightFraction).toBe(0.4);
 
 	// Last time 12 reps at 0: next time 13 at 0, which is the max, so the note shows
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
+	// The bodyweight this workout is saved with: volume below depends on it
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await quickAdd(page, ['Sit-ups']);
-	await expect(page.locator('[id="Sit-ups-set-1-reps"]')).toHaveValue('13');
+	await quickAdd(page, ['Push-ups']);
+	await expect(page.locator('[id="Push-ups-set-1-reps"]')).toHaveValue('13');
 	// A second set starts from the first
-	await page.getByTestId('Sit-ups-add-set').click();
-	await expect(page.locator('[id="Sit-ups-set-2-reps"]')).toHaveValue('13');
-	// No load to enter for a reps-only exercise
-	await expect(page.locator('[id="Sit-ups-set-1-load"]')).toHaveCount(0);
-	await expect(page.getByTestId('Sit-ups-set-1-no-load')).toBeVisible();
-	await expect(page.getByTestId('Sit-ups-at-max-reps')).toHaveText(
+	await page.getByTestId('Push-ups-add-set').click();
+	await expect(page.locator('[id="Push-ups-set-2-reps"]')).toHaveValue('13');
+	// No load to enter for a reps-only exercise; both labels show
+	await expect(page.locator('[id="Push-ups-set-1-load"]')).toHaveCount(0);
+	await expect(page.getByTestId('Push-ups-set-1-no-load')).toBeVisible();
+	await expect(page.getByTestId('Push-ups-at-max-reps')).toHaveText(
 		'All sets at your max of 13 reps — try a harder version or add weight.'
 	);
-	await expect(page.getByTestId('Sit-ups-next-weight')).toHaveCount(0);
+	await expect(page.getByTestId('Push-ups-next-weight')).toHaveCount(0);
+	await expect(page.getByText('Reps only', { exact: true })).toBeVisible();
+	await expect(page.getByText('BW', { exact: true })).toBeVisible();
+
+	for (const set of [1, 2]) {
+		await page.locator(`[id="Push-ups-set-${set}-reps"]`).fill('13');
+		await page.locator(`[id="Push-ups-set-${set}-RIR"]`).fill('1');
+		await page.getByTestId(`Push-ups-set-${set}-action`).click();
+	}
+	await page.getByRole('button', { name: 'Next' }).click();
+	await saveWorkout(page);
+
+	// Saved at 0 added weight; the share still counts: 2 × 13 × (0 + 0.4 × 100 kg) = 1,040 kg.
+	// Yesterday's 12 × 40 kg = 480 kg is still counted too
+	const latest = await prisma.workoutExercise.findFirstOrThrow({
+		where: { exerciseId: pushups.id },
+		orderBy: { workout: { startedAt: 'desc' } },
+		include: { sets: true }
+	});
+	expect(latest.bodyweightFraction).toBe(0.4);
+	expect(latest.sets.map((set) => [set.load, set.reps])).toEqual([
+		[0, 13],
+		[0, 13]
+	]);
+	await expect(page.getByTestId('workout-volume')).toHaveText(['Volume 1,040 kg', 'Volume 480 kg']);
 });
 
 test('New exercise: your exercises and built-in suggestions are labelled apart; yours opens', async ({

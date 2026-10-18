@@ -1872,6 +1872,9 @@ test('Quick add: several at once in the order ticked, 1 set each, from the last 
 	// The small + opens it too; each says what it starts with
 	await page.getByLabel('add-exercise').click();
 	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	// It opens on the list, not in the search box: no keyboard pops up
+	await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
+	await expect(sheet.getByPlaceholder('Search your exercises')).not.toBeFocused();
 	await expect(sheet.getByTestId('Barbell rows-starts-with')).toHaveText('Last time: Straight · 6–10 reps');
 	await expect(sheet.getByTestId('Hammer curls-starts-with')).toHaveText('New: Independent · 8–15 reps');
 	await expect(sheet.getByRole('button', { name: 'Add exercises' })).toBeDisabled();

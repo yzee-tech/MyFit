@@ -121,7 +121,8 @@
 	}
 </script>
 
-<Sheet.Root bind:open>
+<!-- Opens on the list, not the search box: no keyboard popping up and pushing the list down -->
+<Sheet.Root openFocus="#quick-add-list" bind:open>
 	<Sheet.Content class="flex h-[85dvh] flex-col gap-0 rounded-t-xl px-4 pb-4 pt-5" side="bottom">
 		<Sheet.Header class="text-left">
 			<Sheet.Title>Add exercises</Sheet.Title>
@@ -170,7 +171,7 @@
 				</Popover.Content>
 			</Popover.Root>
 		</div>
-		<div class="mt-2 grow overflow-y-auto" data-testid="quick-add-list">
+		<div id="quick-add-list" class="mt-2 grow overflow-y-auto outline-none" data-testid="quick-add-list" tabindex="-1">
 			{#each groups as [group, groupExercises] (group)}
 				<div class="mb-0.5 mt-3 text-xs font-semibold text-muted-foreground">{group}</div>
 				{#each groupExercises ?? [] as exercise (exercise.id)}

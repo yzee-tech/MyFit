@@ -8,11 +8,11 @@ const details = {
 	note: null
 };
 
-test('reps only and a bodyweight share are one or the other, and a cap needs reps only', () => {
-	// Both at once is refused, whichever was turned on last
+test('reps only can keep a bodyweight share, and a cap needs reps only', () => {
+	// Both at once (e.g. push-ups): only reps suggested, the share still counts in volume
 	expect(
-		exerciseDetailsInput.safeParse({ ...details, bodyweightFraction: 0.4, repsOnly: true, maxReps: null }).success
-	).toBe(false);
+		exerciseDetailsInput.parse({ ...details, bodyweightFraction: 0.4, repsOnly: true, maxReps: 13 })
+	).toMatchObject({ repsOnly: true, maxReps: 13, bodyweightFraction: 0.4 });
 	// Reps only, without bodyweight: fine, with its cap
 	const repsOnly = exerciseDetailsInput.parse({ ...details, bodyweightFraction: null, repsOnly: true, maxReps: 30 });
 	expect(repsOnly).toMatchObject({ repsOnly: true, maxReps: 30, bodyweightFraction: null });

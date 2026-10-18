@@ -33,10 +33,6 @@ export const exerciseDetailsInput = z
 			.nullable()
 			.default(null)
 	})
-	// Reps only never counts bodyweight: one or the other
-	.refine((details) => !(details.repsOnly && details.bodyweightFraction !== null), {
-		message: 'Pick either Reps only or a bodyweight share'
-	})
 	// Reps only never adds load, so it has no levels either
 	.refine((details) => !(details.repsOnly && details.levels !== null), {
 		message: 'Pick either Reps only or machine levels'
