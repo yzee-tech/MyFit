@@ -108,7 +108,7 @@ export const ExerciseSchema = z.object({
    */
   note: z.string().nullable(),
   /**
-   * Suggestions only ever add reps, never weight (e.g. sit-ups); never with a bodyweight share
+   * Suggestions only ever add reps, never weight (e.g. sit-ups); a bodyweight share still counts in volume
    */
   repsOnly: z.boolean(),
   /**

@@ -8,7 +8,7 @@
 		customMuscleGroup: string | null;
 		bodyweightFraction: number | null;
 		note: string | null;
-		/** Suggestions only add reps, never weight; never with a bodyweight share */
+		/** Suggestions only add reps, never weight; a bodyweight share still counts in volume */
 		repsOnly: boolean;
 		/** Reps-only cap; null for none */
 		maxReps: number | null;
@@ -46,19 +46,10 @@
 		existingExercises?: ExistingExercise[];
 		/** Tapping one of your exercises instead of making a new one */
 		onPickExisting?: (exercise: ExistingExercise) => void;
-		/** Past workouts of the exercise being edited, for the warning about bodyweight */
-		pastWorkoutCount?: number;
 		submitLabel: string;
 		onSubmit: (details: ExerciseFormDetails) => Promise<unknown>;
 	};
-	let {
-		initial,
-		existingExercises = [],
-		onPickExisting,
-		pastWorkoutCount = 0,
-		submitLabel,
-		onSubmit
-	}: PropsType = $props();
+	let { initial, existingExercises = [], onPickExisting, submitLabel, onSubmit }: PropsType = $props();
 
 	let name = $state(initial?.name ?? '');
 	let targetMuscleGroup: MuscleGroup | undefined = $state(initial?.targetMuscleGroup);
@@ -75,9 +66,6 @@
 	let levelsTo: number | undefined = $state(initial?.levelsTo ?? 20);
 	let halfLevels = $state(initial?.levelStep === 0.5);
 	let saving = $state(false);
-
-	// Turning on reps only drops a bodyweight share the exercise already had
-	let dropsBodyweight = $derived(repsOnly && typeof initial?.bodyweightFraction === 'number');
 
 	// Your own exercises that match what's typed
 	let existingMatches = $derived.by(() => {
@@ -103,7 +91,6 @@
 		targetMuscleGroup = suggestion.targetMuscleGroup;
 		customMuscleGroup = suggestion.customMuscleGroup ?? '';
 		countsBodyweight = typeof suggestion.bodyweightFraction === 'number';
-		if (countsBodyweight) repsOnly = false;
 		bodyweightPercentage = suggestion.bodyweightFraction ? Math.round(suggestion.bodyweightFraction * 100) : 100;
 		note = suggestion.note ?? '';
 	}
@@ -125,8 +112,8 @@
 				name: name.trim(),
 				targetMuscleGroup,
 				customMuscleGroup: targetMuscleGroup === 'Custom' ? customMuscleGroup.trim() || null : null,
-				// Reps only and a bodyweight share are one or the other
-				bodyweightFraction: !repsOnly && countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
+				// Reps only can count bodyweight too (e.g. push-ups): only reps suggested, the share still in volume
+				bodyweightFraction: countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
 				note: note.trim() || null,
 				repsOnly,
 				maxReps: repsOnly && maxReps ? maxReps : null,
@@ -250,14 +237,6 @@
 				bind:value={maxReps}
 			/>
 			<span class="text-xs text-muted-foreground">Suggestions stop at this many reps.</span>
-			{#if dropsBodyweight}
-				<p class="rounded-md bg-muted/50 p-2 text-xs" data-testid="reps-only-bodyweight-warning">
-					This exercise counts {Math.round((initial?.bodyweightFraction ?? 0) * 100)}% of your bodyweight. Turning on
-					Reps only removes that{#if pastWorkoutCount > 0}, so its {pastWorkoutCount} past
-						{pastWorkoutCount === 1 ? 'workout' : 'workouts'} will count as 0 volume in stats{/if}. Your reps and
-					weights don't change.
-				</p>
-			{/if}
 		{/if}
 	</div>
 
@@ -306,7 +285,7 @@
 		{/if}
 	</div>
 
-	<div class="grid gap-1.5" class:hidden={repsOnly}>
+	<div class="grid gap-1.5">
 		<div class="flex items-center justify-between gap-4">
 			<Label for="exercise-form-bodyweight">Counts bodyweight</Label>
 			<Switch id="exercise-form-bodyweight" bind:checked={countsBodyweight} />
