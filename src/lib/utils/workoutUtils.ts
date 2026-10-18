@@ -383,7 +383,11 @@ function addExtraSetProperties(exerciseSet: WorkoutExercise['sets'][number]) {
 	};
 }
 
-function getPerformanceChanges(performances: { exercise: WorkoutExercise; oldUserBodyweight: number }[]) {
+/**
+ * How much each workout beat the one before (%, the average over the sets both did). A pair with no
+ * set both did is left out: averaging nothing would give NaN and spoil every other pair
+ */
+export function getPerformanceChanges(performances: PreviousPerformance[]) {
 	const performanceChanges: number[] = [];
 	if (performances.length < 2) return performanceChanges;
 	for (let i = 0; i < performances.length - 1; i++) {
@@ -391,7 +395,8 @@ function getPerformanceChanges(performances: { exercise: WorkoutExercise; oldUse
 		const newPerformance = performances[i + 1];
 
 		const setPerformanceChanges: number[] = [];
-		for (let j = 0; j <= setPerformanceChanges.length; j++) {
+		const setCount = Math.max(oldPerformance.exercise.sets.length, newPerformance.exercise.sets.length);
+		for (let j = 0; j < setCount; j++) {
 			const oldSet = oldPerformance.exercise.sets[j];
 			const newSet = newPerformance.exercise.sets[j];
 			if (!oldSet || !newSet) break;
@@ -410,7 +415,7 @@ function getPerformanceChanges(performances: { exercise: WorkoutExercise; oldUse
 				})
 			);
 		}
-		performanceChanges.push(arrayAverage(setPerformanceChanges));
+		if (setPerformanceChanges.length > 0) performanceChanges.push(arrayAverage(setPerformanceChanges));
 	}
 	return performanceChanges;
 }
