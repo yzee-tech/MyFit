@@ -124,17 +124,33 @@ test('a template’s routines are added straight to My routines; adding it again
 	await expect(page.getByRole('main')).not.toContainText('Rest');
 	expect(await cardNames(page)).toEqual(['Pull A', 'Push A', 'Legs A', 'Pull B', 'Push B', 'Legs B']);
 
-	// Each card: its size, unit and muscles; Show lists its exercises, Hide folds them away
+	// Each card: its size, unit and muscles; its title lists its exercises, and closes them again
 	const pullA = card(page, 'Pull A');
+	const title = pullA.getByRole('button', { name: /the exercises of Pull A$/ });
 	await expect(pullA).toContainText('4 exercises · KG');
 	for (const muscle of ['Lats', 'Traps', 'Biceps', 'Rear delts']) await expect(pullA).toContainText(muscle);
 	await expect(pullA.getByTestId('routine-card-exercises')).toHaveCount(0);
+	// Closed: no button row under it
+	await expect(pullA.getByRole('button', { name: 'Close Pull A' })).toHaveCount(0);
+	await expect(pullA.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+	// The menu beside the title doesn't open the card
+	await pullA.getByLabel('Routine Pull A options').click();
+	await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(pullA.getByTestId('routine-card-exercises')).toHaveCount(0);
+	await expect(title).toHaveAttribute('aria-expanded', 'false');
 	await pullA.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
+	await expect(title).toHaveAttribute('aria-expanded', 'true');
 	await expect(pullA.getByTestId('routine-card-exercises')).toContainText(
 		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Barbell rows 3 Straight sets of 10 to 15 reps Traps Dumbbell bicep curls 3 Straight sets of 10 to 20 reps Biceps Face pulls 3 Straight sets of 15 to 30 reps Rear delts'
 	);
 	await expect(pullA.getByRole('link', { name: 'Edit' })).toBeVisible();
+	// The title closes it, and so does Hide at the bottom
 	await pullA.getByRole('button', { name: 'Hide the exercises of Pull A' }).click();
+	await expect(pullA.getByTestId('routine-card-exercises')).toHaveCount(0);
+	await title.click();
+	await expect(pullA.getByTestId('routine-card-exercises')).toBeVisible();
+	await pullA.getByRole('button', { name: 'Close Pull A' }).click();
 	await expect(pullA.getByTestId('routine-card-exercises')).toHaveCount(0);
 
 	// Again: after the ones you have, taken names get "(2)"; still one list

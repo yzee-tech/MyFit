@@ -153,13 +153,27 @@
 				{@const isShown = shown.includes(routine.name)}
 				<div class="rounded-lg border bg-card p-3" data-testid="routine-card">
 					<div class="flex items-start gap-2">
-						<div class="flex min-w-0 grow flex-col">
-							<span class="text-lg font-semibold" data-testid="routine-card-name">{routine.name}</span>
+						<!-- The title opens and closes the card; the menu beside it stays its own button -->
+						<button
+							class="flex min-w-0 grow flex-col text-left"
+							aria-expanded={isShown}
+							aria-label="{isShown ? 'Hide' : 'Show'} the exercises of {routine.name}"
+							onclick={() => toggleShown(routine.name)}
+							type="button"
+						>
+							<span class="flex items-center gap-1 text-lg font-semibold">
+								<span data-testid="routine-card-name">{routine.name}</span>
+								{#if isShown}
+									<ChevronUpIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+								{:else}
+									<ChevronDownIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+								{/if}
+							</span>
 							<span class="text-sm text-muted-foreground">
 								{routine.exercises.length}
 								{routine.exercises.length === 1 ? 'exercise' : 'exercises'} · {unitText(routine)}
 							</span>
-						</div>
+						</button>
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button
@@ -214,29 +228,21 @@
 								<ExerciseTemplateCard context="exerciseSplit" exerciseTemplate={exercise} readOnly />
 							{/each}
 						</div>
-					{/if}
-					<div class="mt-2 flex items-center justify-end gap-1">
-						{#if isShown}
+						<div class="mt-2 flex items-center justify-end gap-1">
 							<Button class="gap-1" href={editLink(routine.name)} size="sm" variant="outline">
 								<EditIcon class="h-4 w-4" /> Edit
 							</Button>
-						{/if}
-						<Button
-							class="gap-1"
-							aria-expanded={isShown}
-							aria-label="{isShown ? 'Hide' : 'Show'} the exercises of {routine.name}"
-							onclick={() => toggleShown(routine.name)}
-							size="sm"
-							variant="ghost"
-						>
-							{isShown ? 'Hide' : 'Show'}
-							{#if isShown}
-								<ChevronUpIcon class="h-4 w-4" />
-							{:else}
-								<ChevronDownIcon class="h-4 w-4" />
-							{/if}
-						</Button>
-					</div>
+							<Button
+								class="gap-1"
+								aria-label="Close {routine.name}"
+								onclick={() => toggleShown(routine.name)}
+								size="sm"
+								variant="ghost"
+							>
+								Hide <ChevronUpIcon class="h-4 w-4" />
+							</Button>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
