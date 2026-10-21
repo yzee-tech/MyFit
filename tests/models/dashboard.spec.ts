@@ -68,8 +68,12 @@ test('Dashboard: this week Sunday to Saturday, a check on each day with a workou
 
 test('Dashboard: a workout saved today shows its check back on the dashboard', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell rows']);
+	// Pinned at midday, so a run across midnight can't move the saved workout out of the week
+	const midday = new Date();
+	midday.setHours(12, 0, 0, 0);
+	await page.clock.setFixedTime(midday);
 	await page.goto('/dashboard');
-	const today = day(page, new Date().getDay());
+	const today = day(page, midday.getDay());
 	await expect(today).toHaveAttribute('data-done', 'false');
 
 	await page.goto('/workouts');
