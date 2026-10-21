@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { overviewStats, progressBars, progressPoint, statsRanges, type StatsWorkout } from '../../src/lib/utils/stats';
+import {
+	overviewStats,
+	progressBars,
+	progressPoint,
+	statsRanges,
+	sundayWeek,
+	sundayWeekDay,
+	type StatsWorkout
+} from '../../src/lib/utils/stats';
 
 /** A workout of one exercise, `minutes` long */
 function workout(startedAt: Date, minutes: number, sets: { reps: number; load: number; skipped?: boolean }[]) {
@@ -130,4 +138,36 @@ test('bars: by day for 7 and 30 days, by week from Monday for 90 days and the ye
 	expect(all.map((bar) => bar.start.getMonth())).toEqual([6, 7, 8, 9]);
 	expect(all.map((bar) => bar.minutes)).toEqual([40, 0, 0, 90]);
 	expect(progressBars([], 'all', statsRanges('all', now).current)).toHaveLength(1);
+});
+
+test('the dashboard week: Sunday midnight to the next Sunday midnight, each day from midnight', () => {
+	// Wednesday 21 October 2026, midday: Sunday 18 to Sunday 25
+	const week = sundayWeek(new Date(2026, 9, 21, 12, 0));
+	expect(week.from).toEqual(new Date(2026, 9, 18));
+	expect(week.to).toEqual(new Date(2026, 9, 25));
+	expect(week.days.map((day) => day.getDate())).toEqual([18, 19, 20, 21, 22, 23, 24]);
+	// On the Sunday itself, just after midnight: that week, day 0
+	expect(sundayWeek(new Date(2026, 9, 18, 0, 10)).from).toEqual(new Date(2026, 9, 18));
+	expect(sundayWeekDay(new Date(2026, 9, 18, 0, 10), week)).toBe(0);
+	// Saturday late: still this week, day 6; the next Sunday just after midnight: not this week
+	expect(sundayWeekDay(new Date(2026, 9, 24, 23, 30), week)).toBe(6);
+	expect(sundayWeekDay(new Date(2026, 9, 25, 0, 10), week)).toBeNull();
+	// The Saturday before: not this week
+	expect(sundayWeekDay(new Date(2026, 9, 17, 23, 30), week)).toBeNull();
+});
+
+test('the dashboard week with a clock change is still 7 calendar days, ending at midnight', () => {
+	const zone = process.env.TZ;
+	// The UK's clocks go back on Sunday 25 October 2026: that week is 169 hours long
+	process.env.TZ = 'Europe/London';
+	try {
+		const week = sundayWeek(new Date(2026, 9, 28, 12, 0));
+		expect(week.days.map((day) => [day.getDate(), day.getHours()])).toEqual(
+			[25, 26, 27, 28, 29, 30, 31].map((date) => [date, 0])
+		);
+		expect([week.to.getMonth(), week.to.getDate(), week.to.getHours()]).toEqual([10, 1, 0]);
+		expect(sundayWeekDay(new Date(2026, 9, 31, 23, 30), week)).toBe(6);
+	} finally {
+		process.env.TZ = zone;
+	}
 });

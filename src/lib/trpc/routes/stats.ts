@@ -37,7 +37,30 @@ const overviewInput = z
 		if (!ordered) ctx.addIssue({ code: 'custom', message: 'Ranges out of order' });
 	});
 
+// A week at most (8 days allows for a clock change): never a read of every workout
+export const weekInput = z.strictObject({ from: date, to: date }).superRefine((input, ctx) => {
+	if (!(+input.from < +input.to)) ctx.addIssue({ code: 'custom', message: 'from must be before to' });
+	if (+input.to - +input.from > 8 * DAY_MS) ctx.addIssue({ code: 'custom', message: 'At most a week' });
+});
+
 export const stats = t.router({
+	/**
+	 * When the workouts in a week started, for the dashboard's week: the phone sends its own Sunday to
+	 * Sunday (sundayWeek) and sorts them into its days. Workouts done only: a block's skipped days and
+	 * rest days aren't
+	 */
+	weekWorkoutTimes: t.procedure.input(weekInput).query(async ({ ctx, input }) => {
+		const workouts = await prisma.workout.findMany({
+			where: {
+				userId: ctx.userId,
+				startedAt: { gte: input.from, lt: input.to },
+				OR: [{ workoutOfMesocycle: { is: null } }, { workoutOfMesocycle: { is: { workoutStatus: null } } }]
+			},
+			select: { startedAt: true }
+		});
+		return workouts.map((workout) => workout.startedAt);
+	}),
+
 	/**
 	 * The Stats overview for the last 7, 30 or 90 calendar days (against the same number before), the
 	 * year so far (against the same dates last year) or all time, with each workout's totals for the

@@ -176,6 +176,30 @@ function startOfWeek(date: Date) {
 	day.setDate(day.getDate() - ((day.getDay() + 6) % 7));
 	return day;
 }
+/**
+ * This week for the dashboard, Sunday to Saturday (unlike the Stats weeks, which start on Monday), in
+ * the phone's time zone: its seven days from midnight, and [from, to) from Sunday to the next Sunday
+ */
+export function sundayWeek(now: Date) {
+	const from = startOfDay(now);
+	from.setDate(from.getDate() - from.getDay());
+	// Calendar days, not 7 × 24 hours: a week with a clock change still ends at midnight
+	const days = Array.from({ length: 7 }, (_, idx) => {
+		const day = new Date(from);
+		day.setDate(from.getDate() + idx);
+		return day;
+	});
+	const to = new Date(from);
+	to.setDate(from.getDate() + 7);
+	return { from, to, days };
+}
+
+/** The day (0 = Sunday) of the week a moment falls on; null outside the week */
+export function sundayWeekDay(at: Date, week: { from: Date; to: Date }) {
+	if (at.getTime() < week.from.getTime() || at.getTime() >= week.to.getTime()) return null;
+	return at.getDay();
+}
+
 function startOfMonth(date: Date) {
 	return new Date(date.getFullYear(), date.getMonth(), 1);
 }
