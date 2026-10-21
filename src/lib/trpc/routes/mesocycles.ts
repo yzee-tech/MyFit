@@ -115,14 +115,14 @@ export const mesocycles = t.router({
 	editById: t.procedure
 		.input(z.strictObject({ id: z.string().cuid2(), mesocycleData: zodMesocycleEditInput }))
 		.mutation(async ({ input, ctx }) => {
-			await prisma.$transaction(async () => {
-				const mesocycle = await prisma.mesocycle.update({
+			await prisma.$transaction(async (tx) => {
+				const mesocycle = await tx.mesocycle.update({
 					where: { id: input.id, userId: ctx.userId },
 					data: { ...input.mesocycleData.mesocycle },
 					select: { id: true }
 				});
-				await prisma.mesocycleCyclicSetChange.deleteMany({ where: { mesocycleId: mesocycle.id } });
-				await prisma.mesocycleCyclicSetChange.createMany({
+				await tx.mesocycleCyclicSetChange.deleteMany({ where: { mesocycleId: mesocycle.id } });
+				await tx.mesocycleCyclicSetChange.createMany({
 					data: input.mesocycleData.mesocycleCyclicSetChanges.map((setChange) => ({
 						mesocycleId: mesocycle.id,
 						...setChange
@@ -177,14 +177,11 @@ export const mesocycles = t.router({
 			};
 		}),
 
-	getWorkouts: t.procedure.input(z.enum(['activeMesocycle', 'allSplitDays'])).query(async ({ ctx, input }) => {
+	/** The active block's latest workouts done */
+	getWorkouts: t.procedure.query(async ({ ctx }) => {
 		const includeClause = Prisma.validator<Prisma.WorkoutInclude>()({
 			workoutExercises: { include: { sets: { include: { miniSets: true } } } }
 		});
-
-		if (input === 'allSplitDays') {
-			return await prisma.workout.findMany({ where: { userId: ctx.userId }, include: includeClause });
-		}
 
 		const activeMesocycle = await prisma.mesocycle.findFirst({
 			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },

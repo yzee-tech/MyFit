@@ -1529,7 +1529,7 @@ test('workout length on the list and the workout page; over 3 hours, “check ti
 });
 
 /** A saved workout yesterday: Barbell rows, 3 × 10 at 60 kg, bodyweight 80 kg */
-async function createPastWorkout(userId: string) {
+async function createPastWorkout(userId: string, { weightUnit = 'KG' as 'KG' | 'LB', load = 60 } = {}) {
 	const startedAt = new Date(Date.now() - 86400000);
 	return prisma.workout.create({
 		data: {
@@ -1546,8 +1546,9 @@ async function createPastWorkout(userId: string) {
 						setType: 'Straight',
 						repRangeStart: 8,
 						repRangeEnd: 12,
+						weightUnit,
 						sets: {
-							create: [0, 1, 2].map((setIndex) => ({ setIndex, reps: 10, load: 60, RIR: 2, skipped: false }))
+							create: [0, 1, 2].map((setIndex) => ({ setIndex, reps: 10, load, RIR: 2, skipped: false }))
 						}
 					}
 				]
@@ -1703,6 +1704,41 @@ test('an edit left without saving (tab closed) is cleared on the next visit, wit
 	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
 	await expect.poll(async () => (await savedWorkoutState(page)).editingWorkoutId).toBeNull();
 	expect(await savedFirstSetReps(workout.id)).toBe(10);
+});
+
+test('editing a past workout done in lb: shown in lb, and saved unchanged its loads stay the same', async ({
+	page,
+	userData
+}) => {
+	// 135 lb, stored in kg
+	const kg = 135 * 0.45359237;
+	const workout = await createPastWorkout(userData.userId, { weightUnit: 'LB', load: kg });
+	await editPastWorkout(page, workout.id);
+	await expect(page.getByTestId('Barbell rows-load-header')).toHaveText('LB');
+	for (const set of [1, 2, 3]) {
+		await expectBox(page.locator(`[id="Barbell\\ rows-set-${set}-load"]`), '135');
+	}
+
+	await page.getByRole('button', { name: 'Next' }).click();
+	await saveWorkout(page);
+	const sets = await prisma.workoutExerciseSet.findMany({ where: { workoutExercise: { workoutId: workout.id } } });
+	expect(sets).toHaveLength(3);
+	for (const set of sets) expect(set.load).toBeCloseTo(kg, 6);
+});
+
+test('editing a past workout: a reload keeps the edit, and it still saves', async ({ page, userData }) => {
+	const workout = await createPastWorkout(userData.userId);
+	await editPastWorkout(page, workout.id);
+	await changeFirstSet(page, '9');
+	// Restored from the phone: its times come back as text
+	await page.reload();
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '9');
+
+	await page.getByRole('button', { name: 'Next' }).click();
+	await saveWorkout(page);
+	expect(await savedFirstSetReps(workout.id)).toBe(9);
+	const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
+	expect(saved.endedAt.getTime()).toEqual(workout.endedAt.getTime());
 });
 
 test('Workouts list: two lines, a blank workout named by its time, the volume in full; no skipped or rest day filter', async ({
