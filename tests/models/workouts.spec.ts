@@ -5,8 +5,10 @@ import {
 	createMesocycle,
 	createTemplateExerciseSplit,
 	editWorkoutExercise,
-	quickAdd,
+	expectBox,
+	expectBoxNot,
 	pickRoutine,
+	quickAdd,
 	saveWorkout
 } from './commonFunctions';
 
@@ -327,11 +329,11 @@ test('progression carries over between routines that share an exercise', async (
 	await expect(page.getByRole('main')).toContainText('Legs A Done today');
 	await pickRoutine(page, 'Legs B');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Calf\\ raises-set-1-load"]')).toHaveValue('50');
+	await expectBox(page.locator('[id="Calf\\ raises-set-1-load"]'), '50');
 	// Straight sets share set 1's weight; each set gets a rep target
-	await expect(page.locator('[id="Calf\\ raises-set-3-reps"]')).not.toHaveValue('');
+	await expectBoxNot(page.locator('[id="Calf\\ raises-set-3-reps"]'), '');
 	// Exercises never done before have no suggestion
-	await expect(page.locator('#Lunges-set-1-load')).toHaveValue('');
+	await expectBox(page.locator('#Lunges-set-1-load'), '');
 });
 
 test('delete a workout', async ({ page }) => {
@@ -503,9 +505,9 @@ test('welcome back after a break: repeat last numbers, easier', async ({ page, u
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
 	// Same weight; 1 more rep in reserve than week 1's 3 RIR, so one rep fewer than last time
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('12');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-RIR"]')).toHaveValue('4');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '12');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-RIR"]'), '4');
 
 	// Turned off in Settings: no banner
 	await page.goto('/settings');
@@ -526,7 +528,7 @@ test('deload week: same weights, half the sets', async ({ page, userData }) => {
 	await expect(page.getByRole('main')).toContainText('Week 1 of 1 · Deload');
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40');
 	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toBeVisible();
 	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
 });
@@ -576,19 +578,19 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	await page.getByLabel('Kilograms').click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('KG');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40');
 
 	// Copying last time's sets from history (stored in kg) shows them in this exercise's unit: 90 lb = 40.82 kg
 	await page.getByTestId('Barbell rows-menu-button').click();
 	await page.getByRole('menuitem', { name: 'History' }).click();
 	await page.getByRole('button', { name: 'Copy these sets' }).first().click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40.82');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('12');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40.82');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '12');
 
 	// Switch this exercise back to lb: the planned sets snap to 90 lb
 	await page.getByTestId('Barbell rows-unit-toggle').click();
 	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('90');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '90');
 });
 
 test('home unit in lb: bodyweight shown and entered in lb', async ({ page, userData }) => {
@@ -697,7 +699,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	await page.getByLabel('create-workout').click();
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]')).toHaveValue('10');
+	await expectBox(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]'), '10');
 	await expect(page.getByTestId('Dumbbell bicep curls-next-weight')).toContainText('Next weight: 14 kg. About');
 	await expect(page.getByTestId('Dumbbell bicep curls-next-weight')).toContainText('more reps at 10 kg first.');
 
@@ -760,7 +762,7 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	await page.getByLabel('Weights here').click();
 	await page.getByRole('option', { name: 'Hotel DBs' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^(80|95)$/);
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), /^(80|95)$/);
 });
 
 test('levels: a machine that shows levels logs a level, then goes up a level at the top of the rep range', async ({
@@ -831,8 +833,8 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.getByLabel('create-workout').click();
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]')).toHaveValue('8');
-	await expect(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]')).toHaveValue('10');
+	await expectBox(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-load"]'), '8');
+	await expectBox(page.locator('[id="Dumbbell\\ bicep\\ curls-set-1-reps"]'), '10');
 
 	// The saved workout shows it as a level
 	await page.goto(`/workouts/${logged.workoutId}`);
@@ -1032,8 +1034,8 @@ test('sets: tick in any order, untick, a note for what is missing, and a load pe
 	// Set 1's weight goes into empty boxes only: set 2 gets 40, set 3 keeps 35
 	await fillSet(page, 'Barbell rows', 1, { reps: '12', load: '40' });
 	await setBox(page, 'Barbell rows', 1).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-2-load"]')).toHaveValue('40');
-	await expect(page.locator('[id="Barbell\\ rows-set-3-load"]')).toHaveValue('35');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-2-load"]'), '40');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-3-load"]'), '35');
 	await fillSet(page, 'Barbell rows', 2, { reps: '11' });
 	await setBox(page, 'Barbell rows', 2).click();
 
@@ -1065,8 +1067,8 @@ test('sets: tick in any order, untick, a note for what is missing, and a load pe
 	await page.getByLabel('create-workout').click();
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
-	await expect(page.locator('[id="Barbell\\ rows-set-3-load"]')).toHaveValue('35');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-3-load"]'), '35');
 });
 
 test('a note about a missing number stays with its set when another set is removed', async ({ page }) => {
@@ -1083,7 +1085,7 @@ test('a note about a missing number stays with its set when another set is remov
 	// Set 1 goes: the old set 3 is now set 2, and the note and outline move with it
 	await removeSet(page, 'Barbell rows', 1);
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 2: enter load');
-	await expect(page.locator('[id="Barbell\\ rows-set-2-reps"]')).toHaveValue('10');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-2-reps"]'), '10');
 	await expect(page.locator('[id="Barbell\\ rows-set-2-load"]')).toHaveAttribute('aria-invalid', 'true');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).not.toHaveAttribute('aria-invalid', 'true');
 
@@ -1109,7 +1111,7 @@ test('add and remove sets; the routine prompt: closing it saves nothing, Update 
 	// Rows: one more set, a copy of the last; face pulls: one fewer
 	await fillSet(page, 'Barbell rows', 3, { reps: '9', load: '40' });
 	await page.getByTestId('Barbell rows-add-set').click();
-	await expect(page.locator('[id="Barbell\\ rows-set-4-reps"]')).toHaveValue('9');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-4-reps"]'), '9');
 	await removeSet(page, 'Face pulls', 2);
 	await expect(page.locator('[id="Face\\ pulls-set-3-reps"]')).toHaveCount(0);
 	for (const set of [1, 2, 3, 4]) await fillSet(page, 'Barbell rows', set, { reps: '10', load: '40' });
@@ -1212,7 +1214,7 @@ test('workout panel: on Log workout after Back and on every screen, resumes the 
 	);
 	await page.getByPlaceholder('Type here').fill('98');
 	await continueButton.click();
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('11');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '11');
 
 	// Elsewhere in the app; tapping it goes back to the workout
 	for (const path of ['/workouts', '/dashboard', '/exercises']) {
@@ -1221,7 +1223,7 @@ test('workout panel: on Log workout after Back and on every screen, resumes the 
 	}
 	await page.getByTestId('workout-panel-detail').click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('11');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '11');
 
 	// On a small phone: picking another routine asks first, and the dialog fits
 	await page.setViewportSize({ width: 320, height: 640 });
@@ -1318,7 +1320,7 @@ test('no mesocycle: pick a routine from My routines, suggestions from last time,
 	await page.getByRole('button', { name: 'Next' }).click();
 	await expect(page.getByTestId('workout-routine-name')).toHaveText('Pull A');
 	// Suggested from last time
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^\d/);
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), /^\d/);
 
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByRole('button', { name: 'Skip and continue' }).click();
@@ -1411,7 +1413,7 @@ test('set row: the remove button is after the tick, hidden on a ticked set, off 
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveCount(0);
 	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveCount(0);
 	await page.getByRole('status').filter({ hasText: 'Set 3 removed' }).getByRole('button', { name: 'Undo' }).click();
-	await expect(page.locator('[id="Barbell\\ rows-set-3-reps"]')).toHaveValue('10');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-3-reps"]'), '10');
 	await expect(page.getByTestId('Barbell rows-missing')).toHaveText('Set 3: enter load');
 
 	// A ticked set is done: no remove button until it's unticked
@@ -1492,7 +1494,7 @@ test('removing a set: one tap only gets the bin ready (red); any other tap, a ti
 	await setBox(page, 'Barbell rows', 2).click();
 	await expect(bin(2)).toHaveAttribute('data-armed', 'false');
 	await bin(2).click();
-	await expect(reps(2)).toHaveValue('10');
+	await expectBox(reps(2), '10');
 
 	// Two taps remove it, with Undo
 	await bin(2).click();
@@ -1560,7 +1562,7 @@ async function editPastWorkout(page: Page, workoutId: string) {
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('10');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '10');
 }
 
 /** Changes set 1's reps in the edit */
@@ -1668,7 +1670,7 @@ test('editing a past workout, changed: leaving asks to save; Keep editing stays,
 	await page.getByRole('button', { name: 'Keep editing' }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).toHaveURL(/\/workouts\/manage\/exercises/);
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toHaveValue('9');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '9');
 
 	// Discard: on to where it was going, the workout as it was
 	await page.getByRole('link', { name: 'Exercises' }).first().click();
@@ -1813,21 +1815,30 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	await box(1, 'reps').fill('12');
 	await box(1, 'RIR').fill('2');
 	for (const set of [2, 3]) {
-		await expect(box(set, 'load')).toHaveValue('15');
-		await expect(box(set, 'reps')).toHaveValue('12');
-		await expect(box(set, 'RIR')).toHaveValue('2');
+		await expectBox(box(set, 'load'), '15');
+		await expectBox(box(set, 'reps'), '12');
+		await expectBox(box(set, 'RIR'), '2');
 		await expect(box(set, 'load')).toHaveAttribute('data-suggested', 'true');
 	}
 	// Set 1 changed: the copies follow
 	await box(1, 'load').fill('17.5');
-	await expect(box(2, 'load')).toHaveValue('17.5');
-	await expect(box(3, 'load')).toHaveValue('17.5');
+	await expectBox(box(2, 'load'), '17.5');
+	await expectBox(box(3, 'load'), '17.5');
 	// A box typed in is the person's: set 1 no longer reaches it
 	await box(3, 'load').fill('20');
 	await box(1, 'load').fill('15');
-	await expect(box(2, 'load')).toHaveValue('15');
-	await expect(box(3, 'load')).toHaveValue('20');
+	await expectBox(box(2, 'load'), '15');
+	await expectBox(box(3, 'load'), '20');
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
+	// Emptied after set 1 changed: set 1's number now, not the old copy, and it follows set 1 again
+	await box(1, 'load').fill('25');
+	await expectBox(box(3, 'load'), '20');
+	await box(3, 'load').fill('');
+	await expectBox(box(3, 'load'), '25');
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(1, 'load').fill('30');
+	await expectBox(box(2, 'load'), '30');
+	await expectBox(box(3, 'load'), '30');
 });
 
 test('Quick add: several at once in the order ticked, 1 set each, from the last time or Independent 8–15', async ({
@@ -1892,9 +1903,9 @@ test('Quick add: several at once in the order ticked, 1 set each, from the last 
 		'Barbell rows-summary'
 	]);
 	// Done before: last time's numbers, suggested; never done: empty
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('60');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '60');
 	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveAttribute('data-suggested', 'true');
-	await expect(page.locator('[id="Hammer\\ curls-set-1-load"]')).toHaveValue('');
+	await expectBox(page.locator('[id="Hammer\\ curls-set-1-load"]'), '');
 	await page.getByTestId('Hammer curls-add-set').click();
 	await expect(page.getByTestId('Hammer curls-summary')).toHaveText('2 sets');
 

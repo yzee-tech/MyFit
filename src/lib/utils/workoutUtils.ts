@@ -161,6 +161,11 @@ type SetInProgress = {
 	 * others still hold the app's suggestion and look lighter. Only on the phone: not saved
 	 */
 	chosen?: SetField[];
+	/**
+	 * A box's suggestion from before it was typed in, so emptying the box brings it back. Only on the
+	 * phone: not saved
+	 */
+	suggested?: Partial<Record<SetField, number>>;
 };
 
 export type PreviousPerformance = {

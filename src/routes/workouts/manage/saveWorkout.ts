@@ -21,7 +21,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 	const workoutExercisesSets = exercisesInKg.map((ex) => {
 		return ex.sets.map((_set, idx) => {
 			// Ticks and which boxes were typed are for the workout screen only: the set schema is strict
-			const { completed, chosen, ...set } = _set;
+			const { completed, chosen, suggested, ...set } = _set;
 			if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
 			return { ...set, setIndex: idx };
 		});
@@ -66,7 +66,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 			sets.map((miniSets, setIndex) =>
 				miniSets.map((_miniSet, miniSetIndex) => {
 					const exercises = exercisesInKg as WorkoutExerciseInProgress[];
-					const { completed, ...miniSet } = _miniSet;
+					const { completed, chosen, suggested, ...miniSet } = _miniSet;
 					if (exercises[exerciseIndex].sets[setIndex].skipped) [miniSet.reps, miniSet.load, miniSet.RIR] = [0, 0, 0];
 
 					if (miniSet.reps === undefined || miniSet.load === undefined || miniSet.RIR === undefined) {

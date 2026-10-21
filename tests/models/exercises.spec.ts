@@ -6,8 +6,10 @@ import {
 	createTemplateExerciseSplit,
 	editRoutine,
 	editWorkoutExercise,
-	quickAdd,
+	expectBox,
+	expectBoxNot,
 	pickRoutine,
+	quickAdd,
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
@@ -137,7 +139,7 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByLabel('create-workout').click();
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Bent-over\\ rows-set-1-load"]')).toHaveValue('40');
+	await expectBox(page.locator('[id="Bent-over\\ rows-set-1-load"]'), '40');
 
 	// A name that's taken is refused, rather than mixing two exercises
 	await renameOnExercisesPage(page, 'Bent-over rows', 'Pull-ups');
@@ -333,8 +335,8 @@ test('blank workout: pick exercises as you go, suggested from last time', async 
 	await page.getByLabel('Sets').fill('2');
 	await page.getByRole('button', { name: 'Update' }).click();
 	// Last time 40 kg × 12, so it starts from there
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue('40');
-	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).not.toHaveValue('');
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), '40');
+	await expectBoxNot(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '');
 });
 
 test('bodyweight exercises: help as a negative load, with what it counts as; assisted machine weights', async ({
@@ -517,10 +519,10 @@ test('reps only keeps the bodyweight share: suggestions add reps up to the max, 
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await quickAdd(page, ['Push-ups']);
-	await expect(page.locator('[id="Push-ups-set-1-reps"]')).toHaveValue('13');
+	await expectBox(page.locator('[id="Push-ups-set-1-reps"]'), '13');
 	// A second set starts from the first
 	await page.getByTestId('Push-ups-add-set').click();
-	await expect(page.locator('[id="Push-ups-set-2-reps"]')).toHaveValue('13');
+	await expectBox(page.locator('[id="Push-ups-set-2-reps"]'), '13');
 	// No load to enter for a reps-only exercise; both labels show
 	await expect(page.locator('[id="Push-ups-set-1-load"]')).toHaveCount(0);
 	await expect(page.getByTestId('Push-ups-set-1-no-load')).toBeVisible();
