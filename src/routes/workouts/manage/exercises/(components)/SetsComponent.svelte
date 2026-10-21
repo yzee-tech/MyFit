@@ -279,24 +279,16 @@
 		set.chosen = [...chosen];
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
-	const suggestedClass = (set: WorkoutExerciseSet, field: SetField) =>
-		isSuggested(set, field) ? 'text-muted-foreground' : '';
+	// A suggestion shows as the box's placeholder, not its value: tapping the box then just places the
+	// caret (selecting a number would bring up Android's cut/copy/paste bar). It's still the set's number,
+	// used when the set is ticked
+	const shownValue = (set: WorkoutExerciseSet, field: SetField) => (isSuggested(set, field) ? '' : set[field]);
+	const suggestionHint = (set: WorkoutExerciseSet, field: SetField) =>
+		isSuggested(set, field) ? String(set[field]) : undefined;
 
-	// A suggestion is meant to be typed over: focusing its box selects it. A tap's release would place the
-	// caret and undo that, so the release right after the focus is cancelled
-	let selectedOnFocus: HTMLInputElement | null = null;
-	function selectIfSuggested(e: FocusEvent, set: WorkoutExerciseSet, field: SetField) {
-		const input = e.currentTarget as HTMLInputElement;
-		if (isSuggested(set, field)) {
-			input.select();
-			selectedOnFocus = input;
-		}
+	/** Set 1's value as the edit starts: the value its copies hold */
+	function noteSet1(set: WorkoutExerciseSet, field: SetField) {
 		if (exercise.sets[0] === set) set1Before[field] = set[field];
-	}
-	function keepSelection(e: MouseEvent) {
-		if (selectedOnFocus !== e.currentTarget) return;
-		e.preventDefault();
-		selectedOnFocus = null;
 	}
 
 	// Set 1's numbers as typed are a starting point for the sets after it. A later box takes them when it's
@@ -335,6 +327,54 @@
 		markChosen(set, field);
 		copies.get(set)?.delete(field);
 		if (idx === 0) copyDown(field);
+	}
+
+	// Boxes typed over while they held a copy of set 1: emptied, they follow set 1 again
+	const typedOverCopy = new WeakMap<WorkoutExerciseSet, Set<SetField>>();
+
+	function changed(e: Event, set: WorkoutExerciseSet, idx: number, field: SetField) {
+		const input = e.currentTarget as HTMLInputElement;
+		if (input.value === '') {
+			// Not a number yet (e.g. "-" on the way to a negative load): leave what's typed alone. Already
+			// showing its suggestion: nothing to empty
+			if (input.validity.badInput || isSuggested(set, field)) return;
+			emptied(set, idx, field);
+			return;
+		}
+		const value = input.valueAsNumber;
+		if (Number.isNaN(value)) return;
+		if (isSuggested(set, field)) {
+			// Kept to come back if the box is emptied
+			set.suggested = { ...set.suggested, [field]: set[field] };
+			if (copies.get(set)?.has(field)) typedOverCopy.set(set, (typedOverCopy.get(set) ?? new Set()).add(field));
+		}
+		set[field] = value;
+		typed(set, idx, field);
+	}
+
+	/**
+	 * Emptied: back to set 1's current number if it was a copy of it (and following it again), else back
+	 * to its suggestion; with neither it stays empty, to fill in before ticking
+	 */
+	function emptied(set: WorkoutExerciseSet, idx: number, field: SetField) {
+		const set1Value = exercise.sets[0]?.[field];
+		const wasCopy = idx > 0 && typedOverCopy.get(set)?.has(field) && typeof set1Value === 'number';
+		const restored = wasCopy ? set1Value : set.suggested?.[field];
+		if (typeof restored !== 'number') {
+			set[field] = undefined;
+			workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+			return;
+		}
+		set[field] = restored;
+		set.chosen = set.chosen?.filter((chosenField) => chosenField !== field);
+		typedOverCopy.get(set)?.delete(field);
+		if (wasCopy) copies.set(set, (copies.get(set) ?? new Set<SetField>()).add(field));
+		if (idx === 0) {
+			// Set 1 back to its suggestion: the sets following it follow it back
+			copyDown(field);
+			set1Before[field] = restored;
+		}
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 	let loadKind: LoadKind = $derived(
 		repsOnly
@@ -551,47 +591,46 @@
 				{:else if idx === 0 || !isSameLoadExercise}
 					<Input
 						id="{exercise.name}-set-{idx + 1}-load"
-						class="{boxClass} {suggestedClass(set, 'load')} {isMissing(idx, 'load') ? 'border-destructive' : ''}"
+						class="{boxClass} {isMissing(idx, 'load') ? 'border-destructive' : ''}"
 						aria-invalid={isMissing(idx, 'load')}
 						data-suggested={isSuggested(set, 'load')}
-						onfocus={(e) => selectIfSuggested(e, set, 'load')}
-						onmouseup={keepSelection}
-						oninput={() => typed(set, idx, 'load')}
+						onfocus={() => noteSet1(set, 'load')}
+						oninput={(e) => changed(e, set, idx, 'load')}
 						disabled={set.completed}
 						aria-label={isLevels ? `Set ${idx + 1} level` : undefined}
 						min={isLevels ? 1 : exercise.bodyweightFraction ? undefined : 0.25}
-						placeholder={getNextLoad(idx)}
+						placeholder={suggestionHint(set, 'load') ?? getNextLoad(idx)}
 						step={isLevels ? 1 : 0.25}
 						type="number"
-						bind:value={set.load}
+						value={shownValue(set, 'load')}
 					/>
 				{:else}
 					<span></span>
 				{/if}
 				<Input
 					id="{exercise.name}-set-{idx + 1}-reps"
-					class="{boxClass} {suggestedClass(set, 'reps')} {isMissing(idx, 'reps') ? 'border-destructive' : ''}"
+					class="{boxClass} {isMissing(idx, 'reps') ? 'border-destructive' : ''}"
 					aria-invalid={isMissing(idx, 'reps')}
 					data-suggested={isSuggested(set, 'reps')}
-					onfocus={(e) => selectIfSuggested(e, set, 'reps')}
-					onmouseup={keepSelection}
-					oninput={() => typed(set, idx, 'reps')}
+					onfocus={() => noteSet1(set, 'reps')}
+					oninput={(e) => changed(e, set, idx, 'reps')}
 					disabled={set.completed}
 					min={1}
+					placeholder={suggestionHint(set, 'reps')}
 					type="number"
-					bind:value={set.reps}
+					value={shownValue(set, 'reps')}
 				/>
 				<Input
 					id="{exercise.name}-set-{idx + 1}-RIR"
-					class="{boxClass} {suggestedClass(set, 'RIR')} {isMissing(idx, 'RIR') ? 'border-destructive' : ''}"
+					class="{boxClass} {isMissing(idx, 'RIR') ? 'border-destructive' : ''}"
 					aria-invalid={isMissing(idx, 'RIR')}
 					data-suggested={isSuggested(set, 'RIR')}
-					onfocus={(e) => selectIfSuggested(e, set, 'RIR')}
-					onmouseup={keepSelection}
-					oninput={() => typed(set, idx, 'RIR')}
+					onfocus={() => noteSet1(set, 'RIR')}
+					oninput={(e) => changed(e, set, idx, 'RIR')}
 					disabled={set.completed}
+					placeholder={suggestionHint(set, 'RIR')}
 					type="number"
-					bind:value={set.RIR}
+					value={shownValue(set, 'RIR')}
 				/>
 			{:else}
 				<div class="col-span-3 flex items-center gap-2">

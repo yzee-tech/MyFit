@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
 import { solveBergerFormula } from '../../src/lib/utils/workoutUtils';
-import { editWorkoutExercise, pickRoutine, quickAdd } from './commonFunctions';
+import { boxNumber, editWorkoutExercise, expectBox, expectBoxNot, pickRoutine, quickAdd } from './commonFunctions';
 
 const prisma = new PrismaClient();
 
@@ -132,7 +132,7 @@ async function startTestDay(page: Page) {
 	await pickRoutine(page, 'Test day');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
-	await expect(page.locator('[id="Barbell\\ rows-set-1-load"]')).toHaveValue(/^\d/);
+	await expectBox(page.locator('[id="Barbell\\ rows-set-1-load"]'), /^\d/);
 }
 
 const box = (page: Page, exercise: string, set: number, field: 'load' | 'reps' | 'RIR') =>
@@ -177,8 +177,8 @@ test('set row: Set | Previous | KG | Reps | RIR, last time set by set, tap to co
 	await box(page, 'Barbell rows', 1, 'load').fill('50');
 	await box(page, 'Barbell rows', 1, 'reps').fill('5');
 	await previous(page, 'Barbell rows', 1).click();
-	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveValue('60');
-	await expect(box(page, 'Barbell rows', 1, 'reps')).toHaveValue('10');
+	await expectBox(box(page, 'Barbell rows', 1, 'load'), '60');
+	await expectBox(box(page, 'Barbell rows', 1, 'reps'), '10');
 	// Last time's reps go with last time's weight: no hint
 	await expect(hint(page, 'Barbell rows', 1)).toHaveCount(0);
 	// A ticked set keeps its numbers
@@ -229,9 +229,9 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 	await startTestDay(page);
 
 	// Set 2 of rows: a heavier weight
-	const startLoad = Number(await box(page, 'Barbell rows', 2, 'load').inputValue());
-	const reps = Number(await box(page, 'Barbell rows', 2, 'reps').inputValue());
-	const RIR = Number(await box(page, 'Barbell rows', 2, 'RIR').inputValue());
+	const startLoad = Number(await boxNumber(box(page, 'Barbell rows', 2, 'load')));
+	const reps = Number(await boxNumber(box(page, 'Barbell rows', 2, 'reps')));
+	const RIR = Number(await boxNumber(box(page, 'Barbell rows', 2, 'RIR')));
 	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
 	const expectedReps = (load: number, fromReps: number, fromLoad: number) =>
 		Math.round(
@@ -260,7 +260,7 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 
 	// Use: the reps go in, and the new weight is where the set starts
 	await hint(page, 'Barbell rows', 2).getByRole('button').click();
-	await expect(box(page, 'Barbell rows', 2, 'reps')).toHaveValue(String(firstGuess));
+	await expectBox(box(page, 'Barbell rows', 2, 'reps'), String(firstGuess));
 	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
 	// Changed again: back, from the reps it has now
 	await box(page, 'Barbell rows', 2, 'load').fill(String(heavier + 5));
@@ -277,17 +277,17 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 
 	// Myo-reps share set 1's weight: one hint under set 1, for the sets not done yet
 	await page.getByTestId('Leg press-set-2-action').click();
-	const set2Reps = await box(page, 'Leg press', 2, 'reps').inputValue();
-	const set3Reps = await box(page, 'Leg press', 3, 'reps').inputValue();
-	const legPressLoad = Number(await box(page, 'Leg press', 1, 'load').inputValue());
+	const set2Reps = await boxNumber(box(page, 'Leg press', 2, 'reps'));
+	const set3Reps = await boxNumber(box(page, 'Leg press', 3, 'reps'));
+	const legPressLoad = Number(await boxNumber(box(page, 'Leg press', 1, 'load')));
 	await box(page, 'Leg press', 1, 'load').fill(String(legPressLoad + 20));
 	await expect(hint(page, 'Leg press', 1)).toContainText(`At ${legPressLoad + 20} kg, aim for about`);
 	await expect(hint(page, 'Leg press', 2)).toHaveCount(0);
 	await hint(page, 'Leg press', 1)
 		.getByRole('button', { name: /Use the suggested reps/ })
 		.click();
-	await expect(box(page, 'Leg press', 2, 'reps')).toHaveValue(set2Reps);
-	await expect(box(page, 'Leg press', 3, 'reps')).not.toHaveValue(set3Reps);
+	await expectBox(box(page, 'Leg press', 2, 'reps'), set2Reps);
+	await expectBoxNot(box(page, 'Leg press', 3, 'reps'), set3Reps);
 });
 
 test('drop sets: mini-sets line up under the load, reps and RIR boxes', async ({ page, userData }) => {
@@ -335,11 +335,13 @@ test('suggested numbers look lighter until typed, copied in, or the set is ticke
 	const expectSuggested = async (set: number, field: 'load' | 'reps' | 'RIR', value: boolean) =>
 		expect(box(page, 'Barbell rows', set, field)).toHaveAttribute('data-suggested', String(value));
 
-	// Suggestions to start with, in the lighter colour; an empty box (last time's set 3 was skipped) isn't one
+	// Suggestions to start with; an empty box (last time's set 3 was skipped) isn't one
 	for (const set of [1, 2])
 		for (const field of ['load', 'reps', 'RIR'] as const) await expectSuggested(set, field, true);
-	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveClass(/(^|\s)text-muted-foreground(\s|$)/);
-	await expect(box(page, 'Barbell rows', 3, 'load')).toHaveValue('');
+	// Lighter: shown as the box's placeholder, the box itself empty
+	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveValue('');
+	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveAttribute('placeholder', /^\d/);
+	await expectBox(box(page, 'Barbell rows', 3, 'load'), '');
 	await expectSuggested(3, 'load', false);
 
 	// Typing in a box makes that box the person's, not the rest of the set
@@ -394,7 +396,7 @@ test('editing a past workout: no "Previous" column and no reps hint', async ({ p
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
-	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveValue('60');
+	await expectBox(box(page, 'Barbell rows', 1, 'load'), '60');
 	await expect(page.getByTestId('Barbell rows-sets')).toContainText('Set KG Reps RIR');
 	// Its numbers are the record: none look like suggestions
 	await expect(page.locator('[data-suggested="true"]')).toHaveCount(0);
@@ -442,30 +444,46 @@ test('past sets read weight, reps, RIR, like the workout screen: workout page, H
 	await expect(page.locator('main')).toContainText(rowsOrder);
 });
 
-test('a tap on a suggestion selects it, so typing replaces it; typing set 1 never overwrites the suggestions below', async ({
+test('a suggestion is the box’s placeholder: a tap selects nothing, typing replaces it, emptying brings it back', async ({
 	page,
 	userData
 }) => {
 	await setUpLastTime(userData.userId);
 	await startTestDay(page);
 	const reps2 = box(page, 'Barbell rows', 2, 'reps');
-	const load2 = await box(page, 'Barbell rows', 2, 'load').inputValue();
+	const load2 = await boxNumber(box(page, 'Barbell rows', 2, 'load'));
+	const suggestion = await boxNumber(reps2);
+	expect(suggestion).toMatch(/^\d+$/);
+	// Shown as a placeholder: the box itself is empty, so a tap has nothing to select (no cut/copy/paste bar)
+	await expect(reps2).toHaveValue('');
+	await expect(reps2).toHaveAttribute('placeholder', suggestion);
 	await expect(reps2).toHaveAttribute('data-suggested', 'true');
-	expect(await reps2.inputValue()).not.toBe('');
+	await reps2.click();
+	await expect(reps2).toBeFocused();
+	expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
 
 	// Typed straight over, no deleting first
-	await reps2.click();
 	await page.keyboard.type('7');
 	await expect(reps2).toHaveValue('7');
 	await expect(reps2).toHaveAttribute('data-suggested', 'false');
-
-	// A typed box behaves as any box: a tap doesn't select it
-	await reps2.click();
-	await page.keyboard.press('End');
 	await page.keyboard.type('1');
 	await expect(reps2).toHaveValue('71');
 
+	// Emptied: the suggestion is back, and it's what a tick saves
+	await reps2.fill('');
+	await expect(reps2).toHaveValue('');
+	await expect(reps2).toHaveAttribute('placeholder', suggestion);
+	await expect(reps2).toHaveAttribute('data-suggested', 'true');
+	await page.getByTestId('Barbell rows-set-2-action').click();
+	await expect(reps2).toHaveValue(suggestion);
+
+	// A negative weight (assistance) can be typed: "-" alone isn't wiped on the way
+	const pullUps1 = box(page, 'Pull-ups', 1, 'load');
+	await pullUps1.click();
+	await page.keyboard.type('-20');
+	await expect(pullUps1).toHaveValue('-20');
+
 	// Set 1's new weight stays in set 1: set 2 keeps its own suggestion
 	await box(page, 'Barbell rows', 1, 'load').fill('70');
-	await expect(box(page, 'Barbell rows', 2, 'load')).toHaveValue(load2);
+	await expectBox(box(page, 'Barbell rows', 2, 'load'), load2);
 });

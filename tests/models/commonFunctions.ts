@@ -1,4 +1,4 @@
-import { expect, type Page } from '../fixtures';
+import { expect, type Locator, type Page } from '../fixtures';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
 import { commonExercisePerMuscleGroup } from '../../src/lib/common/commonExercises';
 
@@ -65,6 +65,27 @@ export async function quickAdd(page: Page, names: string[]) {
 export async function editWorkoutExercise(page: Page, name: string) {
 	await page.getByTestId(`${name}-menu-button`).click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
+}
+
+/**
+ * A set box's number as the person sees it: what's in it, else the suggestion it shows as its
+ * placeholder; '' when it's empty with no suggestion
+ */
+export async function boxNumber(box: Locator) {
+	const value = await box.inputValue();
+	if (value !== '' || (await box.getAttribute('data-suggested')) !== 'true') return value;
+	return (await box.getAttribute('placeholder')) ?? '';
+}
+
+/** A set box shows this number, typed or suggested ('' for empty, with no suggestion) */
+export async function expectBox(box: Locator, expected: string | RegExp) {
+	if (typeof expected === 'string') await expect.poll(() => boxNumber(box)).toBe(expected);
+	else await expect.poll(() => boxNumber(box)).toMatch(expected);
+}
+
+/** A set box doesn't show this number, typed or suggested */
+export async function expectBoxNot(box: Locator, unexpected: string) {
+	await expect.poll(() => boxNumber(box)).not.toBe(unexpected);
 }
 
 /** Adds a template's routines to My routines (from the My routines page) */

@@ -6,6 +6,7 @@ import {
 	createTemplateExerciseSplit,
 	deleteRoutine,
 	editRoutine,
+	expectBox,
 	pickExercise,
 	pickRoutine,
 	saveRoutine,
@@ -214,7 +215,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Legs A');
 	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.locator('[id="Calf\\ raises-set-1-load"]')).toHaveValue('50');
+	await expectBox(page.locator('[id="Calf\\ raises-set-1-load"]'), '50');
 });
 
 test('finish a block once its weeks are over', async ({ page, userData }) => {
