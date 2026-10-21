@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures';
 import { exerciseDetailsInput } from '../../src/lib/trpc/routes/exercises';
+import { weekInput } from '../../src/lib/trpc/routes/stats';
 
 const details = {
 	name: 'Sit-ups',
@@ -24,4 +25,16 @@ test('reps only can keep a bodyweight share, and a cap needs reps only', () => {
 		repsOnly: false,
 		maxReps: null
 	});
+});
+
+test('the dashboard week query takes a week at most, from before to', () => {
+	const from = new Date(2026, 9, 18);
+	const to = new Date(2026, 9, 25);
+	expect(weekInput.safeParse({ from, to }).success).toBe(true);
+	// Sent as strings (as JSON would): still dates
+	expect(weekInput.safeParse({ from: from.toISOString(), to: to.toISOString() }).success).toBe(true);
+	expect(weekInput.safeParse({ from: to, to: from }).success).toBe(false);
+	expect(weekInput.safeParse({ from, to: new Date(2026, 10, 30) }).success).toBe(false);
+	expect(weekInput.safeParse({ from: 'not a date', to }).success).toBe(false);
+	expect(weekInput.safeParse({ from, to, extra: 1 }).success).toBe(false);
 });

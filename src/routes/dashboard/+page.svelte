@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import GetStartedComponent from './(components)/GetStartedComponent.svelte';
 	import TodaysWorkoutCard from './(components)/TodaysWorkoutCard.svelte';
+	import WeekStrip from './(components)/WeekStrip.svelte';
 
 	let { data } = $props();
 	let entityCounts: RouterOutputs['users']['getEntityCounts'] | undefined = $state(undefined);
@@ -18,7 +19,8 @@
 	});
 </script>
 
-<H2>Home</H2>
+<H2>Dashboard</H2>
+<WeekStrip />
 <GetStartedComponent {entityCounts} />
 
 <H3>Active mesocycle block</H3>
