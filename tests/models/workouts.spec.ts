@@ -1815,17 +1815,15 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 	await expect(page.getByTestId('workout-name')).toHaveText(['Morning workout', 'Pull A']);
 });
 
-/** A block of `name` started `monthsAgo`, with one workout done from `routineName` in it */
-async function blockWithWorkout(userId: string, name: string, monthsAgo: number, routineName: string) {
-	const startDate = new Date();
-	startDate.setMonth(startDate.getMonth() - monthsAgo, 15);
+/** A week-long block of `name` started on `startDate`, with one workout done from `routineName` in it */
+async function blockWithWorkout(userId: string, name: string, startDate: Date, routineName: string) {
 	const mesocycle = await prisma.mesocycle.create({
 		data: {
 			userId,
 			name,
 			weeklyRIR: [3, 2, 1, 0],
 			startDate,
-			endDate: new Date(startDate.getTime() + 28 * 86400000),
+			endDate: new Date(startDate.getTime() + 7 * 86400000),
 			startOverloadPercentage: 2.5,
 			lastSetToFailure: false,
 			forceRIRMatching: false
@@ -1845,25 +1843,30 @@ async function blockWithWorkout(userId: string, name: string, monthsAgo: number,
 	return mesocycle;
 }
 
-test('Workouts list filter: blocks with the same name are told apart by start month, and only the one picked shows', async ({
+test('Workouts list filter: blocks with the same name, even restarted in the same month, are told apart by start date; only the one picked shows', async ({
 	page,
 	userData
 }) => {
 	const userId = userData.userId;
 	await prisma.workout.deleteMany({ where: { userId } });
 	await prisma.mesocycle.deleteMany({ where: { userId } });
-	const earlier = await blockWithWorkout(userId, 'Hypertrophy', 3, 'Push earlier');
-	await blockWithWorkout(userId, 'Hypertrophy', 1, 'Push later');
+	// Started, ended after a week, started again the same month
+	const earlier = await blockWithWorkout(userId, 'Hypertrophy', new Date(2026, 2, 2, 9), 'Push earlier');
+	const later = await blockWithWorkout(userId, 'Hypertrophy', new Date(2026, 2, 12, 9), 'Push later');
 	await page.goto('/workouts');
 	await expect(page.getByTestId('workout-name')).toHaveText(['Push later', 'Push earlier']);
 
-	const month = earlier.startDate!.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+	const started = (date: Date) =>
+		date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+	const earlierLabel = started(earlier.startDate!);
 	await page.getByLabel('search').click();
 	await page.getByRole('combobox').click();
-	await page.getByRole('option', { name: `Hypertrophy · ${month}` }).click();
+	await expect(page.getByRole('option', { name: `Hypertrophy · ${started(later.startDate!)}` })).toBeVisible();
+	expect(started(later.startDate!)).not.toEqual(earlierLabel);
+	await page.getByRole('option', { name: `Hypertrophy · ${earlierLabel}` }).click();
 	// Closes the list, not the filter
 	await page.getByText('Date range').click();
-	await expect(page.getByRole('combobox')).toHaveText(`Hypertrophy · ${month}`);
+	await expect(page.getByRole('combobox')).toHaveText(`Hypertrophy · ${earlierLabel}`);
 	await page.getByRole('button', { name: 'Apply' }).click();
 	await expect(page).toHaveURL(new RegExp(`selectedMesocycleIds=.*${earlier.id}`));
 	await expect(page.getByTestId('workout-name')).toHaveText(['Push earlier']);
@@ -1877,8 +1880,8 @@ test('Workouts list filter: a link from before picks its blocks by name, shown p
 	const userId = userData.userId;
 	await prisma.workout.deleteMany({ where: { userId } });
 	await prisma.mesocycle.deleteMany({ where: { userId } });
-	await blockWithWorkout(userId, 'Solo', 2, 'Pull solo');
-	await blockWithWorkout(userId, 'Strength', 1, 'Pull strength');
+	await blockWithWorkout(userId, 'Solo', new Date(2026, 5, 1, 9), 'Pull solo');
+	await blockWithWorkout(userId, 'Strength', new Date(2026, 7, 1, 9), 'Pull strength');
 	await page.goto(`/workouts?selectedMesocycles=${encodeURIComponent(JSON.stringify(['Solo']))}`);
 	await expect(page.getByTestId('workout-name')).toHaveText(['Pull solo']);
 	await page.getByLabel('search').click();

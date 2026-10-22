@@ -46,12 +46,12 @@
 
 	const NOT_IN_A_BLOCK = 'Non-meso workouts';
 
-	/** Its name; with its start month too when another block has the same name */
+	/** Its name; with its start date too when another block has the same name (one restarted in the same month too) */
 	function mesocycleLabel(mesocycle: (typeof filterData.allMesocycles)[number]) {
 		const sameName = filterData.allMesocycles.filter((other) => other.name === mesocycle.name).length > 1;
 		if (!sameName) return mesocycle.name;
 		const started = mesocycle.startDate
-			? mesocycle.startDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+			? mesocycle.startDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 			: 'Not started';
 		return `${mesocycle.name} · ${started}`;
 	}
