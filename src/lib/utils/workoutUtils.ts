@@ -511,7 +511,7 @@ function raiseMyorepMatchLoad(ex: WorkoutExerciseInProgress, userBodyweight: num
 function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
 	let loadIncreasedForOneOfSameLoadSets = false;
-	// A set the formula can't move (e.g. from 0 kg to a weight) stays as is
+	// A set whose reps the formula can't work out (e.g. 0 kg to a weight) stays exactly as last time
 	let cantMoveASet = false;
 
 	const newSets = ex.sets.map((set, setIdx) => {
