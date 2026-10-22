@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures';
 import { createMesocycle } from './commonFunctions';
+import { createId } from '@paralleldrive/cuid2';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -221,9 +222,10 @@ test('exercise stats: each workout once, reps-only exercises chart reps, and old
 	// The shown tab's workouts (the overview's muscle list is there too, hidden)
 	const cards = page.getByRole('tabpanel').getByText('Side delts', { exact: true });
 	await expect(cards).toHaveCount(2);
-	// Scrolling to the end loads nothing twice
+	// Every session loaded at once, nothing twice, and nothing left loading
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '2');
 	await page.mouse.wheel(0, 3000);
-	await expect(page.getByText("That's all")).toBeVisible();
+	await expect(page.getByText('Loading…')).toHaveCount(0);
 	await expect(cards).toHaveCount(2);
 
 	// Weighted: overload, load and reps; "Show sets"
@@ -282,4 +284,95 @@ test('a block’s stats: named after the block, a labelled Stats button, sets pe
 	await expect(page.getByTestId('sets-per-routine-chart')).toBeVisible();
 	await page.getByRole('button', { name: 'Details' }).click();
 	await expect(page.getByTestId('sets-per-routine-chart')).toHaveCount(0);
+});
+
+/** `count` sessions of lateral raises, one a day back from yesterday: created in bulk */
+async function seedSessions(userId: string, count: number) {
+	await prisma.workout.deleteMany({ where: { userId } });
+	const exercise = await prisma.exercise.upsert({
+		where: { userId_name: { userId, name: 'Lateral raises' } },
+		create: { userId, name: 'Lateral raises', targetMuscleGroup: 'SideDelts' },
+		update: {}
+	});
+	const ids = Array.from({ length: count }, (_, idx) => ({
+		workout: createId(),
+		exercise: createId(),
+		startedAt: new Date(Date.now() - (idx + 1) * DAY)
+	}));
+	await prisma.workout.createMany({
+		data: ids.map(({ workout, startedAt }) => ({
+			id: workout,
+			userId,
+			userBodyweight: 80,
+			startedAt,
+			endedAt: new Date(startedAt.getTime() + 40 * 60000)
+		}))
+	});
+	await prisma.workoutExercise.createMany({
+		data: ids.map(({ workout, exercise: id }) => ({
+			id,
+			workoutId: workout,
+			exerciseId: exercise.id,
+			exerciseIndex: 0,
+			name: 'Lateral raises',
+			targetMuscleGroup: 'SideDelts' as const,
+			setType: 'Straight' as const,
+			repRangeStart: 10,
+			repRangeEnd: 15
+		}))
+	});
+	await prisma.workoutExerciseSet.createMany({
+		data: ids.map(({ exercise: id }) => ({
+			workoutExerciseId: id,
+			setIndex: 0,
+			reps: 12,
+			load: 10,
+			RIR: 2,
+			skipped: false
+		}))
+	});
+	return ids;
+}
+
+const medium = (date: Date) => date.toLocaleDateString('en-US', { dateStyle: 'medium' });
+
+test('exercise stats: the chart has every session (not just the first 10), and the date filter covers them', async ({
+	page,
+	userData
+}) => {
+	const sessions = await seedSessions(userData.userId, 25);
+	await page.goto('/stats?exercise=Lateral%20raises');
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '25');
+	await expect(page.getByTestId('sessions-limit')).toHaveCount(0);
+	// The date filter: from the first session to the last
+	await page.getByLabel('Filter exercises').click();
+	const range = `${medium(sessions[24].startedAt)} - ${medium(sessions[0].startedAt)}`;
+	await expect(page.getByRole('button', { name: range })).toBeVisible();
+});
+
+test('exercise stats: at most the latest 200 sessions, said only when there are more', async ({ page, userData }) => {
+	await seedSessions(userData.userId, 200);
+	await page.goto('/stats?exercise=Lateral%20raises');
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '200');
+	await expect(page.getByText('Loading…')).toHaveCount(0);
+	await expect(page.getByTestId('sessions-limit')).toHaveCount(0);
+
+	await seedSessions(userData.userId, 201);
+	await page.goto('/stats?exercise=Lateral%20raises');
+	await expect(page.getByTestId('sessions-limit')).toHaveText('Showing the latest 200 sessions');
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '200');
+});
+
+test('exercise stats: an exercise picked from the list is still shown after a reload', async ({ page, userData }) => {
+	await seedSessions(userData.userId, 3);
+	await page.goto('/stats');
+	await page.getByRole('tab', { name: 'Exercises' }).click();
+	await page.getByRole('combobox').filter({ hasText: 'Search for an exercise' }).click();
+	await page.getByRole('option', { name: 'Lateral raises' }).click();
+	await expect(page).toHaveURL(/exercise=Lateral(\+|%20)raises/);
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '3');
+
+	await page.reload();
+	await expect(page.getByRole('combobox').filter({ hasText: 'Lateral raises' })).toBeVisible();
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '3');
 });

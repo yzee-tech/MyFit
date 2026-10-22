@@ -74,3 +74,12 @@ test("an exercise's history, page by page: every time once when they started at 
 	expect(ids).toHaveLength(TIED);
 	expect(new Set(ids).size).toBe(TIED);
 });
+
+test("an exercise's history in pages of up to 100 (10 by default); none of 0, below or above", async () => {
+	const caller = await seedTiedWorkouts();
+	expect(await caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows' })).toHaveLength(10);
+	expect(await caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows', pageSize: 100 })).toHaveLength(TIED);
+	for (const pageSize of [0, -1, 101, 1.5]) {
+		await expect(caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows', pageSize })).rejects.toThrow();
+	}
+});
