@@ -100,6 +100,8 @@
 		if (selectedExercise === name) return;
 		selectedExercise = name;
 		exerciseInstances = [];
+		// The last exercise's block filter would hide this one's sessions
+		selectedMesocycleNames = [];
 		// In the link, so a reload or coming back shows it again (no history entry per pick)
 		const url = new URL($page.url);
 		url.searchParams.set('exercise', name);

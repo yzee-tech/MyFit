@@ -376,3 +376,50 @@ test('exercise stats: an exercise picked from the list is still shown after a re
 	await expect(page.getByRole('combobox').filter({ hasText: 'Lateral raises' })).toBeVisible();
 	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '3');
 });
+
+test('exercise stats: a block filter is cleared when another exercise is picked, so its chart shows', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.workout.deleteMany({ where: { userId } });
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+	const block = await prisma.mesocycle.create({
+		data: {
+			userId,
+			name: 'Hypertrophy',
+			weeklyRIR: [3, 2, 1, 0],
+			startDate: new Date(Date.now() - 20 * DAY),
+			startOverloadPercentage: 2.5,
+			lastSetToFailure: false,
+			forceRIRMatching: false
+		}
+	});
+	try {
+		// Lateral raises in the block; calf raises outside it
+		for (const daysAgo of [3, 2]) {
+			const workout = await seedWorkout(userId, daysAgo, 40, raises([{ reps: 12, load: 10 }]));
+			await prisma.workoutOfMesocycle.create({ data: { workoutId: workout.id, mesocycleId: block.id } });
+		}
+		for (const daysAgo of [5, 4]) {
+			await seedWorkout(userId, daysAgo, 40, { name: 'Calf raises', muscle: 'Calves', sets: [{ reps: 15, load: 40 }] });
+		}
+		await page.goto('/stats?exercise=Lateral%20raises');
+		await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '2');
+		// Only the block's sessions
+		await page.getByLabel('Filter exercises').click();
+		await page.getByRole('combobox').filter({ hasText: 'All mesocycles' }).click();
+		await page.getByRole('option', { name: 'Hypertrophy' }).click();
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Escape');
+
+		// Another exercise: no block filter left over to hide all of its sessions
+		await page.getByRole('combobox').filter({ hasText: 'Lateral raises' }).click();
+		await page.getByPlaceholder('Type here').fill('Calf');
+		await page.getByRole('option', { name: 'Calf raises' }).click();
+		await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '2');
+	} finally {
+		await prisma.workout.deleteMany({ where: { userId } });
+		await prisma.mesocycle.deleteMany({ where: { userId } });
+	}
+});
