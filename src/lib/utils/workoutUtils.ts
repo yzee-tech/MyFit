@@ -92,6 +92,18 @@ type BergerOverloadPercentage = {
 
 type BergerInput = BergerNewReps | BergerOverloadPercentage;
 
+/** The formula's load term: below about 0.04 kg (no weight, or help without bodyweight) it goes negative */
+const bergerLoadFactor = (load: number) => 9745640 * load - 423641;
+
+/**
+ * Whether the formula can compare two loads (kg, with any bodyweight share): both above its zero
+ * point, or exactly the same (the terms cancel). Not 0 kg against a weight (-46,009% for 0 → 20 kg),
+ * nor two amounts of help counted without bodyweight (20 → 10 kg of help would score -50%)
+ */
+function bergerComparable(oldLoad: number, newLoad: number) {
+	return oldLoad === newLoad || (bergerLoadFactor(oldLoad) > 0 && bergerLoadFactor(newLoad) > 0);
+}
+
 export function solveBergerFormula(input: BergerInput) {
 	const { variableToSolve, knownValues } = input;
 	const { oldSet, newSet, bodyweightFraction = null, oldUserBodyweight = 0, newUserBodyweight = 0 } = knownValues;
@@ -121,6 +133,12 @@ export function solveBergerFormula(input: BergerInput) {
 				const prevMiniSet = oldSet.miniSets[i];
 				const newMiniSet = newSet.miniSets[i];
 				if (!prevMiniSet || !newMiniSet) break;
+				const share = bodyweightFraction ?? 0;
+				if (
+					!bergerComparable(prevMiniSet.load + share * oldUserBodyweight, newMiniSet.load + share * newUserBodyweight)
+				) {
+					continue;
+				}
 
 				totalMiniSetsOverload += solveBergerFormula({
 					variableToSolve: 'OverloadPercentage',
@@ -406,6 +424,11 @@ export function getPerformanceChanges(performances: PreviousPerformance[]) {
 			const newSet = newPerformance.exercise.sets[j];
 			if (!oldSet || !newSet) break;
 			if (oldSet.skipped || newSet.skipped) continue;
+			// The formula can't compare these loads (e.g. 0 kg against a weight): left out
+			const share = newPerformance.exercise.bodyweightFraction ?? 0;
+			const oldLoad = oldSet.load + share * oldPerformance.oldUserBodyweight;
+			const newLoad = newSet.load + share * newPerformance.oldUserBodyweight;
+			if (!bergerComparable(oldLoad, newLoad)) continue;
 
 			setPerformanceChanges.push(
 				solveBergerFormula({
@@ -472,13 +495,15 @@ function raiseMyorepMatchLoad(ex: WorkoutExerciseInProgress, userBodyweight: num
 	const repsAt = (set: { reps: number; load: number; RIR: number }) =>
 		Math.round(repsAtLoad(ex, set, newLoad, userBodyweight));
 	const firstReps = repsAt({ reps: first.reps, load: first.load, RIR: first.RIR });
-	if (firstReps < ex.repRangeStart) return ex.sets;
+	// The formula can't tell (e.g. from 0 kg): stays as is
+	if (!Number.isFinite(firstReps) || firstReps < ex.repRangeStart) return ex.sets;
 	return ex.sets.map((set, setIdx) => {
 		if (setIdx === 0) return { ...set, reps: firstReps, load: newLoad, miniSets: [] };
 		if (set.reps === undefined || set.load === undefined || set.RIR === undefined) {
 			return { ...set, load: newLoad, miniSets: [] };
 		}
-		const reps = Math.max(1, Math.min(repsAt({ reps: set.reps, load: set.load, RIR: set.RIR }), firstReps));
+		const matchReps = repsAt({ reps: set.reps, load: set.load, RIR: set.RIR });
+		const reps = Number.isFinite(matchReps) ? Math.max(1, Math.min(matchReps, firstReps)) : firstReps;
 		return { ...set, reps, load: newLoad, miniSets: [] };
 	});
 }
@@ -486,6 +511,8 @@ function raiseMyorepMatchLoad(ex: WorkoutExerciseInProgress, userBodyweight: num
 function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
 	let loadIncreasedForOneOfSameLoadSets = false;
+	// A set the formula can't move (e.g. from 0 kg to a weight) stays as is
+	let cantMoveASet = false;
 
 	const newSets = ex.sets.map((set, setIdx) => {
 		if (set.reps === undefined || set.load === undefined || set.RIR === undefined) return set;
@@ -525,10 +552,16 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 			}
 		});
 
+		if (!Number.isFinite(newReps)) {
+			cantMoveASet = true;
+			return set;
+		}
 		const newSet = { ...set, reps: Math.round(newReps), load: newLoad };
 		return newSet;
 	});
 
+	// Sets meant to share a load move together, or not at all
+	if (sameLoadSetType && cantMoveASet) return ex.sets;
 	if (sameLoadSetType) {
 		const belowRepRangeStart = newSets.some((set) => set.reps! < ex.repRangeStart);
 		if (belowRepRangeStart) return ex.sets;
@@ -605,6 +638,8 @@ function moveSetToLoad(
 			overloadPercentage: 0
 		}
 	});
+	// The formula can't tell (e.g. from 0 kg): the set stays where it was
+	if (!Number.isFinite(newReps)) return set;
 	return { ...set, load: newLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
 }
 
@@ -697,7 +732,7 @@ export function getNextWeightHint(
 	const bodyweight = userBodyweightKg ?? 0;
 	const current = { ...set, load: toKg(set.load, unit) };
 	const repsAtNextWeight = Math.round(repsAtLoad(ex, current, toKg(nextWeight, unit), bodyweight));
-	if (repsAtNextWeight >= start) return null;
+	if (!Number.isFinite(repsAtNextWeight) || repsAtNextWeight >= start) return null;
 
 	// Reps at the current weight that match the bottom of the rep range at the next weight
 	const readyReps = repsAtLoad(
@@ -706,6 +741,7 @@ export function getNextWeightHint(
 		current.load,
 		bodyweight
 	);
+	if (!Number.isFinite(readyReps)) return null;
 	const moreReps = Math.max(1, Math.ceil(readyReps - 1e-9) - set.reps);
 	return { currentWeight: set.load, nextWeight, moreReps };
 }
@@ -809,6 +845,17 @@ export type ProgressionPlan = {
 	exercises: RoutineExerciseTemplate[];
 };
 
+/**
+ * Done at 0 kg without counting bodyweight (plain push-ups, a band): every set done, and every part
+ * of a drop set, at 0. The formula can't put weight on it, so it goes up in reps. A skipped set's
+ * load doesn't count
+ */
+function doneWithNoWeight(ex: WorkoutExerciseInProgress, lastPerformance: PreviousPerformance) {
+	if (ex.bodyweightFraction !== null && ex.bodyweightFraction !== undefined) return false;
+	const done = lastPerformance.exercise.sets.filter((set) => !set.skipped);
+	return done.length > 0 && done.every((set) => set.load === 0 && set.miniSets.every((miniSet) => miniSet.load === 0));
+}
+
 export function progressiveOverloadMagic(
 	plan: ProgressionPlan,
 	cycleNumber: number,
@@ -820,8 +867,11 @@ export function progressiveOverloadMagic(
 	repsOnly: RepsOnlySettings = new Map()
 ) {
 	const mesocycle = plan.settings;
+	// Done with no weight last time: progressed as reps only too (found per exercise below)
+	const noWeight = new Set<string>();
 	// Levels keep their own rule, so reps only applies to exercises with weights
-	const isRepsOnly = (ex: WorkoutExerciseInProgress) => repsOnly.has(ex.name) && !isLevelUnit(ex.weightUnit);
+	const isRepsOnly = (ex: WorkoutExerciseInProgress) =>
+		(repsOnly.has(ex.name) || noWeight.has(ex.name)) && !isLevelUnit(ex.weightUnit);
 
 	const weekRIR = getRIRForWeek(mesocycle.weeklyRIR, cycleNumber);
 	let currentCycleRIR = weekRIR;
@@ -838,6 +888,7 @@ export function progressiveOverloadMagic(
 		const allPreviousPerformances = comparablePerformances(exerciseHistory[ex.name] ?? [], ex.weightUnit);
 		const lastPerformance = allPreviousPerformances.at(-1);
 		if (!lastPerformance?.exercise) return;
+		if (doneWithNoWeight(ex, lastPerformance)) noWeight.add(ex.name);
 
 		const routineSetCount = ex.sets.length;
 

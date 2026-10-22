@@ -756,6 +756,85 @@ test('reps only: max reps caps suggestions, even in a harder week; without a cap
 	capBelowRange.sets.forEach((set) => expect(set.reps).toEqual(6));
 });
 
+// No weight: done at 0 kg and not counting bodyweight (plain push-ups, a band). Treated as reps
+// only, since the formula can't compare 0 kg with a weight
+test('done at 0 kg without a bodyweight share: more reps at 0 kg, never a weight jump or an empty box', () => {
+	// Past the top of the range (8–12): reps only would add a rep; a weight would go to 2.5 kg
+	const rows = repsOnlySuggestion([performance('Barbell rows', sets(0, 13, 13, 13))]);
+	expect(shapeOf(rows)).toEqual([
+		[0, 14],
+		[0, 14],
+		[0, 14]
+	]);
+	// A harder week (RIR 3 → 2): the one rep, not a second for the harder effort
+	const harder = repsOnlySuggestion([performance('Barbell rows', sets(0, 10, 10, 10))], {
+		plan: { weeklyRIR: [3, 2], week: 2 }
+	});
+	expect(shapeOf(harder)).toEqual([
+		[0, 11],
+		[0, 11],
+		[0, 11]
+	]);
+	// A skipped set's old weight doesn't count; any weight that was lifted does
+	const skippedLoaded = performance('Barbell rows', sets(0, 13, 13, 13));
+	skippedLoaded.exercise.sets[2] = { ...skippedLoaded.exercise.sets[2], load: 20, skipped: true };
+	expect(shapeOf(repsOnlySuggestion([skippedLoaded])).slice(0, 2)).toEqual([
+		[0, 14],
+		[0, 14]
+	]);
+	const withLoadedDropSet = performance('Barbell rows', sets(0, 13, 13, 13));
+	withLoadedDropSet.exercise.sets[0].miniSets = [
+		{ id: 'mini-0', miniSetIndex: 0, workoutExerciseSetId: 'set-0', reps: 5, load: 10, RIR: 0 }
+	];
+	repsOnlySuggestion([withLoadedDropSet]).sets.forEach((set) => {
+		expect(Number.isFinite(set.reps)).toBe(true);
+		expect(Number.isFinite(set.load)).toBe(true);
+	});
+});
+
+test('sets that are partly 0 kg and partly weighted: never NaN, even past the top of the range', () => {
+	const mixed = performance('Barbell rows', [
+		{ reps: 13, load: 0, RIR: 3 },
+		{ reps: 13, load: 20, RIR: 3 },
+		{ reps: 13, load: 20, RIR: 3 }
+	]);
+	const rows = repsOnlySuggestion([mixed]);
+	rows.sets.forEach((set) => {
+		expect(Number.isFinite(set.reps)).toBe(true);
+		expect(Number.isFinite(set.load)).toBe(true);
+	});
+});
+
+test('comparing workouts: a 0 kg set against a weighted one, or two different amounts of help without bodyweight, is skipped', () => {
+	const change = (oldLoad: number, newLoad: number, newReps = 10) =>
+		getPerformanceChanges([
+			performance('Barbell rows', [{ reps: 10, load: oldLoad, RIR: 2 }]),
+			performance('Barbell rows', [{ reps: newReps, load: newLoad, RIR: 2 }])
+		]);
+	// Was -46,009% and -100%
+	expect(change(0, 20)).toEqual([]);
+	expect(change(20, 0)).toEqual([]);
+	// 20 kg of help, then 10 kg (help is a negative load): progress, was scored -49.9%
+	expect(change(-20, -10)).toEqual([]);
+	// Still compared: no weight both times (exact), and normal weights
+	expect(change(0, 0, 11)[0]).toBeGreaterThan(0);
+	expect(change(20, 22.5)[0]).toBeCloseTo(12.5, 0);
+
+	// A drop set's parts too: 0 kg against a weight is left out, the main sets still count
+	const set = (miniSetLoad: number) => ({
+		reps: 10,
+		load: 20,
+		RIR: 2,
+		miniSets: [{ reps: 5, load: miniSetLoad, RIR: 0 }]
+	});
+	const withMiniSets = solveBergerFormula({
+		variableToSolve: 'OverloadPercentage',
+		knownValues: { oldSet: set(0), newSet: set(10), bodyweightFraction: null }
+	});
+	// (The formula's two spellings of its constant leave a trace: 0.00003%)
+	expect(withMiniSets).toBeCloseTo(0, 3);
+});
+
 test('reps only: deload and welcome back repeat last time at an easier effort, same load', () => {
 	const history = [performance('Barbell rows', sets(10, 12, 12, 12))];
 	const deload = repsOnlySuggestion(history, { repsOnly: repsOnlyRows(), mode: 'deload' });
