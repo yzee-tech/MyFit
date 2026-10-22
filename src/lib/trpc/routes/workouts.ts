@@ -938,7 +938,14 @@ export const workouts = t.router({
 		}),
 
 	getExerciseHistory: t.procedure
-		.input(z.strictObject({ exerciseName: z.string(), cursorId: z.string().cuid2().optional() }))
+		.input(
+			z.strictObject({
+				exerciseName: z.string(),
+				cursorId: z.string().cuid2().optional(),
+				// 1 to 100 (0 would read as the end, and a negative take reverses the order); 10 by default
+				pageSize: z.number().int().min(1).max(100).optional()
+			})
+		)
 		.query(async ({ ctx, input }) => {
 			return await prisma.workoutExercise.findMany({
 				where: { workout: { userId: ctx.userId }, name: input.exerciseName },
@@ -957,7 +964,7 @@ export const workouts = t.router({
 				},
 				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 				skip: input.cursorId !== undefined ? 1 : 0,
-				take: 10,
+				take: input.pageSize ?? 10,
 				// Ties broken by id, so the pages never repeat or skip one
 				orderBy: [{ workout: { startedAt: 'desc' } }, { id: 'desc' }]
 			});

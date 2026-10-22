@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { untrack } from 'svelte';
-	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
@@ -13,7 +13,6 @@
 	import { cn } from '$lib/utils.js';
 	import { DateFormatter, getLocalTimeZone } from '@internationalized/date';
 	import type { DateRange, Selected } from 'bits-ui';
-	import type { InfiniteEvent } from 'svelte-infinite-loading';
 	import CalendarIcon from 'virtual:icons/lucide/calendar';
 	import ChevronsUpDown from 'virtual:icons/lucide/chevrons-up-down';
 	import FilterIcon from 'virtual:icons/lucide/filter';
@@ -94,39 +93,61 @@
 		}));
 	}
 
-	// The loader below fetches every page, the first one too: fetched here as well, it came in twice
 	function selectExercise(name: string) {
 		searchText = name;
 		searchOpen = false;
-		// Already showing it: the loader carries on as it was
+		// Already showing it: carries on as it was
 		if (selectedExercise === name) return;
 		selectedExercise = name;
 		exerciseInstances = [];
+		// The last exercise's block filter would hide this one's sessions
+		selectedMesocycleNames = [];
+		// In the link, so a reload or coming back shows it again (no history entry per pick)
+		const url = new URL($page.url);
+		url.searchParams.set('exercise', name);
+		replaceState(url, {});
+		loadAllSessions(name);
 	}
 
-	async function loadMore(infiniteEvent: InfiniteEvent) {
-		const exerciseName = selectedExercise;
-		const lastExerciseFound = exerciseInstances?.at(-1);
-		if (exerciseName === undefined) return;
+	// Every session for the chart (not just a page of them), the latest few hundred at most
+	const PAGE_SIZE = 100;
+	const MAX_SESSIONS = 200;
+	let loadingSessions = $state(false);
+	let moreThanShown = $state(false);
+	// The date filter follows the sessions loaded, until it's changed by hand
+	let dateRangeChanged = false;
 
-		const newExercisesFound = await trpc().workouts.getExerciseHistory.query({
-			cursorId: lastExerciseFound?.id,
-			exerciseName
-		});
-		if (newExercisesFound.length === 0) {
-			infiniteEvent.detail.complete();
-			return;
+	async function loadAllSessions(exerciseName: string) {
+		loadingSessions = true;
+		moreThanShown = false;
+		dateRangeChanged = false;
+		const found: WorkoutExercise[] = [];
+		const fetchPage = (pageSize: number) =>
+			trpc().workouts.getExerciseHistory.query({ exerciseName, cursorId: found.at(-1)?.id, pageSize });
+		try {
+			while (found.length < MAX_SESSIONS) {
+				const pageSize = Math.min(PAGE_SIZE, MAX_SESSIONS - found.length);
+				const sessions = await fetchPage(pageSize);
+				// Another exercise picked meanwhile
+				if (selectedExercise !== exerciseName) return;
+				// Never the same workout twice
+				const shown = new Set(found.map((ex) => ex.id));
+				found.push(...sessions.filter((ex) => !shown.has(ex.id)));
+				exerciseInstances = [...found];
+				if (!dateRangeChanged && found.length > 0) {
+					dateRange = {
+						start: dateToCalendarDate(found[found.length - 1].workout.startedAt),
+						end: dateToCalendarDate(found[0].workout.startedAt)
+					};
+				}
+				if (sessions.length < pageSize) return;
+			}
+			// At the limit: is there more than that?
+			const beyond = await fetchPage(1);
+			if (selectedExercise === exerciseName) moreThanShown = beyond.length > 0;
+		} finally {
+			if (selectedExercise === exerciseName) loadingSessions = false;
 		}
-
-		if (selectedExercise !== exerciseName) return;
-		infiniteEvent.detail.loaded();
-		if (!exerciseInstances) exerciseInstances = [];
-		// Never the same workout twice
-		const shown = new Set(exerciseInstances.map((ex) => ex.id));
-		exerciseInstances.push(...newExercisesFound.filter((ex) => !shown.has(ex.id)));
-		dateRange.start = dateToCalendarDate(exerciseInstances[exerciseInstances.length - 1].workout.startedAt);
-		dateRange.end = dateToCalendarDate(exerciseInstances[0].workout.startedAt);
-		if (newExercisesFound.length < 10) infiniteEvent.detail.complete();
 	}
 </script>
 
@@ -204,7 +225,12 @@
 						</Button>
 					</Popover.Trigger>
 					<Popover.Content class="w-auto p-0" align="start">
-						<RangeCalendar bind:value={dateRange} initialFocus placeholder={dateRange?.start} />
+						<RangeCalendar
+							initialFocus
+							onValueChange={() => (dateRangeChanged = true)}
+							placeholder={dateRange?.start}
+							bind:value={dateRange}
+						/>
 					</Popover.Content>
 				</Popover.Root>
 				<span class="font-semibold">Filter by mesocycles</span>
@@ -227,12 +253,23 @@
 
 <div class="flex flex-col gap-2">
 	{#if selectedExercise}
-		<ExerciseStatsChart {selectedExercise} exercises={filteredExerciseInstances} />
-		{#if exerciseInstances}
+		{#if exerciseInstances?.length}
+			<ExerciseStatsChart {selectedExercise} exercises={filteredExerciseInstances} />
+			{#if moreThanShown}
+				<span class="px-2 text-sm text-muted-foreground" data-testid="sessions-limit">
+					Showing the latest {MAX_SESSIONS} sessions
+				</span>
+			{/if}
 			{#each filteredExerciseInstances as instance}
 				<WorkoutExerciseCard exercise={instance} date={new Date(instance.workout.startedAt)} />
 			{/each}
-			<DefaultInfiniteLoader {loadMore} identifier={selectedExercise} entityPlural="exercises" />
+		{/if}
+		{#if loadingSessions}
+			<div class="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+				<LoaderCircle class="animate-spin" /> Loading…
+			</div>
+		{:else if !exerciseInstances?.length}
+			<span class="px-2 text-sm text-muted-foreground" data-testid="no-sessions">No sessions yet</span>
 		{/if}
 	{/if}
 </div>

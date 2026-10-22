@@ -261,7 +261,7 @@
 				<LoaderCircle class="animate-spin" /> Fetching performances
 			</div>
 		{:else}
-			<canvas bind:this={chartCanvas} height="240"></canvas>
+			<canvas bind:this={chartCanvas} data-points={exercises.length} data-testid="exercise-chart" height="240"></canvas>
 		{/if}
 	</Card.Content>
 </Card.Root>
