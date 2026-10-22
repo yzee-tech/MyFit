@@ -317,7 +317,10 @@ const loadWorkoutsSchema = z.strictObject({
 	filters: z
 		.object({
 			startDate: z.date().optional(),
+			/** From apps before endBefore: the end day's midnight in UTC, a day added */
 			endDate: z.date().optional(),
+			/** The midnight after the filter's last day (the phone's) */
+			endBefore: z.date().optional(),
 			/** Days picked on the calendar: from the first day's midnight to the midnight after the last (the phone's) */
 			pickedDays: z.strictObject({ from: z.date(), to: z.date() }).optional(),
 			// No longer a filter (skipped and rest days are gone): still accepted from a saved filter or an
@@ -340,7 +343,8 @@ export const workouts = t.router({
 		// Both ends together (an end date used to replace the start)
 		const startedAt: Prisma.DateTimeFilter = {};
 		if (filters?.startDate) startedAt.gte = filters.startDate;
-		if (filters?.endDate) startedAt.lte = new Date(Number(filters.endDate) + 1000 * 60 * 60 * 24);
+		if (filters?.endBefore) startedAt.lt = filters.endBefore;
+		else if (filters?.endDate) startedAt.lte = new Date(Number(filters.endDate) + 1000 * 60 * 60 * 24);
 		if (filters?.pickedDays) {
 			startedAt.gte = filters.pickedDays.from;
 			startedAt.lt = filters.pickedDays.to;

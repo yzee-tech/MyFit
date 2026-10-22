@@ -1,4 +1,4 @@
-import { parseDate } from '@internationalized/date';
+import { CalendarDate } from '@internationalized/date';
 import { type ClassValue, clsx } from 'clsx';
 import { cubicOut } from 'svelte/easing';
 import type { TransitionConfig } from 'svelte/transition';
@@ -56,9 +56,10 @@ export const flyAndScale = (
 	};
 };
 
+/** The day a moment falls on, on this device's calendar (not the UTC date: 6 am in Hong Kong is the day before in UTC) */
 export function dateToCalendarDate(date: Date | undefined) {
 	if (!date) date = new Date();
-	return parseDate(date.toISOString().slice(0, 10));
+	return new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
 }
 
 export function generateShadesAndTints(count: number): string[] {

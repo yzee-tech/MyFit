@@ -24,8 +24,11 @@
 		if (currentFilters.startDate) {
 			selectedDateRange.start = dateToCalendarDate(new Date(currentFilters.startDate));
 		}
-		if (currentFilters.endDate) {
-			selectedDateRange.end = dateToCalendarDate(new Date(currentFilters.endDate));
+		if (currentFilters.endBefore) {
+			// The filter's last day: the day before the midnight it ends at
+			const lastDay = new Date(currentFilters.endBefore);
+			lastDay.setDate(lastDay.getDate() - 1);
+			selectedDateRange.end = dateToCalendarDate(lastDay);
 		}
 		// Picked by id, or by name in a link from before ids (every block of that name)
 		const ids =

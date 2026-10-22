@@ -171,6 +171,13 @@ test('Workouts calendar: days picked and the filters replace each other, and the
 		await expect(page.getByTestId('showing')).toContainText('Showing Oct 1 – 14');
 		// Both ends apply (the end used to replace the start, letting Sep 28 in)
 		await expect(names(page)).toHaveText(['Pull A', 'Push A']);
+		// The filter's days are the phone's: the 16th from its midnight (with the 6 am workout) to the
+		// next (without the 17th's 6 am one); in UTC they were 8 hours off
+		await seedWorkout(userId, hk(10, 17, 6), 'Legs B');
+		await page.goto('/workouts?startDate=2026-10-16&endDate=2026-10-16');
+		await expect(page.getByTestId('showing')).toContainText('Showing Fri, Oct 16');
+		await expect(names(page)).toHaveText(['Pull A', 'Morning workout']);
+		await expect(calendarDay(page, 17)).toContainText('Legs B');
 
 		// A day picked replaces the filters
 		await page.goto(`/workouts?selectedMesocycleIds=${encodeURIComponent(JSON.stringify([block.id]))}`);

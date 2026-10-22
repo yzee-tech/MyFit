@@ -26,6 +26,7 @@
 		localDayKey,
 		monthOf,
 		monthStart,
+		nextDay,
 		parseLocalDay,
 		pickedBounds,
 		type CalendarMonth
@@ -65,12 +66,12 @@
 		// A link from before ids: its blocks by name
 		const selectedMesocycles = $page.url.searchParams.get('selectedMesocycles');
 
-		if (startDate) {
-			currentFilters.startDate = new Date(startDate);
-		}
-		if (endDate) {
-			currentFilters.endDate = new Date(endDate);
-		}
+		// The filter's dates are days on the phone's calendar: from the first one's midnight to the
+		// midnight after the last
+		const startDay = parseLocalDay(startDate);
+		const endDay = parseLocalDay(endDate);
+		if (startDay) currentFilters.startDate = startDay;
+		if (endDay) currentFilters.endBefore = nextDay(endDay);
 		if (selectedMesocycleIds) {
 			currentFilters.selectedMesocycleIds = JSON.parse(selectedMesocycleIds);
 		} else if (selectedMesocycles) {
@@ -150,7 +151,7 @@
 		const start = parseLocalDay(params.get('startDate'));
 		const end = parseLocalDay(params.get('endDate'));
 		const day = (date: Date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-		if (start && end) parts.push(describeDates(start, end));
+		if (start && end) parts.push(+start === +end ? describePick(start, end) : describeDates(start, end));
 		else if (start) parts.push(`From ${day(start)}`);
 		else if (end) parts.push(`Until ${day(end)}`);
 		return parts.length ? parts.join(' · ') : null;
