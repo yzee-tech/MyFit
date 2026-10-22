@@ -3,6 +3,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import H3 from '$lib/components/ui/typography/H3.svelte';
+	import { SECTION_HEADING } from '../sectionHeading';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import DoneIcon from 'virtual:icons/lucide/circle-check-big';
 	import OpenLinkIcon from 'virtual:icons/lucide/square-arrow-out-up-right';
@@ -26,11 +27,11 @@
 </script>
 
 {#if tasksDone < taskList.length}
-	<H3>Get started</H3>
+	<H3 class={SECTION_HEADING}>Get started</H3>
 	{#if entityCounts === undefined}
-		<Skeleton class="h-[174px] w-full" />
+		<Skeleton class="mb-6 h-[174px] w-full" />
 	{:else}
-		<Card.Root class="grid p-4 text-sm">
+		<Card.Root class="mb-6 grid p-4 text-sm">
 			{#each taskList as { task, completion, link }, idx}
 				{@const prevTaskDone = idx === 0 ? true : taskList.at(idx - 1)?.completion}
 				<div class="flex h-7 items-center justify-between">
@@ -49,5 +50,4 @@
 			{/each}
 		</Card.Root>
 	{/if}
-	<br />
 {/if}

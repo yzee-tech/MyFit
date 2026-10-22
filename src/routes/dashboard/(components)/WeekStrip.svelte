@@ -2,6 +2,8 @@
 	import { trpc } from '$lib/trpc/client';
 	import { sundayWeek, sundayWeekDay } from '$lib/utils/stats';
 	import { onMount } from 'svelte';
+	import H3 from '$lib/components/ui/typography/H3.svelte';
+	import { SECTION_HEADING } from '../sectionHeading';
 	import CheckIcon from 'virtual:icons/lucide/check';
 
 	const letters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -31,42 +33,44 @@
 	});
 </script>
 
-<div class="mb-6 rounded-lg border bg-card px-2 py-2.5" data-testid="week-strip">
-	<span class="mx-1 mb-2 block text-sm font-semibold">This week</span>
-	{#if week}
-		<div class="grid grid-cols-7">
-			{#each week.days as day, idx}
-				{@const done = doneDays.has(idx)}
-				{@const isToday = idx === today}
-				<div
-					class="flex flex-col items-center gap-1"
-					aria-label="{names[idx]} {day.getDate()}{done ? ', workout done' : ''}{isToday ? ', today' : ''}"
-					data-done={done}
-					data-testid="week-day-{idx}"
-					data-today={isToday}
-					role="img"
-				>
-					<span class="text-xs {isToday ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'}">
-						{letters[idx]}
-					</span>
-					{#if done}
-						<span class="flex h-9 w-9 items-center justify-center rounded-full bg-green-600 text-white">
-							<CheckIcon class="h-5 w-5" />
+<div class="mb-6" data-testid="week-strip">
+	<H3 class={SECTION_HEADING}>This week</H3>
+	<div class="rounded-lg border bg-card px-2 py-2">
+		{#if week}
+			<div class="grid grid-cols-7">
+				{#each week.days as day, idx}
+					{@const done = doneDays.has(idx)}
+					{@const isToday = idx === today}
+					<div
+						class="flex flex-col items-center gap-0.5"
+						aria-label="{names[idx]} {day.getDate()}{done ? ', workout done' : ''}{isToday ? ', today' : ''}"
+						data-done={done}
+						data-testid="week-day-{idx}"
+						data-today={isToday}
+						role="img"
+					>
+						<span class="text-[11px] {isToday ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'}">
+							{letters[idx]}
 						</span>
-					{:else}
-						<span
-							class="flex h-9 w-9 items-center justify-center rounded-full text-sm text-muted-foreground {isToday
-								? 'border-2 border-primary'
-								: 'border'} {idx > today ? 'opacity-50' : ''}"
-						>
-							{day.getDate()}
-						</span>
-					{/if}
-				</div>
-			{/each}
-		</div>
-	{:else}
-		<!-- Same height as the days, so nothing moves when they appear -->
-		<div class="h-14"></div>
-	{/if}
+						{#if done}
+							<span class="flex h-7 w-7 items-center justify-center rounded-full bg-green-600 text-white">
+								<CheckIcon class="h-4 w-4" />
+							</span>
+						{:else}
+							<span
+								class="flex h-7 w-7 items-center justify-center rounded-full text-xs text-muted-foreground {isToday
+									? 'border-2 border-primary'
+									: 'border'} {idx > today ? 'opacity-50' : ''}"
+							>
+								{day.getDate()}
+							</span>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<!-- Same height as the days, so nothing moves when they appear -->
+			<div class="h-12"></div>
+		{/if}
+	</div>
 </div>
