@@ -50,8 +50,9 @@ jobs:
       - name: Set DATABASE_URL
         run: echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/myfit" >> $GITHUB_ENV
 
+      # The migrations, as production runs them (not db push, which skips them)
       - name: Initialize database schema
-        run: pnpm exec prisma db push
+        run: pnpm exec prisma migrate deploy
 
       - name: Generate AUTH_SECRET
         run: echo "AUTH_SECRET=$(openssl rand -base64 33)" >> $GITHUB_ENV

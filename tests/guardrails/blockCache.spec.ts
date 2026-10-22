@@ -6,6 +6,7 @@ import { config } from 'dotenv';
 config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
+import { deleteTestUsers } from '../deleteTestUsers';
 
 /**
  * Mesocycles used to keep a copy of the routines (MesocycleExerciseSplitDay / MesocycleExerciseTemplate,
@@ -50,7 +51,7 @@ test('nothing reads or writes the mesocycle copy of the routines, or makes a sec
 
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
-	await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
 });
 
 /** A person with My routines, an active block and a finished block that share an exercise */

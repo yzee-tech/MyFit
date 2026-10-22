@@ -4,13 +4,14 @@ import { config } from 'dotenv';
 config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
+import { deleteTestUsers } from '../deleteTestUsers';
 import { historyFromPerformances } from '../../src/lib/trpc/routes/workouts';
 
 /** Which past performances feed suggestions, and that a workout only goes in one's own block */
 
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
-	await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
 });
 
 const rows = {
