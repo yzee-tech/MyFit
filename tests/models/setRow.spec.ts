@@ -195,10 +195,11 @@ test('set row: Set | Previous | KG | Reps | RIR, last time set by set, tap to co
 		// The spare width goes to the boxes, not just Previous: wider than the minimums on a usual phone
 		const minimums = { load: 52, reps: 44, RIR: 36 };
 		for (const field of ['load', 'reps', 'RIR'] as const) {
-			// The layout is redrawn for the new width: measure once it's back on screen
-			await expect(box(page, 'Barbell rows', 2, field)).toBeVisible();
-			const { width: boxWidth } = (await box(page, 'Barbell rows', 2, field).boundingBox())!;
-			expect(boxWidth).toBeGreaterThanOrEqual(width === 390 ? minimums[field] + 6 : minimums[field] - 1);
+			// The layout is redrawn for the new width, and the box can be swapped between a check and a
+			// measure: measure until it's back on screen
+			await expect
+				.poll(async () => (await box(page, 'Barbell rows', 2, field).boundingBox())?.width ?? 0)
+				.toBeGreaterThanOrEqual(width === 390 ? minimums[field] + 6 : minimums[field] - 1);
 		}
 		const { width: previousWidth } = (await page.getByTestId('Barbell rows-set-2-previous').boundingBox())!;
 		if (width === 390) expect(previousWidth).toBeLessThan(90);
