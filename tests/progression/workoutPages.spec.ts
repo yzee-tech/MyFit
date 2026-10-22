@@ -4,12 +4,13 @@ import { config } from 'dotenv';
 config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
+import { deleteTestUsers } from '../deleteTestUsers';
 
 /** Lists loaded page by page (from the last one's id): each item once, even when times are the same */
 
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
-	await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
 });
 
 const TIED = 25;

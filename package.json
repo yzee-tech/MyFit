@@ -12,6 +12,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch --compiler-warnings \"state_referenced_locally:ignore\"",
 		"format": "prettier --write .",
 		"postinstall": "prisma generate",
+		"prepare": "svelte-kit sync",
 		"lint": "eslint . && prettier --check .",
 		"release": "release-it",
 		"create-user": "tsx src/lib/utils/userCreation.ts",
