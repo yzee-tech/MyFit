@@ -32,6 +32,8 @@
 		const currentFilters: Exclude<RouterInputs['workouts']['load']['filters'], undefined> = {};
 		const startDate = $page.url.searchParams.get('startDate');
 		const endDate = $page.url.searchParams.get('endDate');
+		const selectedMesocycleIds = $page.url.searchParams.get('selectedMesocycleIds');
+		// A link from before ids: its blocks by name
 		const selectedMesocycles = $page.url.searchParams.get('selectedMesocycles');
 
 		if (startDate) {
@@ -40,7 +42,9 @@
 		if (endDate) {
 			currentFilters.endDate = new Date(endDate);
 		}
-		if (selectedMesocycles) {
+		if (selectedMesocycleIds) {
+			currentFilters.selectedMesocycleIds = JSON.parse(selectedMesocycleIds);
+		} else if (selectedMesocycles) {
 			currentFilters.selectedMesocycles = JSON.parse(selectedMesocycles);
 		}
 
@@ -70,7 +74,7 @@
 		goto('/workouts/manage/start');
 	}
 
-	function setFilters(selectedDateRange: DateRange, selectedMesocycles: (string | null)[]) {
+	function setFilters(selectedDateRange: DateRange, selectedMesocycleIds: (string | null)[]) {
 		const newURL = new URL($page.url);
 
 		if (selectedDateRange.start) {
@@ -85,11 +89,13 @@
 			newURL.searchParams.delete('endDate');
 		}
 
-		if (selectedMesocycles.length) {
-			newURL.searchParams.set('selectedMesocycles', JSON.stringify(selectedMesocycles));
+		if (selectedMesocycleIds.length) {
+			newURL.searchParams.set('selectedMesocycleIds', JSON.stringify(selectedMesocycleIds));
 		} else {
-			newURL.searchParams.delete('selectedMesocycles');
+			newURL.searchParams.delete('selectedMesocycleIds');
 		}
+		// An old link's blocks by name are now the ones picked here
+		newURL.searchParams.delete('selectedMesocycles');
 
 		// Skipped and rest days are gone: an old link's filter on them goes too
 		newURL.searchParams.delete('selectedWorkoutStatuses');

@@ -12,7 +12,7 @@
 	type PropsType = {
 		currentFilters: Exclude<RouterInputs['workouts']['load']['filters'], undefined>;
 		filterData: NonNullable<RouterOutputs['workouts']['getFilterData']>;
-		setFilters: (selectedDateRange: DateRange, selectedMesocycles: (string | null)[]) => void;
+		setFilters: (selectedDateRange: DateRange, selectedMesocycleIds: (string | null)[]) => void;
 	};
 	let { currentFilters, filterData, setFilters }: PropsType = $props();
 
@@ -27,13 +27,34 @@
 		if (currentFilters.endDate) {
 			selectedDateRange.end = dateToCalendarDate(new Date(currentFilters.endDate));
 		}
-		if (currentFilters.selectedMesocycles) {
-			selectedMesocycles = currentFilters.selectedMesocycles.map((mesocycleName) => ({
-				value: mesocycleName,
-				label: mesocycleName ?? 'Non-meso workouts'
-			}));
+		// Picked by id, or by name in a link from before ids (every block of that name)
+		const ids =
+			currentFilters.selectedMesocycleIds ??
+			currentFilters.selectedMesocycles?.flatMap((name) =>
+				name === null
+					? [null]
+					: filterData.allMesocycles.filter((mesocycle) => mesocycle.name === name).map(({ id }) => id)
+			);
+		if (ids) {
+			selectedMesocycles = ids.flatMap((id): Selected<string | null>[] => {
+				if (id === null) return [{ value: null, label: NOT_IN_A_BLOCK }];
+				const mesocycle = filterData.allMesocycles.find((mesocycle) => mesocycle.id === id);
+				return mesocycle ? [{ value: id, label: mesocycleLabel(mesocycle) }] : [];
+			});
 		}
 	});
+
+	const NOT_IN_A_BLOCK = 'Non-meso workouts';
+
+	/** Its name; with its start date too when another block has the same name (one restarted in the same month too) */
+	function mesocycleLabel(mesocycle: (typeof filterData.allMesocycles)[number]) {
+		const sameName = filterData.allMesocycles.filter((other) => other.name === mesocycle.name).length > 1;
+		if (!sameName) return mesocycle.name;
+		const started = mesocycle.startDate
+			? mesocycle.startDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+			: 'Not started';
+		return `${mesocycle.name} · ${started}`;
+	}
 
 	function applyFilters() {
 		setFilters(
@@ -60,11 +81,11 @@
 				<Select.Value placeholder="Select a value" />
 			</Select.Trigger>
 			<Select.Content>
-				<Select.Item class="italic" value={null}>Non-meso workouts</Select.Item>
+				<Select.Item class="italic" value={null}>{NOT_IN_A_BLOCK}</Select.Item>
 				{#each filterData.allMesocycles as mesocycle}
 					{@const isActive = mesocycle.startDate && mesocycle.endDate === null}
-					<Select.Item class="flex items-center justify-between" value={mesocycle.name}>
-						{mesocycle.name}
+					<Select.Item class="flex items-center justify-between" label={mesocycleLabel(mesocycle)} value={mesocycle.id}>
+						{mesocycleLabel(mesocycle)}
 						{#if isActive}
 							<div class="h-2 w-2 rounded-full bg-primary"></div>
 						{/if}
