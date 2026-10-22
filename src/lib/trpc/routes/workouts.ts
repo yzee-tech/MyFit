@@ -297,6 +297,20 @@ async function findMyRoutineForWorkout(userId: string, routineName: string, inBl
 	return { plan, routineWeightUnit: routine.weightUnit, weekNumber, inBlock: block !== null };
 }
 
+/** The blocks an old link's filter names (null kept, for workouts not in a block); none if it names none */
+async function legacyMesocycleIds(
+	userId: string,
+	filters: { selectedMesocycles?: (string | null)[] } | undefined
+): Promise<(string | null)[] | undefined> {
+	const names = filters?.selectedMesocycles;
+	if (!names) return undefined;
+	const named = await prisma.mesocycle.findMany({
+		where: { userId, name: { in: names.filter((name) => name !== null) } },
+		select: { id: true }
+	});
+	return [...named.map((mesocycle) => mesocycle.id), ...(names.includes(null) ? [null] : [])];
+}
+
 const loadWorkoutsSchema = z.strictObject({
 	cursorId: z.string().cuid2().optional(),
 	filters: z
@@ -306,6 +320,9 @@ const loadWorkoutsSchema = z.strictObject({
 			// No longer a filter (skipped and rest days are gone): still accepted from a saved filter or an
 			// app from before, and ignored
 			selectedWorkoutStatuses: z.array(z.union([z.literal('RestDay'), z.literal('Skipped'), z.null()])).optional(),
+			/** Blocks by id; null for workouts not in a block */
+			selectedMesocycleIds: z.array(z.union([z.string().cuid2(), z.null()])).optional(),
+			/** Blocks by name, from a link made before ids: every block of that name, as it was */
 			selectedMesocycles: z.array(z.union([z.string(), z.null()])).optional()
 		})
 		.optional()
@@ -326,12 +343,14 @@ export const workouts = t.router({
 			whereClause = { ...whereClause, startedAt: { lte: endDate } };
 		}
 
-		if (filters?.selectedMesocycles) {
+		const selectedIds = filters?.selectedMesocycleIds ?? (await legacyMesocycleIds(ctx.userId, filters));
+		if (selectedIds) {
 			const orClause: Prisma.WorkoutWhereInput['OR'] = [
-				{ workoutOfMesocycle: { mesocycle: { name: { in: filters.selectedMesocycles.filter((m) => m !== null) } } } }
+				{ workoutOfMesocycle: { mesocycleId: { in: selectedIds.filter((id) => id !== null) } } }
 			];
 
-			if (filters.selectedMesocycles.includes(null)) {
+			// Workouts not in a block
+			if (selectedIds.includes(null)) {
 				orClause.push({ workoutOfMesocycle: null });
 			}
 
@@ -342,7 +361,8 @@ export const workouts = t.router({
 
 		const workouts = await prisma.workout.findMany({
 			where: whereClause,
-			orderBy: { startedAt: 'desc' },
+			// Ties broken by id, so the pages (from the last one's id) never repeat or skip one
+			orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
 			include: {
 				workoutOfMesocycle: {
 					include: {
@@ -394,7 +414,7 @@ export const workouts = t.router({
 
 		const allMesocycles = await prisma.mesocycle.findMany({
 			where: { userId: ctx.userId },
-			select: { name: true, startDate: true, endDate: true }
+			select: { id: true, name: true, startDate: true, endDate: true }
 		});
 
 		return { firstWorkoutDate, lastWorkoutDate, allMesocycles };
@@ -918,7 +938,8 @@ export const workouts = t.router({
 				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 				skip: input.cursorId !== undefined ? 1 : 0,
 				take: 10,
-				orderBy: { workout: { startedAt: 'desc' } }
+				// Ties broken by id, so the pages never repeat or skip one
+				orderBy: [{ workout: { startedAt: 'desc' } }, { id: 'desc' }]
 			});
 		}),
 

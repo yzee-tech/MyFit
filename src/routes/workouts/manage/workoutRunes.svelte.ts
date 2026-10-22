@@ -340,6 +340,7 @@ function createWorkoutRunes() {
 		},
 		set lastActivityAt(value) {
 			lastActivityAt = value;
+			saveStoresToLocalStorage();
 		},
 		markActivity,
 		hasUnsavedEdits,
@@ -354,6 +355,7 @@ function createWorkoutRunes() {
 		},
 		set workoutData(value) {
 			workoutData = value;
+			saveStoresToLocalStorage();
 		},
 		get workoutExercises() {
 			return workoutExercises;
@@ -373,6 +375,7 @@ function createWorkoutRunes() {
 		},
 		set editingWorkoutId(value) {
 			editingWorkoutId = value;
+			saveStoresToLocalStorage();
 		},
 		get repsOnly() {
 			return repsOnly;

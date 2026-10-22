@@ -1815,6 +1815,77 @@ test('Workouts list: two lines, a blank workout named by its time, the volume in
 	await expect(page.getByTestId('workout-name')).toHaveText(['Morning workout', 'Pull A']);
 });
 
+/** A block of `name` started `monthsAgo`, with one workout done from `routineName` in it */
+async function blockWithWorkout(userId: string, name: string, monthsAgo: number, routineName: string) {
+	const startDate = new Date();
+	startDate.setMonth(startDate.getMonth() - monthsAgo, 15);
+	const mesocycle = await prisma.mesocycle.create({
+		data: {
+			userId,
+			name,
+			weeklyRIR: [3, 2, 1, 0],
+			startDate,
+			endDate: new Date(startDate.getTime() + 28 * 86400000),
+			startOverloadPercentage: 2.5,
+			lastSetToFailure: false,
+			forceRIRMatching: false
+		}
+	});
+	const startedAt = new Date(startDate.getTime() + 86400000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt,
+			endedAt: new Date(startedAt.getTime() + 3600000),
+			routineName,
+			workoutOfMesocycle: { create: { mesocycleId: mesocycle.id, workoutStatus: null } }
+		}
+	});
+	return mesocycle;
+}
+
+test('Workouts list filter: blocks with the same name are told apart by start month, and only the one picked shows', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.workout.deleteMany({ where: { userId } });
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+	const earlier = await blockWithWorkout(userId, 'Hypertrophy', 3, 'Push earlier');
+	await blockWithWorkout(userId, 'Hypertrophy', 1, 'Push later');
+	await page.goto('/workouts');
+	await expect(page.getByTestId('workout-name')).toHaveText(['Push later', 'Push earlier']);
+
+	const month = earlier.startDate!.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+	await page.getByLabel('search').click();
+	await page.getByRole('combobox').click();
+	await page.getByRole('option', { name: `Hypertrophy · ${month}` }).click();
+	// Closes the list, not the filter
+	await page.getByText('Date range').click();
+	await expect(page.getByRole('combobox')).toHaveText(`Hypertrophy · ${month}`);
+	await page.getByRole('button', { name: 'Apply' }).click();
+	await expect(page).toHaveURL(new RegExp(`selectedMesocycleIds=.*${earlier.id}`));
+	await expect(page.getByTestId('workout-name')).toHaveText(['Push earlier']);
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+});
+
+test('Workouts list filter: a link from before picks its blocks by name, shown picked in the filter', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.workout.deleteMany({ where: { userId } });
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+	await blockWithWorkout(userId, 'Solo', 2, 'Pull solo');
+	await blockWithWorkout(userId, 'Strength', 1, 'Pull strength');
+	await page.goto(`/workouts?selectedMesocycles=${encodeURIComponent(JSON.stringify(['Solo']))}`);
+	await expect(page.getByTestId('workout-name')).toHaveText(['Pull solo']);
+	await page.getByLabel('search').click();
+	await expect(page.getByRole('combobox')).toHaveText('Solo');
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+});
+
 test('a big Add exercise button under the exercises; set 1 typed is copied into later empty sets, which follow it until typed in', async ({
 	page
 }) => {
