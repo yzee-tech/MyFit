@@ -134,17 +134,35 @@ const EXERCISE_HISTORY_LENGTH = 8;
 
 /** Recent performances of each named exercise across all of the user's workouts, oldest first */
 async function getExerciseHistory(userId: string, exerciseIds: string[]): Promise<ExerciseHistory> {
-	const pastExercises = await prisma.workoutExercise.findMany({
-		where: { exerciseId: { in: exerciseIds }, workout: { userId, isDeload: false } },
-		include: {
-			sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
-			workout: { select: { userBodyweight: true } }
-		},
-		orderBy: { workout: { startedAt: 'desc' } }
-	});
+	// Only the latest few of each: a routine can hold the same exercise twice, so each is asked for once
+	const perExercise = await Promise.all(
+		[...new Set(exerciseIds)].map((exerciseId) =>
+			prisma.workoutExercise.findMany({
+				where: { exerciseId, workout: { userId, isDeload: false } },
+				include: {
+					sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
+					workout: { select: { userBodyweight: true, startedAt: true } }
+				},
+				orderBy: { workout: { startedAt: 'desc' } },
+				take: EXERCISE_HISTORY_LENGTH
+			})
+		)
+	);
+	return historyFromPerformances(perExercise.flat());
+}
 
-	const history: ExerciseHistory = {};
-	for (const { workout, ...exercise } of pastExercises) {
+/**
+ * Past performances, keyed by the name they were done under: each one once, the latest
+ * EXERCISE_HISTORY_LENGTH of each name, oldest first
+ */
+export function historyFromPerformances<
+	T extends { id: string; name: string; workout: { userBodyweight: number; startedAt: Date } }
+>(pastExercises: T[]) {
+	const newestFirst = [...new Map(pastExercises.map((row) => [row.id, row])).values()].sort(
+		(a, b) => b.workout.startedAt.getTime() - a.workout.startedAt.getTime()
+	);
+	const history: Record<string, { exercise: Omit<T, 'workout'>; oldUserBodyweight: number }[]> = {};
+	for (const { workout, ...exercise } of newestFirst) {
 		const performances = (history[exercise.name] ??= []);
 		if (performances.length < EXERCISE_HISTORY_LENGTH) {
 			performances.push({ exercise, oldUserBodyweight: workout.userBodyweight });
@@ -721,6 +739,12 @@ export const workouts = t.router({
 
 		const { workoutOfMesocycle } = input.workoutData;
 		if (workoutOfMesocycle) {
+			// Only one of the user's own blocks
+			const mesocycle = await prisma.mesocycle.findFirst({
+				where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
+				select: { id: true }
+			});
+			if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
 			workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycle.id, workout.startedAt);
 			workout.workoutOfMesocycle = {
 				create: {
@@ -801,7 +825,7 @@ export const workouts = t.router({
 			z.strictObject({
 				id: z.string().cuid2(),
 				data: createWorkoutSchema,
-				endedAt: z.date().or(z.string().date())
+				endedAt: z.date().or(z.string().datetime())
 			})
 		)
 		.mutation(async ({ ctx, input }) => {

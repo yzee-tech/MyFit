@@ -317,7 +317,7 @@ function createWorkoutRunes() {
 			const { id, workoutId, ...exercise } = convertExerciseLoads(ex, 'toDisplay');
 			return {
 				...exercise,
-				sets: ex.sets.map((set) => {
+				sets: exercise.sets.map((set) => {
 					const { id, workoutExerciseId, ...rest } = set;
 					return {
 						...rest,
