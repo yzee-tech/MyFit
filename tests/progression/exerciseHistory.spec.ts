@@ -142,3 +142,49 @@ test("a new workout can't go in someone else's block", async () => {
 	expect(await prisma.workout.count({ where: { userId: other.userId } })).toBe(0);
 	expect(await prisma.workoutOfMesocycle.count({ where: { mesocycleId: mesocycle.id } })).toBe(0);
 });
+
+test('push-ups at 0 kg without a bodyweight share, past the top of the range: more reps at 0 kg, not a weight with no reps', async () => {
+	const { userId, caller } = await seedPerson();
+	const pushUps = await prisma.exercise.create({ data: { userId, name: 'Push-ups', targetMuscleGroup: 'Chest' } });
+	for (const daysAgo of [3, 1]) {
+		const startedAt = new Date(Date.now() - daysAgo * 86400000);
+		await prisma.workout.create({
+			data: {
+				userId,
+				userBodyweight: 80,
+				startedAt,
+				endedAt: startedAt,
+				workoutExercises: {
+					create: [
+						{
+							exerciseIndex: 0,
+							exerciseId: pushUps.id,
+							name: 'Push-ups',
+							targetMuscleGroup: 'Chest',
+							setType: 'Straight',
+							repRangeStart: 10,
+							repRangeEnd: 15,
+							sets: {
+								create: [0, 1].map((setIndex) => ({ setIndex, reps: 16, load: 0, RIR: 2, skipped: false }))
+							}
+						}
+					]
+				}
+			}
+		});
+	}
+	const suggestion = await caller.workouts.suggestSets({
+		exerciseName: 'Push-ups',
+		sets: 2,
+		setType: 'Straight',
+		repRangeStart: 10,
+		repRangeEnd: 15,
+		weightUnit: 'KG',
+		userBodyweight: 80
+	});
+	// Was 2.5 kg with the reps left empty
+	expect(suggestion?.sets?.map((set) => [set.load, set.reps])).toEqual([
+		[0, 17],
+		[0, 17]
+	]);
+});
