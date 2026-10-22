@@ -38,6 +38,7 @@ import {
 	type WorkoutOfMesocycle
 } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
+import { doneWorkouts, monthInput } from './stats';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { createId } from '@paralleldrive/cuid2';
 import { levelSetOf, levelSetsFor, type WeightSetLike } from '$lib/utils/weightSets';
@@ -316,7 +317,12 @@ const loadWorkoutsSchema = z.strictObject({
 	filters: z
 		.object({
 			startDate: z.date().optional(),
+			/** From apps before endBefore: the end day's midnight in UTC, a day added */
 			endDate: z.date().optional(),
+			/** The midnight after the filter's last day (the phone's) */
+			endBefore: z.date().optional(),
+			/** Days picked on the calendar: from the first day's midnight to the midnight after the last (the phone's) */
+			pickedDays: z.strictObject({ from: z.date(), to: z.date() }).optional(),
 			// No longer a filter (skipped and rest days are gone): still accepted from a saved filter or an
 			// app from before, and ignored
 			selectedWorkoutStatuses: z.array(z.union([z.literal('RestDay'), z.literal('Skipped'), z.null()])).optional(),
@@ -334,14 +340,16 @@ export const workouts = t.router({
 		const andConditions: Prisma.WorkoutWhereInput['AND'] = [];
 		const { filters } = input;
 
-		if (filters?.startDate) {
-			whereClause = { ...whereClause, startedAt: { gte: filters.startDate } };
+		// Both ends together (an end date used to replace the start)
+		const startedAt: Prisma.DateTimeFilter = {};
+		if (filters?.startDate) startedAt.gte = filters.startDate;
+		if (filters?.endBefore) startedAt.lt = filters.endBefore;
+		else if (filters?.endDate) startedAt.lte = new Date(Number(filters.endDate) + 1000 * 60 * 60 * 24);
+		if (filters?.pickedDays) {
+			startedAt.gte = filters.pickedDays.from;
+			startedAt.lt = filters.pickedDays.to;
 		}
-
-		if (filters?.endDate) {
-			const endDate = new Date(Number(filters.endDate) + 1000 * 60 * 60 * 24);
-			whereClause = { ...whereClause, startedAt: { lte: endDate } };
-		}
+		if (Object.keys(startedAt).length > 0) whereClause = { ...whereClause, startedAt };
 
 		const selectedIds = filters?.selectedMesocycleIds ?? (await legacyMesocycleIds(ctx.userId, filters));
 		if (selectedIds) {
@@ -391,6 +399,18 @@ export const workouts = t.router({
 				0
 			)
 		}));
+	}),
+
+	/**
+	 * The workouts done in a month, for the calendar: when, and their routine (the phone names them and
+	 * sorts them into its own days, from its own midnight)
+	 */
+	monthDays: t.procedure.input(monthInput).query(async ({ ctx, input }) => {
+		return prisma.workout.findMany({
+			where: { userId: ctx.userId, startedAt: { gte: input.from, lt: input.to }, ...doneWorkouts },
+			select: { startedAt: true, routineName: true },
+			orderBy: [{ startedAt: 'asc' }, { id: 'asc' }]
+		});
 	}),
 
 	getFilterData: t.procedure.query(async ({ ctx }) => {

@@ -4,7 +4,7 @@ import { overviewStats, type StatsRanges } from '$lib/utils/stats';
 import { z } from 'zod';
 
 // coerce turns a bad string into an Invalid Date: refused here rather than making a nonsense range
-const date = z.coerce.date().refine((value) => !isNaN(+value), 'Invalid date');
+export const date = z.coerce.date().refine((value) => !isNaN(+value), 'Invalid date');
 const DAY_MS = 24 * 60 * 60 * 1000;
 const bounded = (period: 7 | 30 | 90 | 'ytd') =>
 	z.strictObject({
@@ -42,6 +42,17 @@ export const weekInput = z.strictObject({ from: date, to: date }).superRefine((i
 	if (!(+input.from < +input.to)) ctx.addIssue({ code: 'custom', message: 'from must be before to' });
 	if (+input.to - +input.from > 8 * DAY_MS) ctx.addIssue({ code: 'custom', message: 'At most a week' });
 });
+
+// A month at most (32 days allows for a clock change): the calendar asks for one month at a time
+export const monthInput = z.strictObject({ from: date, to: date }).superRefine((input, ctx) => {
+	if (!(+input.from < +input.to)) ctx.addIssue({ code: 'custom', message: 'from must be before to' });
+	if (+input.to - +input.from > 32 * DAY_MS) ctx.addIssue({ code: 'custom', message: 'At most a month' });
+});
+
+/** Workouts done: a block's skipped days and rest days aren't */
+export const doneWorkouts = {
+	OR: [{ workoutOfMesocycle: { is: null } }, { workoutOfMesocycle: { is: { workoutStatus: null } } }]
+};
 
 export const stats = t.router({
 	/**

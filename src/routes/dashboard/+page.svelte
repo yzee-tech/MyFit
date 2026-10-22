@@ -6,6 +6,7 @@
 	import GetStartedComponent from './(components)/GetStartedComponent.svelte';
 	import TodaysWorkoutCard from './(components)/TodaysWorkoutCard.svelte';
 	import WeekStrip from './(components)/WeekStrip.svelte';
+	import { SECTION_HEADING } from './sectionHeading';
 
 	let { data } = $props();
 	let entityCounts: RouterOutputs['users']['getEntityCounts'] | undefined = $state(undefined);
@@ -20,8 +21,9 @@
 </script>
 
 <H2>Dashboard</H2>
-<WeekStrip />
+<!-- Get started first while it isn't done, then the week, then the block -->
 <GetStartedComponent {entityCounts} />
+<WeekStrip />
 
-<H3>Active mesocycle block</H3>
+<H3 class={SECTION_HEADING}>Active mesocycle block</H3>
 <TodaysWorkoutCard {...data} />
