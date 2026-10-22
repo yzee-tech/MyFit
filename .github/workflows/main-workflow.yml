@@ -28,7 +28,10 @@ jobs:
   playwright_tests:
     env:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
-    runs-on: ubuntu-latest
+    # A version Playwright installs its browser's libraries on (ubuntu-latest is moving to 26)
+    runs-on: ubuntu-24.04
+    # A hang fails here, not after GitHub's six hours
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -57,8 +60,23 @@ jobs:
       - name: Generate AUTH_SECRET
         run: echo "AUTH_SECRET=$(openssl rand -base64 33)" >> $GITHUB_ENV
 
+      # Chromium only (the one project the tests use), kept between runs until Playwright changes
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 10
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run Playwright tests
         run: pnpm exec playwright test
