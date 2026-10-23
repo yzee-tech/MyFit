@@ -2,6 +2,31 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-23: estimated 1RM, exercise charts, Warm up (PR #51)
+
+### Added
+
+- **Estimated 1RM chart**, now the first chart for a weighted exercise in Stats and History: one point per
+  workout, from its best set, counting reps in reserve (80 kg × 8 with 2 in reserve ≈ 101.27 kg). Bodyweight
+  exercises include the bodyweight share. Above the chart: the latest estimate and the change since the first one
+  shown. Shown in your home unit, to 2 decimals.
+- **Set volume** (a line per set) and **Session volume** (the workout's total) charts, counted like the Workouts list.
+
+### Changed
+
+- **Warm up** starts from the best estimate of your last 3 times doing the exercise (one light day doesn't lower
+  it), and says which set it's from. With no history, or offline, it uses today's set 1. The 1-RM calculator has a
+  reps in reserve box and uses the same formula as the chart.
+- Warm up is no longer offered for bodyweight or reps-only exercises (as for levels).
+- "Show sets" is greyed out, with why, for the one-line charts.
+- An old skipped set reads "uncompleted" in a saved workout and when editing it.
+
+### Fixed
+
+- Warm up with 1 set showed "NaN": it's now 50% × 8 reps.
+- Warm up's % column showed long decimals (53.333333333333336): now to 0.1 (53.3).
+- Opening Warm up again for the same exercise starts afresh, and closes the exercise menu.
+
 ## 2026-10-23: charts, finishing a workout, editing a past one (PR #50)
 
 ### Fixed
