@@ -26,6 +26,8 @@ What changed in MyFit, newest first.
 - Warm up with 1 set showed "NaN": it's now 50% × 8 reps.
 - Warm up's % column showed long decimals (53.333333333333336): now to 0.1 (53.3).
 - Opening Warm up again for the same exercise starts afresh, and closes the exercise menu.
+- The 1-RM calculator with no weight or no reps says so and stays open, instead of keeping the old number as if
+  it had worked.
 
 ## 2026-10-23: charts, finishing a workout, editing a past one (PR #50)
 

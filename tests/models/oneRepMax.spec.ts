@@ -267,6 +267,23 @@ test('Warm up: the best of the last 3 times, a light day or an older one not cou
 	await page.getByRole('button', { name: 'Calculate' }).click();
 	await expect(dialog.getByLabel('One rep max (kg)')).toHaveValue('126.59');
 	await expect(dialog.getByTestId('one-rep-max-source')).toHaveCount(0);
+
+	// Nothing to estimate (0 kg): it says why and stays open, keeping the last estimate
+	await dialog.getByRole('button', { name: '1-RM calculator' }).click();
+	await page.locator('#weight').fill('0');
+	await page.getByRole('button', { name: 'Calculate' }).click();
+	await expect(page.getByTestId('one-rep-max-calculator-error')).toHaveText(
+		'Enter a weight above 0 and at least 1 rep'
+	);
+	await expect(page.getByRole('button', { name: 'Calculate' })).toBeVisible();
+	await expect(dialog.getByLabel('One rep max (kg)')).toHaveValue('126.59');
+	// A good one clears the message and closes the calculator
+	await page.locator('#weight').fill('80');
+	await page.getByRole('button', { name: 'Calculate' }).click();
+	await expect(page.getByRole('button', { name: 'Calculate' })).toHaveCount(0);
+	await expect(dialog.getByLabel('One rep max (kg)')).toHaveValue('101.27');
+	await dialog.getByRole('button', { name: '1-RM calculator' }).click();
+	await expect(page.getByTestId('one-rep-max-calculator-error')).toHaveCount(0);
 });
 
 test('Warm up: no history or offline, from set 1 with the same formula; lb shown in lb; a late answer for another exercise is ignored', async ({

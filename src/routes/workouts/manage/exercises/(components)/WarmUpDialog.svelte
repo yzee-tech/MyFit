@@ -28,6 +28,8 @@
 	let weight = $state<number>();
 	let reps = $state<number>();
 	let RIR = $state<number>();
+	/** The calculator had nothing to estimate (no weight or no reps): it says so and stays open */
+	let calculatorError = $state(false);
 
 	let warmUpSets = $state<WarmUpSet[]>();
 
@@ -45,6 +47,7 @@
 				reps = opened.sets[0]?.reps ?? 0;
 				RIR = opened.sets[0]?.RIR ?? 0;
 				warmUpSets = undefined;
+				calculatorError = false;
 				oneRepMax = undefined;
 				oneRepMaxSource = undefined;
 				calculateOneRepMax();
@@ -75,16 +78,20 @@
 		oneRepMaxSource = `Best of ${times}: ${date}, ${roundWeight(fromKg(set.load, shownUnit))} ${unitLabel(shownUnit)} × ${set.reps}, RIR ${set.RIR}`;
 	}
 
+	/** Whether there was something to estimate; the box keeps its number when not */
 	function calculateOneRepMax() {
-		if (weight === undefined || reps === undefined) return;
+		if (weight === undefined || reps === undefined) return false;
 		// The same in either unit: the load is the only weight in it
 		const estimate = estimatedOneRepMax(toKg(weight, unit), reps, RIR ?? 0);
-		if (estimate !== null) oneRepMax = roundWeight(fromKg(estimate, unit));
+		if (estimate === null) return false;
+		oneRepMax = roundWeight(fromKg(estimate, unit));
+		return true;
 	}
 
 	function submitOneRepMax(e: SubmitEvent) {
 		e.preventDefault();
-		calculateOneRepMax();
+		calculatorError = !calculateOneRepMax();
+		if (calculatorError) return;
 		oneRepMaxSource = undefined;
 		oneRepMaxCalculatorOpen = false;
 	}
@@ -149,7 +156,13 @@
 						bind:value={totalWarmUpSets}
 					/>
 				</div>
-				<Popover.Root bind:open={oneRepMaxCalculatorOpen} onOpenChange={(v) => (oneRepMaxCalculatorOpen = v)}>
+				<Popover.Root
+					bind:open={oneRepMaxCalculatorOpen}
+					onOpenChange={(v) => {
+						oneRepMaxCalculatorOpen = v;
+						if (v) calculatorError = false;
+					}}
+				>
 					<Popover.Trigger asChild let:builder>
 						<Button variant="secondary" builders={[builder]} class="gap-2">
 							1-RM calculator
@@ -170,6 +183,11 @@
 								<Label for="rir">RIR</Label>
 								<Input id="rir" type="number" min={0} placeholder="0" bind:value={RIR} />
 							</div>
+							{#if calculatorError}
+								<p class="col-span-full text-sm text-destructive" data-testid="one-rep-max-calculator-error">
+									Enter a weight above 0 and at least 1 rep
+								</p>
+							{/if}
 							<Button type="submit" class="col-span-full">Calculate</Button>
 						</form>
 					</Popover.Content>
