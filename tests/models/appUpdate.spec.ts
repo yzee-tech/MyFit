@@ -18,8 +18,11 @@ async function pullAToOverview(page: Page) {
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.getByTestId('Pull-ups-menu-button').click();
 	await page.getByRole('menuitem', { name: 'Delete' }).click();
+	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill('10');
+	await page.locator('[id="Barbell\\ rows-set-1-load"]').fill('40');
+	await page.getByTestId('Barbell rows-set-1-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Skip and continue' }).click();
+	await page.getByRole('button', { name: 'Remove and finish' }).click();
 	await page.waitForURL(/\/workouts\/manage\/overview/);
 }
 
@@ -62,7 +65,7 @@ test('a workout saved by an older app version (a position, no routine name) save
 	});
 	await page.reload();
 	expect((await savedWorkout(page)).workoutData.workoutOfMesocycle.splitDayName).toEqual('Pull A');
-	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
+	await saveWorkout(page);
 	const workout = await prisma.workout.findFirstOrThrow({
 		where: { userId: userData.userId },
 		include: { workoutOfMesocycle: true }

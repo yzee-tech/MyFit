@@ -97,9 +97,9 @@
 			toast.error('Add at least one exercise');
 			return;
 		}
-		// Sets not done yet: skip them, or keep going
+		// Sets not done yet: remove them, or keep going (nothing done at all: keep going, or discard)
 		if (completedSets < totalSets) {
-			skipDialogOpen = true;
+			removeDialogOpen = true;
 			return;
 		}
 		goto('./overview');
@@ -114,23 +114,24 @@
 		goto('/workouts');
 	}
 
-	let skipDialogOpen = $state(false);
+	let removeDialogOpen = $state(false);
 	let setsLeft = $derived(totalSets !== null && completedSets !== null ? totalSets - completedSets : 0);
 
-	/** Marks every set not done as skipped (dropping unfinished mini-sets), then moves on */
-	function skipSetsLeftAndContinue() {
-		workoutRunes.workoutExercises?.forEach((exercise) => {
-			exercise.sets.forEach((set) => {
-				if (!set.completed && !set.skipped) {
-					set.skipped = true;
-					set.miniSets = [];
-					return;
-				}
-				set.miniSets = set.miniSets.filter((miniSet) => miniSet.completed);
-			});
-		});
-		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
-		skipDialogOpen = false;
+	/**
+	 * Removes every set not done (with its mini-sets; unfinished mini-sets of a done set too), and an
+	 * exercise left with none, then moves on. A past workout's old skipped sets stay as they were
+	 */
+	function removeSetsLeftAndContinue() {
+		if (!workoutRunes.workoutExercises) return;
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises
+			.map((exercise) => ({
+				...exercise,
+				sets: exercise.sets
+					.filter((set) => set.completed || set.skipped)
+					.map((set) => ({ ...set, miniSets: set.miniSets.filter((miniSet) => miniSet.completed) }))
+			}))
+			.filter((exercise) => exercise.sets.length > 0);
+		removeDialogOpen = false;
 		goto('./overview');
 	}
 </script>
@@ -270,20 +271,48 @@
 	<Button onclick={submitWorkoutExercises}>Next</Button>
 </div>
 
-<ResponsiveDialog title="Discard this workout?" bind:open={discardDialogOpen}>
+<ResponsiveDialog
+	title={workoutRunes.editingWorkoutId === null ? 'Discard this workout?' : 'Discard your changes?'}
+	bind:open={discardDialogOpen}
+>
 	{#snippet description()}
-		Everything entered so far is cleared. This can't be undone.
+		{#if workoutRunes.editingWorkoutId === null}
+			Everything entered so far is cleared. This can't be undone.
+		{:else}
+			The saved workout stays as it was.
+		{/if}
 	{/snippet}
 	<Button onclick={discardWorkout} variant="destructive">Yes, discard</Button>
 </ResponsiveDialog>
 
-<ResponsiveDialog title="{setsLeft} {setsLeft === 1 ? 'set' : 'sets'} not done" bind:open={skipDialogOpen}>
+<ResponsiveDialog
+	title={completedSets === 0 ? 'No sets done yet' : `${setsLeft} ${setsLeft === 1 ? 'set' : 'sets'} not done`}
+	bind:open={removeDialogOpen}
+>
 	{#snippet description()}
-		Skip {setsLeft === 1 ? 'it' : 'them'} and continue? Skipped sets are saved as skipped.
+		{#if completedSets === 0}
+			There's nothing to save yet. Keep going, or discard {workoutRunes.editingWorkoutId === null
+				? 'the workout'
+				: 'your changes'}.
+		{:else}
+			Remove {setsLeft === 1 ? 'it' : 'them'} and finish? Sets not ticked aren't saved.
+		{/if}
 	{/snippet}
 	<div class="grid grid-cols-2 gap-1.5">
-		<Button onclick={() => (skipDialogOpen = false)} variant="secondary">Keep going</Button>
-		<Button onclick={skipSetsLeftAndContinue}>Skip and continue</Button>
+		<Button onclick={() => (removeDialogOpen = false)} variant="secondary">Keep going</Button>
+		{#if completedSets === 0}
+			<Button
+				onclick={() => {
+					removeDialogOpen = false;
+					discardDialogOpen = true;
+				}}
+				variant="destructive"
+			>
+				{workoutRunes.editingWorkoutId === null ? 'Discard workout' : 'Discard changes'}
+			</Button>
+		{:else}
+			<Button onclick={removeSetsLeftAndContinue}>Remove and finish</Button>
+		{/if}
 	</div>
 </ResponsiveDialog>
 

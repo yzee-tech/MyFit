@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
 	import {
@@ -35,6 +36,8 @@
 	});
 
 	$effect(() => {
+		// Grid and text come from the theme (Chart.defaults): drawn again when it changes
+		if (!$chartTheme) return;
 		if (chart) chart.destroy();
 		if (selectedChartType.value === 'Work volume') {
 			// Compare in kg: exercises can be shown in different units

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import SetsPerMuscleChart from '$lib/components/charts/SetsPerMuscleChart.svelte';
 	import { Root as Card } from '$lib/components/ui/card';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -21,10 +22,10 @@
 	let chart: Chart<'bar'> | undefined;
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
 	$effect(() => {
-		if (!chartCanvas) return;
+		// Drawn again in the theme's colours when it changes
+		const palette = $chartTheme;
+		if (!chartCanvas || !palette) return;
 		chart?.destroy();
-		const style = getComputedStyle(document.body);
-		const primary = style.getPropertyValue('--primary').split(' ').join(', ');
 		chart = new Chart(chartCanvas, {
 			type: 'bar',
 			data: {
@@ -35,7 +36,7 @@
 						data: routines.map((routine) =>
 							routine.exercises.reduce((total, exercise) => total + routineSetCount(exercise.sets), 0)
 						),
-						backgroundColor: `hsl(${primary})`,
+						backgroundColor: `hsl(${palette.primary})`,
 						borderRadius: 4
 					}
 				]

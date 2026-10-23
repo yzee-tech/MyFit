@@ -3,6 +3,7 @@
 	import { getWorkoutVolume } from '$lib/utils/workoutUtils';
 	import { fromKg } from '$lib/utils/weightUnits';
 	import { page } from '$app/stores';
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import {
 		CategoryScale,
 		Chart,
@@ -24,12 +25,10 @@
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
 
 	$effect(() => {
-		if (chartCanvas === undefined) return;
+		// Drawn again in the theme's colours when it changes
+		const palette = $chartTheme;
+		if (chartCanvas === undefined || !palette) return;
 		if (chart) chart.destroy();
-
-		const style = getComputedStyle(document.body);
-		const primaryColor = style.getPropertyValue('--primary').split(' ').join(', ');
-		const secondaryColor = style.getPropertyValue('--secondary').split(' ').join(', ');
 
 		chart = new Chart(chartCanvas, {
 			type: 'line',
@@ -44,9 +43,9 @@
 						),
 						fill: {
 							target: 'origin',
-							above: `hsl(${secondaryColor})`
+							above: `hsl(${palette.secondary})`
 						},
-						borderColor: `hsl(${primaryColor})`,
+						borderColor: `hsl(${palette.primary})`,
 						borderWidth: 1,
 						label: 'Work volume'
 					}

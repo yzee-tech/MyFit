@@ -2,6 +2,24 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-23: charts, finishing a workout, editing a past one (PR #50)
+
+### Fixed
+
+- **Charts follow light and dark mode** straight away (also System following the phone), without a reload:
+  the dashboard, Stats, exercise, block and workout charts.
+
+### Changed
+
+- **Finishing with sets not ticked** removes them (and an exercise left with none): "Remove them and
+  finish?". Nothing ticked at all offers Keep going or Discard. Sets are no longer saved as skipped; old
+  workouts keep theirs.
+- **A workout never changes its routine**: no more "Update routine?" when saving. Change routines in My
+  routines (Save as routine on a finished workout stays).
+- **Exercise menu in a workout:** Edit, Warm up, History, Delete ("Skip sets left" is gone). When editing a
+  past workout: **Replace** (swap a wrongly logged exercise, keeping its sets), History, Delete.
+- **Compare:** a set not done last time reads "uncompleted last time".
+
 ## 2026-10-23: Workouts page and menu (PR #49)
 
 ### Changed

@@ -98,7 +98,7 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	await page.getByTestId('Barbell rows-set-2-action').click();
 	await page.getByTestId('Barbell rows-set-3-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page, { changes: ['Removed: Pull-ups'], answer: 'Just this workout' });
+	await saveWorkout(page);
 
 	// Stats › Exercises shows it, with no way to rename it there (an old link still gets there)
 	await page.goto('/exercise-stats');

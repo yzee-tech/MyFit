@@ -190,7 +190,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByTestId('Calf raises-set-2-action').click();
 	await page.getByTestId('Calf raises-set-3-action').click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page, { changes: ['Removed: Barbell good mornings'], answer: 'Just this workout' });
+	await saveWorkout(page);
 
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();

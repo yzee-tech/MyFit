@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import { page } from '$app/stores';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -160,13 +161,11 @@
 	let chart: Chart<'radar'> | undefined;
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
 	$effect(() => {
-		if (!chartCanvas || !overview) return;
+		// Drawn again in the theme's colours when it changes
+		const palette = $chartTheme;
+		if (!chartCanvas || !overview || !palette) return;
 		chart?.destroy();
-		const style = getComputedStyle(document.body);
-		const color = (name: string) => style.getPropertyValue(name).split(' ').join(', ');
-		const primary = color('--primary');
-		const muted = color('--muted-foreground');
-		const border = color('--border');
+		const { primary, mutedForeground: muted, border } = palette;
 		const { current, previous } = overview;
 		chart = new Chart(chartCanvas, {
 			type: 'radar',
@@ -247,10 +246,9 @@
 	let progressChart: Chart<'bar'> | undefined;
 	let progressCanvas: HTMLCanvasElement | undefined = $state();
 	$effect(() => {
-		if (!progressCanvas || !overview) return;
+		const palette = $chartTheme;
+		if (!progressCanvas || !overview || !palette) return;
 		progressChart?.destroy();
-		const style = getComputedStyle(document.body);
-		const color = (name: string) => style.getPropertyValue(name).split(' ').join(', ');
 		const axisUnit = measure === 'minutes' ? 'h' : measure === 'volume' ? unitLabel(homeUnit) : '';
 		const shownBars = bars;
 		progressChart = new Chart(progressCanvas, {
@@ -261,7 +259,7 @@
 					{
 						label: measures.find((m) => m.value === measure)!.label,
 						data: shownBars.map((bar) => barValue(bar[measure])),
-						backgroundColor: `hsl(${color('--primary')})`,
+						backgroundColor: `hsl(${palette.primary})`,
 						borderRadius: 3
 					}
 				]
@@ -271,13 +269,13 @@
 				scales: {
 					x: {
 						grid: { display: false },
-						ticks: { color: `hsl(${color('--muted-foreground')})`, maxRotation: 0, autoSkipPadding: 12 }
+						ticks: { color: `hsl(${palette.mutedForeground})`, maxRotation: 0, autoSkipPadding: 12 }
 					},
 					y: {
 						beginAtZero: true,
-						grid: { color: `hsl(${color('--border')})` },
+						grid: { color: `hsl(${palette.border})` },
 						ticks: {
-							color: `hsl(${color('--muted-foreground')})`,
+							color: `hsl(${palette.mutedForeground})`,
 							precision: 0,
 							callback: (value) => `${Number(value).toLocaleString()}${axisUnit ? ` ${axisUnit}` : ''}`
 						}

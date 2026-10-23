@@ -38,6 +38,8 @@ function createWorkoutRunes() {
 
 	let exerciseHistorySheetOpen = $state(false);
 	let exerciseHistorySheetName: string | undefined = $state();
+	// The exercise being replaced (a past workout's), while its picker is open
+	let replacingExerciseIdx: number | null = $state(null);
 	let exerciseWarmUpDialogOpen = $state(false);
 	let exerciseWarmUpDialogExercise: WorkoutExerciseInProgress | undefined = $state();
 
@@ -245,6 +247,53 @@ function createWorkoutRunes() {
 		}
 	}
 
+	/**
+	 * A past workout's exercise logged as the wrong one: it becomes `exercise` (its name, muscle group,
+	 * bodyweight share and note), keeping what was logged (its sets, set type, rep range, load change,
+	 * routine note and settings). No weight set: a past workout doesn't record its gym, and the old one
+	 * was the old exercise's (a machine's levels come from the exercise itself). Between levels and
+	 * weights the loads mean something else: they're cleared and those sets un-ticked. 'taken' if the
+	 * workout has that exercise already
+	 */
+	function replaceExercise(
+		exerciseIdx: number,
+		exercise: {
+			name: string;
+			targetMuscleGroup: WorkoutExerciseInProgress['targetMuscleGroup'];
+			customMuscleGroup: string | null;
+			bodyweightFraction: number | null;
+			note: string | null;
+		}
+	): 'replaced' | 'loadsCleared' | 'taken' {
+		if (workoutExercises === null || !workoutExercises[exerciseIdx]) return 'taken';
+		if (exerciseNameExists(exercise.name, exerciseIdx)) return 'taken';
+		const current = workoutExercises[exerciseIdx];
+		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
+		const levels = Boolean(levelSetOf(exercise.name, weightSets));
+		const kindChanged = levels !== isLevelUnit(current.weightUnit);
+		const unload = <T extends { load?: number; completed: boolean }>(set: T) => ({
+			...set,
+			load: undefined,
+			completed: false
+		});
+		workoutExercises[exerciseIdx] = {
+			...current,
+			// The save links it to its exercise by name
+			name: exercise.name,
+			targetMuscleGroup: exercise.targetMuscleGroup,
+			customMuscleGroup: exercise.customMuscleGroup,
+			bodyweightFraction: exercise.bodyweightFraction,
+			exerciseNote: exercise.note,
+			weightSetId: null,
+			...(kindChanged && {
+				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
+				sets: current.sets.map((set) => ({ ...unload(set), miniSets: set.miniSets.map(unload) }))
+			})
+		};
+		saveStoresToLocalStorage();
+		return kindChanged ? 'loadsCleared' : 'replaced';
+	}
+
 	function deleteExercise(exerciseIdx: number) {
 		if (workoutExercises === null) return;
 		workoutExercises.splice(exerciseIdx, 1);
@@ -392,6 +441,12 @@ function createWorkoutRunes() {
 			previousWorkoutData = value;
 			saveStoresToLocalStorage();
 		},
+		get replacingExerciseIdx() {
+			return replacingExerciseIdx;
+		},
+		set replacingExerciseIdx(value) {
+			replacingExerciseIdx = value;
+		},
 		get exerciseHistorySheetName() {
 			return exerciseHistorySheetName;
 		},
@@ -421,6 +476,7 @@ function createWorkoutRunes() {
 		addExercise,
 		setEditingExercise,
 		editExercise,
+		replaceExercise,
 		deleteExercise,
 		loadWorkout,
 		openExerciseHistorySheet,

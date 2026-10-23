@@ -163,21 +163,8 @@ export async function pickRoutine(page: Page, routineName: string) {
 	await page.getByRole('radio', { name: new RegExp(`^${routineName}`) }).click();
 }
 
-/**
- * Saves a workout from its Overview page. `routine` is the "Update routine?" question this test
- * expects (the changes it lists, and the answer); without it, the workout must match its routine
- * (or have none), so nothing is asked.
- */
-export async function saveWorkout(
-	page: Page,
-	routine?: { changes: string[]; answer: 'Update routine' | 'Just this workout' }
-) {
+/** Saves a workout from its Overview page: straight away (a workout never asks about its routine) */
+export async function saveWorkout(page: Page) {
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
-	if (routine) {
-		const changes = page.getByTestId('routine-changes');
-		for (const change of routine.changes) await expect(changes).toContainText(change);
-		await page.getByRole('button', { name: routine.answer, exact: true }).click();
-	}
 	await page.waitForURL('/workouts');
-	await expect(page.getByTestId('routine-changes')).toHaveCount(0);
 }

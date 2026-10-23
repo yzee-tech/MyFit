@@ -32,6 +32,42 @@
 	// In the order they were ticked: that's the order they're added in
 	let ticked: string[] = $state([]);
 
+	// Replace (a past workout's exercise): one pick, which replaces it at once
+	let replacingIdx = $derived(workoutRunes.replacingExerciseIdx);
+	let replacingName = $derived(
+		replacingIdx === null ? null : (workoutRunes.workoutExercises?.[replacingIdx]?.name ?? null)
+	);
+	// Opened once per Replace; closed (picked or dismissed), the Replace is over
+	let openedFor: number | null = null;
+	$effect(() => {
+		const idx = replacingIdx;
+		if (idx === null || idx === openedFor) return;
+		openedFor = idx;
+		openSheet();
+	});
+	$effect(() => {
+		if (open || replacingIdx === null) return;
+		openedFor = null;
+		workoutRunes.replacingExerciseIdx = null;
+	});
+
+	function replaceWith(exercise: PickerExercise) {
+		if (replacingIdx === null) return;
+		const result = workoutRunes.replaceExercise(replacingIdx, exercise);
+		if (result === 'taken') {
+			toast.error(`${exercise.name} is in this workout already`);
+			return;
+		}
+		if (result === 'loadsCleared') {
+			toast.warning(`Replaced with ${exercise.name}`, {
+				description: "Levels and weights don't match: enter the loads and tick the sets again"
+			});
+		} else {
+			toast.success(`Replaced with ${exercise.name}`);
+		}
+		open = false;
+	}
+
 	/** Opens it with nothing ticked; your exercises are fetched each time, so new ones show up */
 	export async function openSheet() {
 		ticked = [];
@@ -72,6 +108,7 @@
 	}
 
 	function toggle(exercise: PickerExercise) {
+		if (replacingIdx !== null) return replaceWith(exercise);
 		ticked = ticked.includes(exercise.id) ? ticked.filter((id) => id !== exercise.id) : [...ticked, exercise.id];
 	}
 
@@ -112,9 +149,14 @@
 			// A machine's levels, for the workout screen
 			await invalidate('settings:userSettings');
 			await loadExercises();
-			if (!ticked.includes(created.id)) ticked = [...ticked, created.id];
 			newExerciseOpen = false;
 			toast.success('Exercise created');
+			if (replacingIdx !== null) {
+				const exercise = exercises.find(({ id }) => id === created.id);
+				if (exercise) replaceWith(exercise);
+				return;
+			}
+			if (!ticked.includes(created.id)) ticked = [...ticked, created.id];
 		} catch (error) {
 			toast.error(error instanceof TRPCClientError ? error.message : 'Failed to create exercise');
 		}
@@ -125,7 +167,7 @@
 <Sheet.Root openFocus="#quick-add-list" bind:open>
 	<Sheet.Content class="flex h-[85dvh] flex-col gap-0 rounded-t-xl px-4 pb-4 pt-5" side="bottom">
 		<Sheet.Header class="text-left">
-			<Sheet.Title>Add exercises</Sheet.Title>
+			<Sheet.Title>{replacingName ? `Replace ${replacingName}` : 'Add exercises'}</Sheet.Title>
 		</Sheet.Header>
 		<div class="mt-3 flex items-center gap-1">
 			<Input class="grow" placeholder="Search your exercises" bind:value={search} />
@@ -181,24 +223,26 @@
 						class="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left disabled:opacity-50 {isTicked && !added
 							? 'bg-primary/10'
 							: ''}"
-						aria-checked={isTicked}
+						aria-checked={replacingIdx === null ? isTicked : undefined}
 						aria-label={exercise.name}
 						disabled={added}
 						onclick={() => toggle(exercise)}
-						role="checkbox"
+						role={replacingIdx === null ? 'checkbox' : 'button'}
 						type="button"
 					>
-						<span
-							class="flex h-5 w-5 shrink-0 items-center justify-center rounded border {isTicked
-								? 'border-primary bg-primary text-primary-foreground'
-								: 'border-muted-foreground/50'}"
-						>
-							{#if isTicked}<CheckIcon class="h-3.5 w-3.5" />{/if}
-						</span>
+						{#if replacingIdx === null}
+							<span
+								class="flex h-5 w-5 shrink-0 items-center justify-center rounded border {isTicked
+									? 'border-primary bg-primary text-primary-foreground'
+									: 'border-muted-foreground/50'}"
+							>
+								{#if isTicked}<CheckIcon class="h-3.5 w-3.5" />{/if}
+							</span>
+						{/if}
 						<span class="flex min-w-0 flex-col">
 							<span class="truncate">{exercise.name}</span>
 							<span class="text-xs text-muted-foreground" data-testid="{exercise.name}-starts-with">
-								{added ? 'In this workout' : startsWith(exercise)}
+								{added ? 'In this workout' : replacingIdx !== null ? muscleGroupOf(exercise) : startsWith(exercise)}
 							</span>
 						</span>
 					</button>
@@ -213,24 +257,33 @@
 			<Button class="w-fit gap-1 px-0 text-primary" onclick={() => (newExerciseOpen = true)} variant="link">
 				<AddIcon class="h-4 w-4" /> New exercise
 			</Button>
-			<span class="text-xs text-muted-foreground">Each starts with 1 set. Add more on the workout screen.</span>
-			<Button disabled={ticked.length === 0} onclick={addTicked}>
-				{ticked.length === 0
-					? 'Add exercises'
-					: `Add ${ticked.length} ${ticked.length === 1 ? 'exercise' : 'exercises'}`}
-			</Button>
+			{#if replacingIdx === null}
+				<span class="text-xs text-muted-foreground">Each starts with 1 set. Add more on the workout screen.</span>
+				<Button disabled={ticked.length === 0} onclick={addTicked}>
+					{ticked.length === 0
+						? 'Add exercises'
+						: `Add ${ticked.length} ${ticked.length === 1 ? 'exercise' : 'exercises'}`}
+				</Button>
+			{:else}
+				<span class="text-xs text-muted-foreground">Its sets stay as you logged them.</span>
+			{/if}
 		</div>
 	</Sheet.Content>
 </Sheet.Root>
 
 <ResponsiveDialog title="New exercise" bind:open={newExerciseOpen}>
 	{#snippet description()}
-		It's added to your exercises, and ticked here.
+		{replacingIdx === null ? "It's added to your exercises, and ticked here." : "It's added to your exercises."}
 	{/snippet}
 	{#if newExerciseOpen}
 		<ExerciseForm
 			existingExercises={exercises}
 			onPickExisting={(existing) => {
+				newExerciseOpen = false;
+				if (replacingIdx !== null) {
+					const exercise = exercises.find(({ id }) => id === existing.id);
+					return exercise && replaceWith(exercise);
+				}
 				// Already one of yours: tick it
 				if (!ticked.includes(existing.id) && !inWorkout.has(existing.name)) ticked = [...ticked, existing.id];
 				newExerciseOpen = false;
