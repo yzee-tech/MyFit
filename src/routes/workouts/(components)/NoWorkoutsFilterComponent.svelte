@@ -6,7 +6,7 @@
 
 <Popover.Root>
 	<Popover.Trigger asChild let:builder>
-		<Button class="grow gap-2" aria-label="search" builders={[builder]} variant="secondary">
+		<Button class="w-full gap-2" aria-label="search" builders={[builder]} variant="secondary">
 			Filters <FilterIcon />
 		</Button>
 	</Popover.Trigger>

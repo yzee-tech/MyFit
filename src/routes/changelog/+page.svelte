@@ -1,10 +1,11 @@
 <script lang="ts">
-	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import DOMPurify from 'dompurify';
 	import { marked } from 'marked';
+	import changelog from '../../../CHANGELOG.md?raw';
 
-	let { data } = $props();
+	// The notes ship with the app (no GitHub call); the file's own "# Changelog" title is this page's H2
+	const notes = changelog.replace(/^# Changelog\s*\n/, '');
 </script>
 
 <svelte:head>
@@ -13,16 +14,8 @@
 </svelte:head>
 
 <H2>Changelog</H2>
-{#if data.releases.length === 0}
-	<p class="text-muted-foreground">No releases yet.</p>
-{/if}
-{#each data.releases as { body }, idx}
-	<article class="prose prose-sm dark:prose-invert md:prose-base">
-		{#await marked.parse(body) then body}
-			{@html DOMPurify.sanitize(body)}
-		{/await}
-	</article>
-	{#if idx !== data.releases.length - 1}
-		<Separator class="my-6" />
-	{/if}
-{/each}
+<article class="prose prose-sm dark:prose-invert md:prose-base">
+	{#await marked.parse(notes) then html}
+		{@html DOMPurify.sanitize(html)}
+	{/await}
+</article>

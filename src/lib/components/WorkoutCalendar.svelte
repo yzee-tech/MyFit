@@ -1,12 +1,5 @@
 <script lang="ts">
-	import {
-		addMonths,
-		compareMonths,
-		localDayKey,
-		monthStart,
-		parseLocalDay,
-		type CalendarMonth
-	} from '$lib/utils/calendarDays';
+	import { addMonths, compareMonths, localDayKey, monthStart, type CalendarMonth } from '$lib/utils/calendarDays';
 	import ChevronLeftIcon from 'virtual:icons/lucide/chevron-left';
 	import ChevronRightIcon from 'virtual:icons/lucide/chevron-right';
 
@@ -22,8 +15,22 @@
 		onPick: (picked: { from: string; to: string } | null) => void;
 		minMonth?: CalendarMonth;
 		maxMonth?: CalendarMonth;
+		/**
+		 * A held day waiting for the other end of its range (YYYY-MM-DD), or null. Bound so the page can
+		 * say so (pickHint) and clear it with the pick (Show all); never kept in the link
+		 */
+		rangeStart?: string | null;
 	};
-	let { month, days, picked, onMonthChange, onPick, minMonth, maxMonth }: PropsType = $props();
+	let {
+		month,
+		days,
+		picked,
+		onMonthChange,
+		onPick,
+		minMonth,
+		maxMonth,
+		rangeStart = $bindable(null)
+	}: PropsType = $props();
 
 	const letters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 	// Long enough not to fire on a quick tap or the start of a scroll
@@ -50,8 +57,7 @@
 		todayKey = localDayKey(new Date());
 	});
 
-	// Held to start a range: the next tap picks its other end
-	let rangeStart: string | null = $state(null);
+	// Held: that day is picked at once, and the next tap picks the other end of its range
 	let holdTimer: ReturnType<typeof setTimeout> | undefined;
 	let holdFrom: { x: number; y: number } | null = null;
 	let held = false;
@@ -63,6 +69,7 @@
 		holdTimer = setTimeout(() => {
 			held = true;
 			rangeStart = key;
+			if (!(picked && picked.from === key && picked.to === key)) onPick({ from: key, to: key });
 		}, HOLD_MS);
 	}
 	function pointerMove(event: PointerEvent) {
@@ -82,7 +89,7 @@
 			return;
 		}
 		if (rangeStart) {
-			// In either order; the same day again is just that day
+			// In either order; the held day again is just that day
 			const [from, to] = [rangeStart, key].sort();
 			rangeStart = null;
 			onPick({ from, to });
@@ -102,26 +109,26 @@
 	}
 </script>
 
-<div class="rounded-lg border bg-card px-1.5 pb-0.5 pt-1.5" data-testid="workout-calendar">
+<div class="rounded-lg border bg-card p-1.5" data-testid="workout-calendar">
 	<div class="mb-1 flex items-center justify-between">
 		<button
-			class="flex h-7 w-7 items-center justify-center rounded-md border disabled:opacity-30"
+			class="flex h-12 w-12 items-center justify-center rounded-md border disabled:opacity-30"
 			aria-label="Previous month"
 			disabled={!canGoBack}
 			onclick={() => month && onMonthChange(addMonths(month, -1))}
 			type="button"
 		>
-			<ChevronLeftIcon class="h-4 w-4" />
+			<ChevronLeftIcon class="h-7 w-7" />
 		</button>
 		<span class="text-sm font-semibold" data-testid="calendar-month">{title}</span>
 		<button
-			class="flex h-7 w-7 items-center justify-center rounded-md border disabled:opacity-30"
+			class="flex h-12 w-12 items-center justify-center rounded-md border disabled:opacity-30"
 			aria-label="Next month"
 			disabled={!canGoForward}
 			onclick={() => month && onMonthChange(addMonths(month, 1))}
 			type="button"
 		>
-			<ChevronRightIcon class="h-4 w-4" />
+			<ChevronRightIcon class="h-7 w-7" />
 		</button>
 	</div>
 	<div class="grid grid-cols-7">
@@ -176,9 +183,4 @@
 			{/if}
 		{/each}
 	</div>
-	<p class="py-1 text-center text-[11px] text-muted-foreground" data-testid="calendar-hint">
-		{rangeStart
-			? `From ${parseLocalDay(rangeStart)?.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: now tap the last day`
-			: 'Hold a day to pick a range'}
-	</p>
 </div>
