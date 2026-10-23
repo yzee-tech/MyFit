@@ -2123,6 +2123,11 @@ test('editing a past workout: ⋮ is Replace, History, Delete; Replace keeps the
 	});
 	const pendlay = await prisma.exercise.findFirstOrThrow({ where: { userId, name: 'Pendlay rows' } });
 	const workout = await createPastWorkout(userId);
+	// Logged with the rows' weights; the replacement doesn't take them (a past workout's gym isn't known)
+	const gymPlates = await prisma.weightSet.create({
+		data: { userId, name: 'Gym plates', unit: 'KG', weights: [40, 50, 60, 70] }
+	});
+	await prisma.workoutExercise.updateMany({ where: { workoutId: workout.id }, data: { weightSetId: gymPlates.id } });
 	await editPastWorkout(page, workout.id);
 
 	await page.getByTestId('Barbell rows-menu-button').click();
@@ -2153,7 +2158,8 @@ test('editing a past workout: ⋮ is Replace, History, Delete; Replace keeps the
 		targetMuscleGroup: 'Traps',
 		setType: 'Straight',
 		repRangeStart: 8,
-		repRangeEnd: 12
+		repRangeEnd: 12,
+		weightSetId: null
 	});
 	expect(replaced.sets.map(({ reps, load }) => [reps, load])).toEqual([
 		[10, 60],

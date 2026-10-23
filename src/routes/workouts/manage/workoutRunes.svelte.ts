@@ -250,8 +250,10 @@ function createWorkoutRunes() {
 	/**
 	 * A past workout's exercise logged as the wrong one: it becomes `exercise` (its name, muscle group,
 	 * bodyweight share and note), keeping what was logged (its sets, set type, rep range, load change,
-	 * routine note and settings). Between a machine's levels and weights the loads mean something else:
-	 * they're cleared and those sets un-ticked. 'taken' if the workout has that exercise already
+	 * routine note and settings). No weight set: a past workout doesn't record its gym, and the old one
+	 * was the old exercise's (a machine's levels come from the exercise itself). Between levels and
+	 * weights the loads mean something else: they're cleared and those sets un-ticked. 'taken' if the
+	 * workout has that exercise already
 	 */
 	function replaceExercise(
 		exerciseIdx: number,
@@ -282,9 +284,9 @@ function createWorkoutRunes() {
 			customMuscleGroup: exercise.customMuscleGroup,
 			bodyweightFraction: exercise.bodyweightFraction,
 			exerciseNote: exercise.note,
+			weightSetId: null,
 			...(kindChanged && {
 				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
-				weightSetId: null,
 				sets: current.sets.map((set) => ({ ...unload(set), miniSets: set.miniSets.map(unload) }))
 			})
 		};
