@@ -198,7 +198,7 @@ test('a saved mesocycle workout is named by its routineName, else (saved by an o
 		workoutData: {
 			userBodyweight: 80,
 			routineName: 'Pull A',
-			workoutOfMesocycle: { mesocycle: { id: block.id }, splitDayName: 'Other', workoutStatus: null }
+			workoutOfMesocycle: { mesocycle: { id: block.id }, splitDayName: 'Other' }
 		}
 	});
 	expect((await saved(named)).routineName).toEqual('Pull A');
@@ -235,7 +235,7 @@ test('a block workout from today’s app: named by its routine of My routines, n
 		workoutData: {
 			userBodyweight: 80,
 			routineName: 'Pull A',
-			workoutOfMesocycle: { mesocycle: { id: block.id }, workoutStatus: null }
+			workoutOfMesocycle: { mesocycle: { id: block.id } }
 		}
 	});
 	const saved = await prisma.workout.findUniqueOrThrow({

@@ -1837,7 +1837,7 @@ async function blockWithWorkout(userId: string, name: string, startDate: Date, r
 			startedAt,
 			endedAt: new Date(startedAt.getTime() + 3600000),
 			routineName,
-			workoutOfMesocycle: { create: { mesocycleId: mesocycle.id, workoutStatus: null } }
+			workoutOfMesocycle: { create: { mesocycleId: mesocycle.id } }
 		}
 	});
 	return mesocycle;

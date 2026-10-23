@@ -21,34 +21,15 @@ async function seedPerson() {
 	return { userId, caller: createCaller({ event: {} as never, userId }) };
 }
 
-test('a month’s workouts: done ones only (not a block’s skipped days), when and their routine, one person’s', async () => {
+test('a month’s workouts: when and their routine, one person’s', async () => {
 	const { userId, caller } = await seedPerson();
 	const other = await seedPerson();
-	const block = await prisma.mesocycle.create({
-		data: {
-			userId,
-			name: 'Block',
-			weeklyRIR: [3, 2],
-			startDate: new Date('2026-10-01T00:00:00Z'),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
-		}
-	});
-	const workout = (who: string, at: string, routineName: string | null, skipped = false) =>
+	const workout = (who: string, at: string, routineName: string | null) =>
 		prisma.workout.create({
-			data: {
-				userId: who,
-				userBodyweight: 80,
-				startedAt: new Date(at),
-				endedAt: new Date(at),
-				routineName,
-				...(skipped && { workoutOfMesocycle: { create: { mesocycleId: block.id, workoutStatus: 'Skipped' } } })
-			}
+			data: { userId: who, userBodyweight: 80, startedAt: new Date(at), endedAt: new Date(at), routineName }
 		});
 	await workout(userId, '2026-10-02T10:00:00Z', 'Push A');
 	await workout(userId, '2026-10-03T10:00:00Z', null);
-	await workout(userId, '2026-10-04T10:00:00Z', 'Legs A', true);
 	await workout(userId, '2026-11-02T10:00:00Z', 'Pull A');
 	await workout(other.userId, '2026-10-05T10:00:00Z', 'Theirs');
 

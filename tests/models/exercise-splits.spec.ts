@@ -266,7 +266,6 @@ test('the last routine can go: then the empty state, with both ways to start', a
 					{
 						name: 'Only one',
 						dayIndex: 0,
-						isRestDay: false,
 						exercises: {
 							create: [
 								{
@@ -598,4 +597,43 @@ test('weight sets: Edit buttons line up, and the form opens under the set being 
 	await below('Hotel DBs');
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await expect(form).toHaveCount(0);
+});
+
+test('a file exported before rest days went imports: its routines added, its rest day left out', async ({
+	page,
+	userData
+}) => {
+	const squats = {
+		name: 'Squats',
+		targetMuscleGroup: 'Quads',
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		sets: 3,
+		setType: 'Straight',
+		repRangeStart: 5,
+		repRangeEnd: 10,
+		changeType: null,
+		changeAmount: null,
+		note: null,
+		exerciseIndex: 0
+	};
+	// As an older version exported it: each routine says whether it's a rest day
+	const oldExport = {
+		name: 'My routines',
+		exerciseSplitDays: [
+			{ name: 'Legs', dayIndex: 0, isRestDay: false, weightUnit: 'KG', exercises: [squats] },
+			{ name: '', dayIndex: 1, isRestDay: true, weightUnit: 'KG', exercises: [] },
+			{ name: 'Legs again', dayIndex: 2, isRestDay: false, weightUnit: 'KG', exercises: [squats] }
+		]
+	};
+	await page.goto('/exercise-splits/import');
+	await page.getByLabel('Routines JSON file').setInputFiles({
+		name: 'My routines.json',
+		mimeType: 'application/json',
+		buffer: Buffer.from(JSON.stringify(oldExport))
+	});
+	await page.getByRole('button', { name: 'Import', exact: true }).click();
+	await expect(page.getByText('Added 2 routines')).toBeVisible();
+	await expect(page).toHaveURL(/\/exercise-splits$/);
+	expect((await savedRoutines(userData.userId)).map((routine) => routine.name)).toEqual(['Legs', 'Legs again']);
 });

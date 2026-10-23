@@ -8,7 +8,7 @@
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
 	// The routines this mesocycle's workouts were done from, by their names at the time
-	const done = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null && wm.workout.routineName);
+	const done = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workout.routineName);
 	const routineNames = [...new Set(done.map((wm) => wm.workout.routineName!))];
 	let selectedRoutine: Selected<string> | undefined = $state(
 		routineNames[0] === undefined ? undefined : { value: routineNames[0], label: routineNames[0] }

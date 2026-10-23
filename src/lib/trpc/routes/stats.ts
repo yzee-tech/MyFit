@@ -49,23 +49,16 @@ export const monthInput = z.strictObject({ from: date, to: date }).superRefine((
 	if (+input.to - +input.from > 32 * DAY_MS) ctx.addIssue({ code: 'custom', message: 'At most a month' });
 });
 
-/** Workouts done: a block's skipped days and rest days aren't */
-export const doneWorkouts = {
-	OR: [{ workoutOfMesocycle: { is: null } }, { workoutOfMesocycle: { is: { workoutStatus: null } } }]
-};
-
 export const stats = t.router({
 	/**
 	 * When the workouts in a week started, for the dashboard's week: the phone sends its own Sunday to
-	 * Sunday (sundayWeek) and sorts them into its days. Workouts done only: a block's skipped days and
-	 * rest days aren't
+	 * Sunday (sundayWeek) and sorts them into its days
 	 */
 	weekWorkoutTimes: t.procedure.input(weekInput).query(async ({ ctx, input }) => {
 		const workouts = await prisma.workout.findMany({
 			where: {
 				userId: ctx.userId,
-				startedAt: { gte: input.from, lt: input.to },
-				OR: [{ workoutOfMesocycle: { is: null } }, { workoutOfMesocycle: { is: { workoutStatus: null } } }]
+				startedAt: { gte: input.from, lt: input.to }
 			},
 			select: { startedAt: true }
 		});
@@ -89,12 +82,7 @@ export const stats = t.router({
 		const from = ranges.previous?.from ?? ranges.current.from;
 		const to = ranges.current.to;
 		const workouts = await prisma.workout.findMany({
-			// Workouts done: a block's skipped days and rest days aren't
-			where: {
-				userId: ctx.userId,
-				startedAt: from ? { gte: from, lt: to } : { lt: to },
-				OR: [{ workoutOfMesocycle: { is: null } }, { workoutOfMesocycle: { is: { workoutStatus: null } } }]
-			},
+			where: { userId: ctx.userId, startedAt: from ? { gte: from, lt: to } : { lt: to } },
 			select: {
 				startedAt: true,
 				endedAt: true,

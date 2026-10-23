@@ -12,7 +12,6 @@ export const exerciseSplitTemplates: {
 			exerciseSplitDays: [
 				{
 					name: 'Pull A',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Pull-ups',
@@ -66,7 +65,6 @@ export const exerciseSplitTemplates: {
 				},
 				{
 					name: 'Push A',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Incline barbell press',
@@ -120,7 +118,6 @@ export const exerciseSplitTemplates: {
 				},
 				{
 					name: 'Legs A',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Barbell good mornings',
@@ -174,7 +171,6 @@ export const exerciseSplitTemplates: {
 				},
 				{
 					name: 'Pull B',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Lat pulldowns',
@@ -228,7 +224,6 @@ export const exerciseSplitTemplates: {
 				},
 				{
 					name: 'Push B',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Incline dumbbell press',
@@ -282,7 +277,6 @@ export const exerciseSplitTemplates: {
 				},
 				{
 					name: 'Legs B',
-					isRestDay: false,
 					exercises: [
 						{
 							name: 'Leg curls',
@@ -333,11 +327,6 @@ export const exerciseSplitTemplates: {
 							note: null
 						}
 					]
-				},
-				{
-					name: '',
-					isRestDay: true,
-					exercises: []
 				}
 			]
 		}

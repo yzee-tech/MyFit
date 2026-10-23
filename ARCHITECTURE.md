@@ -220,7 +220,7 @@ Prisma schema is split into logical modules:
 
 **schema.prisma**: Core user and authentication tables (User, Account, Session, VerificationToken, UserSettings)
 
-**enums.prisma**: Shared enumerations (MuscleGroup, SetType, ChangeType, WorkoutStatus, QuotesDisplayMode)
+**enums.prisma**: Shared enumerations (MuscleGroup, SetType, ChangeType, QuotesDisplayMode)
 
 **exerciseSplit.prisma**: Exercise split templates (ExerciseSplit, ExerciseSplitDay, ExerciseTemplate)
 

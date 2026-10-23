@@ -128,8 +128,7 @@
 			workoutOfMesocycle: {
 				mesocycle: activeBlock.mesocycle,
 				cycleNumber: activeBlock.weekNumber,
-				splitDayName: selectedRoutine.name,
-				workoutStatus: null
+				splitDayName: selectedRoutine.name
 			}
 		};
 	}

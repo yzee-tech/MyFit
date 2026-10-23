@@ -32,7 +32,6 @@ export const exerciseSplits = t.router({
 			where: { userId: ctx.userId },
 			include: {
 				exerciseSplitDays: {
-					where: { isRestDay: false },
 					include: { exercises: { orderBy: { exerciseIndex: 'asc' } } },
 					orderBy: { dayIndex: 'asc' }
 				}
@@ -68,7 +67,6 @@ export const exerciseSplits = t.router({
 						id: routineId,
 						name: routine.name,
 						dayIndex,
-						isRestDay: false,
 						weightUnit: routine.weightUnit,
 						exerciseSplitId: listId
 					}
@@ -128,7 +126,6 @@ export const exerciseSplits = t.router({
 						id: routineId,
 						name,
 						dayIndex: Math.max(-1, ...existing.map((routine) => routine.dayIndex)) + 1,
-						isRestDay: false,
 						weightUnit,
 						exerciseSplitId: listId
 					}

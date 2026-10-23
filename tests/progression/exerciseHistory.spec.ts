@@ -133,7 +133,7 @@ test("a new workout can't go in someone else's block", async () => {
 		other.caller.workouts.create({
 			workoutData: {
 				userBodyweight: 80,
-				workoutOfMesocycle: { mesocycle: { id: mesocycle.id }, splitDayName: 'Pull', workoutStatus: null }
+				workoutOfMesocycle: { mesocycle: { id: mesocycle.id }, splitDayName: 'Pull' }
 			},
 			workoutExercises: [{ ...rows, exerciseIndex: 0 }],
 			workoutExercisesSets: [[{ setIndex: 0, reps: 12, load: 40, RIR: 2, skipped: false }]],

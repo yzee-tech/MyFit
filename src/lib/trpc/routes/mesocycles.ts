@@ -58,7 +58,7 @@ export const mesocycles = t.router({
 				}
 			}),
 			prisma.exerciseSplitDay.findMany({
-				where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
+				where: { exerciseSplit: { userId: ctx.userId } },
 				orderBy: { dayIndex: 'asc' },
 				select: { name: true, exercises: { orderBy: { exerciseIndex: 'asc' } } }
 			})
@@ -190,7 +190,7 @@ export const mesocycles = t.router({
 		if (!activeMesocycle) return [];
 
 		const recentWorkouts = await prisma.workout.findMany({
-			where: { workoutOfMesocycle: { mesocycleId: activeMesocycle.id, workoutStatus: null }, userId: ctx.userId },
+			where: { workoutOfMesocycle: { mesocycleId: activeMesocycle.id }, userId: ctx.userId },
 			include: includeClause,
 			orderBy: { startedAt: 'desc' },
 			take: 12

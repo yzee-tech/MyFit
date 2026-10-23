@@ -29,16 +29,14 @@ import {
 } from '$lib/zodSchemas';
 import {
 	Prisma,
-	WorkoutStatus,
 	type RoutineWeightUnit,
 	type WeightUnit as WeightUnitType,
 	type Mesocycle,
 	type PrismaPromise,
-	type WorkoutExercise,
-	type WorkoutOfMesocycle
+	type WorkoutExercise
 } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
-import { doneWorkouts, monthInput } from './stats';
+import { monthInput } from './stats';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { createId } from '@paralleldrive/cuid2';
 import { levelSetOf, levelSetsFor, type WeightSetLike } from '$lib/utils/weightSets';
@@ -52,7 +50,7 @@ type TodaysWorkoutData = {
 	endedAt: Date | string | null;
 	userBodyweight: number | null;
 	workoutExercises: Pick<WorkoutExercise, 'name' | 'targetMuscleGroup' | 'customMuscleGroup'>[];
-	workoutOfMesocycle?: Pick<WorkoutOfMesocycle, 'workoutStatus'> & {
+	workoutOfMesocycle?: {
 		mesocycle: Mesocycle;
 		cycleNumber: number;
 		splitDayName: string;
@@ -184,8 +182,8 @@ const workoutInputDataSchema = z.object({
 		.object({
 			mesocycle: z.object({ id: z.string().cuid2() }),
 			/** The routine's name as the app showed it: for a saved workout from before routineName */
-			splitDayName: z.string().trim().min(1).max(100).optional(),
-			workoutStatus: z.nativeEnum(WorkoutStatus).nullable()
+			splitDayName: z.string().trim().min(1).max(100).optional()
+			// workoutStatus (always null since skipped and rest days went) is still sent by older app versions; ignored
 		})
 		.optional(),
 	note: z.string().optional()
@@ -212,7 +210,7 @@ function routineNameOf(workoutData: z.infer<typeof workoutInputDataSchema>) {
 async function findWorkoutRoutine(userId: string, routineName: string | null) {
 	if (routineName === null) return null;
 	return prisma.exerciseSplitDay.findFirst({
-		where: { exerciseSplit: { userId }, name: routineName, isRestDay: false },
+		where: { exerciseSplit: { userId }, name: routineName },
 		include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
 	});
 }
@@ -274,7 +272,7 @@ function workoutAsRoutine(input: z.infer<typeof createWorkoutSchema>, routine: W
 async function findMyRoutineForWorkout(userId: string, routineName: string, inBlock = false) {
 	const [routine, block] = await Promise.all([
 		prisma.exerciseSplitDay.findFirst({
-			where: { exerciseSplit: { userId }, name: routineName, isRestDay: false },
+			where: { exerciseSplit: { userId }, name: routineName },
 			include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
 		}),
 		inBlock ? prisma.mesocycle.findFirst({ where: { userId, startDate: { not: null }, endDate: null } }) : null
@@ -405,7 +403,7 @@ export const workouts = t.router({
 	 */
 	monthDays: t.procedure.input(monthInput).query(async ({ ctx, input }) => {
 		return prisma.workout.findMany({
-			where: { userId: ctx.userId, startedAt: { gte: input.from, lt: input.to }, ...doneWorkouts },
+			where: { userId: ctx.userId, startedAt: { gte: input.from, lt: input.to } },
 			select: { startedAt: true, routineName: true },
 			orderBy: [{ startedAt: 'asc' }, { id: 'asc' }]
 		});
@@ -490,7 +488,7 @@ export const workouts = t.router({
 
 		// Routines to pick from are My routines, in a block or not
 		const myRoutines = await prisma.exerciseSplitDay.findMany({
-			where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
+			where: { exerciseSplit: { userId: ctx.userId } },
 			orderBy: { dayIndex: 'asc' },
 			select: {
 				name: true,
@@ -785,10 +783,7 @@ export const workouts = t.router({
 			if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
 			workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycle.id, workout.startedAt);
 			workout.workoutOfMesocycle = {
-				create: {
-					mesocycleId: workoutOfMesocycle.mesocycle.id,
-					workoutStatus: workoutOfMesocycle.workoutStatus
-				}
+				create: { mesocycleId: workoutOfMesocycle.mesocycle.id }
 			};
 		}
 

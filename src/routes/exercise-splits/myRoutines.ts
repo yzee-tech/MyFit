@@ -22,6 +22,7 @@ export type FullExerciseSplitWithoutIdsOrIndex = Omit<
 /** A routine coming in from a template or an import */
 export type RoutineToAdd = {
 	name: string;
+	/** In files exported before rest days went: those are left out */
 	isRestDay?: boolean;
 	weightUnit?: RoutineWeightUnit;
 	exercises: SplitExerciseTemplateWithoutIdsOrIndex[];

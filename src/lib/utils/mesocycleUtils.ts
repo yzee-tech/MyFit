@@ -84,8 +84,7 @@ export function groupWorkoutsBySplitDayName(workoutsOfMesocycle: WorkoutsOfMesoc
 }
 
 export function generatePerformanceChangesPerSplitDay(mesocycle: Mesocycle) {
-	const workoutsOfMesocycle = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null);
-	const groupedWorkouts = groupWorkoutsBySplitDayName(workoutsOfMesocycle);
+	const groupedWorkouts = groupWorkoutsBySplitDayName(mesocycle.workoutsOfMesocycle);
 
 	const performanceChangesPerSplitDay = groupedWorkouts.map(({ splitDayName, workouts }) => ({
 		splitDayName,
@@ -109,8 +108,8 @@ export function getSetsPerformedPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMe
 	return setsPerformedPerMuscleGroup;
 }
 
-/** e.g. "1 routine" or "6 routines"; rest days from the old fixed rotation don't count */
-export function formatRoutineCount(splitDays: { isRestDay: boolean }[]) {
-	const count = splitDays.filter((splitDay) => !splitDay.isRestDay).length;
+/** e.g. "1 routine" or "6 routines" */
+export function formatRoutineCount(routines: readonly unknown[]) {
+	const count = routines.length;
 	return `${count} ${count === 1 ? 'routine' : 'routines'}`;
 }

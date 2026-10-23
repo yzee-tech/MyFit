@@ -1,10 +1,9 @@
 model WorkoutOfMesocycle {
-  id            String         @id @default(cuid()) /// @zod.string.cuid2()
-  workoutId     String         @unique
-  mesocycleId   String
-  workoutStatus WorkoutStatus?
-  workout       Workout        @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  mesocycle     Mesocycle      @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid()) /// @zod.string.cuid2()
+  workoutId   String    @unique
+  mesocycleId String
+  workout     Workout   @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  mesocycle   Mesocycle @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
 }
 
 model Workout {

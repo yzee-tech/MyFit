@@ -263,7 +263,7 @@ export const exercises = t.router({
 	/** Routines an exercise can be added to: My routines */
 	routineTargets: t.procedure.query(async ({ ctx }) => {
 		const routines = await prisma.exerciseSplitDay.findMany({
-			where: { exerciseSplit: { userId: ctx.userId }, isRestDay: false },
+			where: { exerciseSplit: { userId: ctx.userId } },
 			orderBy: { dayIndex: 'asc' },
 			select: { id: true, name: true, exercises: { select: { exerciseId: true } } }
 		});

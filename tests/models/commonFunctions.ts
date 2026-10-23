@@ -115,11 +115,16 @@ export async function editRoutine(page: Page, name: string) {
  * then goes Back to My routines: nothing left to ask
  */
 export async function saveRoutine(page: Page) {
-	await page
-		.getByRole('main')
-		.getByRole('button', { name: /^(Save|Update)$/ })
-		.click();
-	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' })).toBeVisible({ timeout: 10000 });
+	const saveButton = page.getByRole('main').getByRole('button', { name: /^(Save|Update)$/ });
+	// This save's reply, not an earlier save's message still showing
+	const saved = page.waitForResponse((response) => response.url().includes('exerciseSplits.save'));
+	await saveButton.click();
+	await saved;
+	await expect(page.getByRole('status').filter({ hasText: 'My routines saved' }).first()).toBeVisible({
+		timeout: 10000
+	});
+	// Done saving (the button is back): leaving now doesn't race the rest of the save
+	await expect(saveButton).toBeEnabled();
 	expect(new URL(page.url()).pathname).toEqual('/exercise-splits/edit');
 	await page.getByRole('main').getByRole('button', { name: 'Back', exact: true }).click();
 	await page.waitForURL('/exercise-splits');

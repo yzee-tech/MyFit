@@ -1,12 +1,8 @@
 <script lang="ts">
 	import * as Popover from '$lib/components/ui/popover';
-	import type { WorkoutStatus } from '@prisma/client';
 
 	interface WorkoutData {
 		startedAt: Date;
-		workoutOfMesocycle: {
-			workoutStatus: WorkoutStatus | null;
-		} | null;
 	}
 
 	let { workouts = [] }: { workouts: WorkoutData[] } = $props();
@@ -17,29 +13,18 @@
 	oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
 	// Create a map of dates to workout counts
-	const workoutsByDate = new Map<string, { count: number; hasSkipped: boolean; hasRestDay: boolean }>();
+	const workoutsByDate = new Map<string, number>();
 
 	workouts.forEach((workout) => {
 		const date = new Date(workout.startedAt);
 		const dateKey = date.toISOString().split('T')[0];
 
-		const existing = workoutsByDate.get(dateKey) || { count: 0, hasSkipped: false, hasRestDay: false };
-
-		const status = workout.workoutOfMesocycle?.workoutStatus;
-		if (status === 'Skipped') {
-			existing.hasSkipped = true;
-		} else if (status === 'RestDay') {
-			existing.hasRestDay = true;
-		} else {
-			existing.count += 1;
-		}
-
-		workoutsByDate.set(dateKey, existing);
+		workoutsByDate.set(dateKey, (workoutsByDate.get(dateKey) ?? 0) + 1);
 	});
 
 	// Generate grid data (53 weeks × 7 days)
-	const weeks: { date: Date; count: number; hasSkipped: boolean; hasRestDay: boolean }[][] = [];
-	let currentWeek: { date: Date; count: number; hasSkipped: boolean; hasRestDay: boolean }[] = [];
+	const weeks: { date: Date; count: number }[][] = [];
+	let currentWeek: { date: Date; count: number }[] = [];
 
 	// Start from 52 weeks ago
 	const startDate = new Date(today);
@@ -54,14 +39,7 @@
 		date.setDate(startDate.getDate() + i);
 
 		const dateKey = date.toISOString().split('T')[0];
-		const data = workoutsByDate.get(dateKey) || { count: 0, hasSkipped: false, hasRestDay: false };
-
-		currentWeek.push({
-			date: new Date(date),
-			count: data.count,
-			hasSkipped: data.hasSkipped,
-			hasRestDay: data.hasRestDay
-		});
+		currentWeek.push({ date: new Date(date), count: workoutsByDate.get(dateKey) ?? 0 });
 
 		if (currentWeek.length === 7) {
 			weeks.push(currentWeek);
@@ -74,9 +52,7 @@
 		weeks.push(currentWeek);
 	}
 
-	function getColor(count: number, hasSkipped: boolean, hasRestDay: boolean): string {
-		if (hasSkipped) return 'bg-orange-500/70 dark:bg-orange-400/70';
-		if (hasRestDay) return 'bg-blue-500/70 dark:bg-blue-400/70';
+	function getColor(count: number): string {
 		if (count === 0) return 'bg-muted/30';
 		if (count === 1) return 'bg-green-500/30 dark:bg-green-400/30';
 		if (count === 2) return 'bg-green-500/60 dark:bg-green-400/60';
@@ -87,9 +63,7 @@
 		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 	}
 
-	function getPopoverText(count: number, hasSkipped: boolean, hasRestDay: boolean, date: Date): string {
-		if (hasSkipped) return `Skipped on ${formatDate(date)}`;
-		if (hasRestDay) return `Rest day on ${formatDate(date)}`;
+	function getPopoverText(count: number, date: Date): string {
 		if (count === 0) return `No workouts on ${formatDate(date)}`;
 		return `${count} workout${count > 1 ? 's' : ''} on ${formatDate(date)}`;
 	}
@@ -142,16 +116,12 @@
 								<Popover.Root>
 									<Popover.Trigger>
 										<button
-											class="h-3 w-3 rounded-sm transition-all hover:ring-2 hover:ring-offset-1 {getColor(
-												day.count,
-												day.hasSkipped,
-												day.hasRestDay
-											)}"
+											class="h-3 w-3 rounded-sm transition-all hover:ring-2 hover:ring-offset-1 {getColor(day.count)}"
 											aria-label={day.date.toLocaleDateString()}
 										></button>
 									</Popover.Trigger>
 									<Popover.Content class="w-auto p-2 text-sm">
-										<p>{getPopoverText(day.count, day.hasSkipped, day.hasRestDay, day.date)}</p>
+										<p>{getPopoverText(day.count, day.date)}</p>
 									</Popover.Content>
 								</Popover.Root>
 							{/each}
