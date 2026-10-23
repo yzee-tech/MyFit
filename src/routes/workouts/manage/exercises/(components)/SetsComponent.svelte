@@ -635,7 +635,7 @@
 			{:else}
 				<div class="col-span-3 flex items-center gap-2">
 					<Separator class="w-px grow" />
-					<span class="text-sm text-muted-foreground">skipped</span>
+					<span class="text-sm text-muted-foreground">uncompleted</span>
 					<Separator class="w-px grow" />
 				</div>
 			{/if}
@@ -714,7 +714,7 @@
 				{#if set.skipped}
 					<div class="col-span-3 flex items-center gap-2">
 						<Separator class="w-px grow" />
-						<span class="text-sm text-muted-foreground">skipped</span>
+						<span class="text-sm text-muted-foreground">uncompleted</span>
 						<Separator class="w-px grow" />
 					</div>
 					<Button class="h-9 w-9" disabled size="icon" variant="secondary">

@@ -5,6 +5,7 @@ import { type Mesocycle, type Prisma } from '@prisma/client';
 import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
 import type { WeightUnit } from './prismaEnums';
 import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
+import { BERGER_REPS_RATE } from './oneRepMax';
 
 type VolumeSet = { reps: number; load: number; RIR: number; miniSets?: { reps: number; load: number; RIR: number }[] };
 
@@ -111,18 +112,18 @@ export function solveBergerFormula(input: BergerInput) {
 	const oldLoad = oldSet.load + (bodyweightFraction ?? 0) * oldUserBodyweight;
 	const newLoad = newSet.load + (bodyweightFraction ?? 0) * newUserBodyweight;
 
-	const exponentialMultiplier = Math.pow(Math.E, (131 * (oldSet.reps + oldSet.RIR)) / 5000);
+	const exponentialMultiplier = Math.exp(BERGER_REPS_RATE * (oldSet.reps + oldSet.RIR));
 
 	switch (variableToSolve) {
 		case 'NewReps': {
 			const numerator =
 				(1 + knownValues.overloadPercentage / 100) * (9745640 * oldLoad - 423641) * exponentialMultiplier;
 			const denominator = 9745640 * newLoad - 423641;
-			return 38.1679 * Math.log(numerator / denominator) - newSet.RIR;
+			return Math.log(numerator / denominator) / BERGER_REPS_RATE - newSet.RIR;
 		}
 
 		case 'OverloadPercentage': {
-			const numeratorMultiplier = Math.pow(Math.E, (knownValues.newSet.reps + newSet.RIR) / 38.1679);
+			const numeratorMultiplier = Math.exp(BERGER_REPS_RATE * (knownValues.newSet.reps + newSet.RIR));
 			const numerator = numeratorMultiplier * (9745640 * newLoad - 423641);
 			const denominator = exponentialMultiplier * (9745640 * oldLoad - 423641);
 			const overloadPercentage = (numerator / denominator - 1) * 100;

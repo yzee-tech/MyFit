@@ -13,6 +13,7 @@
 	} from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, type WeightSetLike } from '$lib/utils/weightSets';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { canWarmUp } from '$lib/utils/oneRepMax';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -143,8 +144,14 @@
 								>
 									<EditIcon /> Edit
 								</DropdownMenu.Item>
-								{#if !isLevelUnit(exercise.weightUnit)}
-									<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseWarmupDialog(exercise)}>
+								{#if canWarmUp(exercise, isRepsOnly)}
+									<DropdownMenu.Item
+										class="gap-2"
+										onclick={() => {
+											isContextMenuOpen = false;
+											workoutRunes.openExerciseWarmupDialog(exercise);
+										}}
+									>
 										<ChartIcon /> Warm up
 									</DropdownMenu.Item>
 								{/if}

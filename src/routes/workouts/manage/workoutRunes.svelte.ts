@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { levelSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
 import { isLevelUnit } from '$lib/utils/weightUnits';
+import { canWarmUp } from '$lib/utils/oneRepMax';
 import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
 import { trpc } from '$lib/trpc/client';
@@ -307,6 +308,8 @@ function createWorkoutRunes() {
 
 	function openExerciseWarmupDialog(exercise: WorkoutExerciseInProgress) {
 		if (workoutExercises === null) return;
+		// Not for levels, reps-only or bodyweight exercises: there's no weight to warm up to
+		if (!canWarmUp(exercise, exercise.name in repsOnly)) return;
 		exerciseWarmUpDialogOpen = true;
 		exerciseWarmUpDialogExercise = exercise;
 	}

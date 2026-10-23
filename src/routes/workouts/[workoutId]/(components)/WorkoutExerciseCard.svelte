@@ -73,7 +73,7 @@
 						<Table.Cell class="px-1 py-1.5 text-center font-light">{set.RIR}</Table.Cell>
 					{:else}
 						<Table.Cell colspan={3} class="px-1 py-1.5 text-center italic text-muted-foreground">
-							<span>skipped</span>
+							<span>uncompleted</span>
 						</Table.Cell>
 					{/if}
 				</Table.Row>

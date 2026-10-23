@@ -250,6 +250,8 @@ test('exercise stats: each workout once, reps-only exercises chart reps, and old
 		await expect(page.getByLabel('Reps')).toBeChecked();
 		await expect(page.getByLabel('Relative overload')).toHaveCount(0);
 		await expect(page.getByLabel('Absolute load')).toHaveCount(0);
+		await expect(page.getByLabel('Estimated 1RM')).toHaveCount(0);
+		await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-type', 'reps');
 		await expect(page.getByLabel('Load', { exact: true })).toHaveCount(0);
 	} finally {
 		await prisma.exercise.update({
