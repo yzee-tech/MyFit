@@ -309,6 +309,34 @@ test('Workouts calendar: no hint until a day is picked; then it is the Showing b
 	await expect(page).toHaveURL(/\?from=2026-10-12$/);
 });
 
+test('Workouts calendar: Back after a hold leaves nothing waiting; the next tap is one day', async ({
+	page,
+	userData
+}) => {
+	await seedMonth(userData.userId);
+	await page.clock.setFixedTime(TODAY);
+	await page.goto('/workouts');
+	await calendarDay(page, 16).click();
+	await expect(page).toHaveURL(/\?from=2026-10-16$/);
+	await hold(page, 19);
+	await expect(page).toHaveURL(/\?from=2026-10-19$/);
+	await expect(page.getByTestId('calendar-hint')).toHaveText('From Oct 19: now tap the last day');
+
+	// Back to the 16th: the 19th no longer waits for a last day
+	await page.goBack();
+	await expect(page).toHaveURL(/\?from=2026-10-16$/);
+	await expect(page.getByTestId('calendar-hint')).toHaveText('Tip: hold a day to pick a range');
+	await calendarDay(page, 5).click();
+	await expect(page).toHaveURL(/\?from=2026-10-05$/);
+
+	// Again: held, then Back to the 5th
+	await hold(page, 19);
+	await page.goBack();
+	await expect(page).toHaveURL(/\?from=2026-10-05$/);
+	await calendarDay(page, 1).click();
+	await expect(page).toHaveURL(/\?from=2026-10-01$/);
+});
+
 test('Workouts calendar: Hide calendar keeps it hidden on this phone, with the days picked', async ({
 	page,
 	userData

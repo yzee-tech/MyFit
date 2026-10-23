@@ -2,7 +2,7 @@
 	import { formatWorkoutLength } from '$lib/utils/workoutLength';
 	import { fromKg, unitLabel } from '$lib/utils/weightUnits';
 	import { workoutName } from '$lib/utils/workoutNames';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
@@ -50,6 +50,10 @@
 	let pickedKeys = $derived(picked && { from: localDayKey(picked.from), to: localDayKey(picked.to) });
 	// A held day waiting for the other end of its range (the calendar's; not in the link)
 	let rangeStart: string | null = $state(null);
+	// Back or forward to another pick: the held day isn't the one picked any more
+	afterNavigate(({ type }) => {
+		if (type === 'popstate') rangeStart = null;
+	});
 
 	// Hidden on this phone: from the cookie at first, then from the button straight away
 	let calendarHidden = $state(data.calendarHidden);
