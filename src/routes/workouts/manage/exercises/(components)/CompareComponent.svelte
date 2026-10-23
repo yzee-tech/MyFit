@@ -203,12 +203,11 @@
 			{:else}
 				<Separator />
 				<span class="text-center text-sm text-muted-foreground">
+					<!-- Skipped (old workouts) or not there: the same, as unfinished sets are removed -->
 					{#if set.skipped}
-						skipped
-					{:else if prevSet?.skipped}
-						skipped last time
+						uncompleted
 					{:else}
-						new set
+						uncompleted last time
 					{/if}
 				</span>
 				<Separator />

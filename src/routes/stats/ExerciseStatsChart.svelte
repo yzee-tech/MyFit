@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import { page } from '$app/stores';
 	import { fromKg, isLevelUnit, roundWeight } from '$lib/utils/weightUnits';
 	import * as Card from '$lib/components/ui/card';
@@ -82,7 +83,8 @@
 	});
 
 	$effect(() => {
-		if (chartCanvas === undefined) return;
+		// Grid and text come from the theme (Chart.defaults): drawn again when it changes
+		if (chartCanvas === undefined || !$chartTheme) return;
 		if (chart) chart.destroy();
 
 		const colors = generateShadesAndTints(maxSets);

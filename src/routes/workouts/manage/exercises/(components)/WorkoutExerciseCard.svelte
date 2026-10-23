@@ -17,7 +17,7 @@
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	import EditIcon from 'virtual:icons/lucide/pencil';
-	import SkipIcon from 'virtual:icons/lucide/skip-forward';
+	import ReplaceIcon from 'virtual:icons/lucide/replace';
 	import DeleteIcon from 'virtual:icons/lucide/trash';
 	import HistoryIcon from 'virtual:icons/lucide/history';
 	import ChartIcon from 'virtual:icons/lucide/chart-no-axes-column-increasing';
@@ -82,14 +82,8 @@
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
-	function skipSetsLeft() {
-		exercise.sets.forEach((set) => {
-			if (set.completed) return;
-			set.skipped = true;
-			set.miniSets.forEach((miniSet) => (miniSet.completed = false));
-		});
-		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
-	}
+	// A past workout: fix what was logged (the exercise itself, or sets); no planning for it
+	let editingPast = $derived(workoutRunes.editingWorkoutId !== null);
 </script>
 
 <div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
@@ -129,23 +123,32 @@
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end">
 						<DropdownMenu.Group>
-							<DropdownMenu.Item
-								class="gap-2"
-								onclick={() => {
-									isContextMenuOpen = false;
-									workoutRunes.setEditingExercise(exercise);
-								}}
-							>
-								<EditIcon /> Edit
-							</DropdownMenu.Item>
-							{#if !isLevelUnit(exercise.weightUnit)}
-								<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseWarmupDialog(exercise)}>
-									<ChartIcon /> Warm up
+							{#if editingPast}
+								<DropdownMenu.Item
+									class="gap-2"
+									onclick={() => {
+										isContextMenuOpen = false;
+										workoutRunes.replacingExerciseIdx = idx;
+									}}
+								>
+									<ReplaceIcon /> Replace
 								</DropdownMenu.Item>
+							{:else}
+								<DropdownMenu.Item
+									class="gap-2"
+									onclick={() => {
+										isContextMenuOpen = false;
+										workoutRunes.setEditingExercise(exercise);
+									}}
+								>
+									<EditIcon /> Edit
+								</DropdownMenu.Item>
+								{#if !isLevelUnit(exercise.weightUnit)}
+									<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseWarmupDialog(exercise)}>
+										<ChartIcon /> Warm up
+									</DropdownMenu.Item>
+								{/if}
 							{/if}
-							<DropdownMenu.Item class="gap-2" onclick={skipSetsLeft}>
-								<SkipIcon /> Skip sets left
-							</DropdownMenu.Item>
 							<DropdownMenu.Item class="gap-2" onclick={() => workoutRunes.openExerciseHistorySheet(exercise.name)}>
 								<HistoryIcon /> History
 							</DropdownMenu.Item>

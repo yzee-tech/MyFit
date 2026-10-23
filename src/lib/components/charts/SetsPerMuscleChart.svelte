@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { chartTheme } from '$lib/utils/chartTheme';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import type { MuscleGroup } from '$lib/utils/prismaEnums';
 	import { BarController, BarElement, CategoryScale, Chart, LinearScale, Tooltip } from 'chart.js';
@@ -28,10 +29,10 @@
 	let chart: Chart<'bar'> | undefined;
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
 	$effect(() => {
-		if (!chartCanvas) return;
+		// Drawn again in the theme's colours when it changes
+		const palette = $chartTheme;
+		if (!chartCanvas || !palette) return;
 		chart?.destroy();
-		const style = getComputedStyle(document.body);
-		const color = (name: string) => style.getPropertyValue(name).split(' ').join(', ');
 		chart = new Chart(chartCanvas, {
 			type: 'bar',
 			data: {
@@ -40,7 +41,7 @@
 					{
 						label,
 						data: muscles.map(([, count]) => count),
-						backgroundColor: `hsl(${color('--primary')})`,
+						backgroundColor: `hsl(${palette.primary})`,
 						borderRadius: 4
 					}
 				]
@@ -49,8 +50,8 @@
 				indexAxis: 'y',
 				maintainAspectRatio: false,
 				scales: {
-					x: { beginAtZero: true, ticks: { precision: 0, color: `hsl(${color('--muted-foreground')})` } },
-					y: { ticks: { color: `hsl(${color('--foreground')})` } }
+					x: { beginAtZero: true, ticks: { precision: 0, color: `hsl(${palette.mutedForeground})` } },
+					y: { ticks: { color: `hsl(${palette.foreground})` } }
 				}
 			}
 		});
