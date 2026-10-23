@@ -183,8 +183,6 @@ const workoutInputDataSchema = z.object({
 	workoutOfMesocycle: z
 		.object({
 			mesocycle: z.object({ id: z.string().cuid2() }),
-			/** Sent by old app versions; not used */
-			splitDayIndex: z.number().int().optional(),
 			/** The routine's name as the app showed it: for a saved workout from before routineName */
 			splitDayName: z.string().trim().min(1).max(100).optional(),
 			workoutStatus: z.nativeEnum(WorkoutStatus).nullable()

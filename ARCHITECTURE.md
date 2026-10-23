@@ -123,8 +123,6 @@ User
   │           └── ExerciseTemplate
   │
   ├── Mesocycle (training program instances)
-  │     ├── MesocycleExerciseSplitDay (copied from ExerciseSplit)
-  │     │     └── MesocycleExerciseTemplate
   │     ├── MesocycleCyclicSetChange (volume adjustment rules)
   │     └── WorkoutOfMesocycle (workout assignments)
   │
@@ -226,7 +224,7 @@ Prisma schema is split into logical modules:
 
 **exerciseSplit.prisma**: Exercise split templates (ExerciseSplit, ExerciseSplitDay, ExerciseTemplate)
 
-**mesocycle.prisma**: Training program definitions (Mesocycle, MesocycleExerciseSplitDay, MesocycleExerciseTemplate, MesocycleCyclicSetChange)
+**mesocycle.prisma**: Training program definitions (Mesocycle, MesocycleCyclicSetChange)
 
 **workout.prisma**: Workout logs (Workout, WorkoutOfMesocycle, WorkoutExercise, WorkoutExerciseSet, WorkoutExerciseMiniSet)
 

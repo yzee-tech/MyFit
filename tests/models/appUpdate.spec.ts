@@ -68,7 +68,8 @@ test('a workout saved by an older app version (a position, no routine name) save
 		include: { workoutOfMesocycle: true }
 	});
 	expect(workout.routineName).toEqual('Pull A');
-	expect(workout.workoutOfMesocycle?.splitDayIndex).toBeNull();
+	// The position it sent is ignored (there is no column for it)
+	expect(workout.workoutOfMesocycle).not.toHaveProperty('splitDayIndex');
 });
 
 test('a newer version going live: the next page change reloads into it, and the workout in progress is still there', async ({

@@ -1,10 +1,7 @@
 /**
  * Helpers for saving My routines (ExerciseSplit, one per person), the one place routines live.
- *
- * Mesocycles used to keep their own copy of the routines (MesocycleExerciseSplitDay /
- * MesocycleExerciseTemplate). Nothing reads or writes that copy any more: a mesocycle and its
- * workouts use My routines and each workout's routineName. The tables stay, frozen, until they are
- * dropped. A test fails if anything reads or writes them.
+ * A mesocycle and its workouts use My routines and each workout's routineName (mesocycles used to
+ * keep their own copy of the routines; it was dropped). A test fails if a second list is made.
  */
 import { prisma } from '$lib/prisma';
 import type { Prisma } from '@prisma/client';
