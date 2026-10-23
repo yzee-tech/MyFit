@@ -8,14 +8,17 @@
 		showChartIcon?: boolean;
 		chartMode?: boolean;
 		children: Snippet;
+		/** A button at the right end of the heading, e.g. Hide calendar */
+		action?: Snippet;
 	};
-	let { showChartIcon = false, children, chartMode = $bindable(false) }: PropsType = $props();
+	let { showChartIcon = false, children, action, chartMode = $bindable(false) }: PropsType = $props();
 </script>
 
 <h2
 	class="mb-4 flex h-10 scroll-m-20 items-end justify-between gap-2 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0"
 >
 	{@render children()}
+	{@render action?.()}
 	{#if showChartIcon}
 		<!-- Labelled, so the charts are easy to find -->
 		<Button class="shrink-0 gap-1.5" onclick={() => (chartMode = !chartMode)} size="sm" variant="outline">

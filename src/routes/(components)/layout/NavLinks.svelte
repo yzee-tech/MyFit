@@ -7,9 +7,9 @@
 
 	const linkItems: ({ text: string; href: string } | null)[] = [
 		{ text: 'Dashboard', href: '/dashboard' },
-		{ text: 'Exercises', href: '/exercises' },
 		{ text: 'Stats', href: '/stats' },
 		null,
+		{ text: 'Exercises', href: '/exercises' },
 		{ text: 'My routines', href: '/exercise-splits' },
 		{ text: 'Mesocycles', href: '/mesocycles' },
 		{ text: 'Workouts', href: '/workouts' },
@@ -23,7 +23,7 @@
 	];
 </script>
 
-<ul class="mb-auto lg:mt-8">
+<ul class="mb-auto lg:mt-8" data-testid="nav-links">
 	{#each linkItems as linkItem}
 		{#if linkItem}
 			<li>

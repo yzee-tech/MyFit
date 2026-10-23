@@ -1864,8 +1864,10 @@ test('Workouts list filter: blocks with the same name, even restarted in the sam
 	await expect(page.getByRole('option', { name: `Hypertrophy · ${started(later.startDate!)}` })).toBeVisible();
 	expect(started(later.startDate!)).not.toEqual(earlierLabel);
 	await page.getByRole('option', { name: `Hypertrophy · ${earlierLabel}` }).click();
-	// Closes the list, not the filter
-	await page.getByText('Date range').click();
+	// Closes the list, not the filter (the list may open over the dates: its own button again)
+	await page.getByRole('combobox').click();
+	await expect(page.getByRole('listbox')).toHaveCount(0);
+	await expect(page.getByText('Date range')).toBeVisible();
 	await expect(page.getByRole('combobox')).toHaveText(`Hypertrophy · ${earlierLabel}`);
 	await page.getByRole('button', { name: 'Apply' }).click();
 	await expect(page).toHaveURL(new RegExp(`selectedMesocycleIds=.*${earlier.id}`));

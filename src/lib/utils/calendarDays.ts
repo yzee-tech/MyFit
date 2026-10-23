@@ -73,3 +73,17 @@ export function describeDates(from: Date, to: Date, now = new Date()): string {
 	}
 	return `${from.toLocaleDateString(undefined, options)} – ${to.toLocaleDateString(undefined, options)}`;
 }
+
+/**
+ * The Showing box's second line for days picked on a calendar: while a held day waits for the other
+ * end of its range, what to do next; for one day, how to pick a range; for a range, nothing
+ */
+export function pickHint(picked: { from: string; to: string } | null, rangeStart: string | null): string | null {
+	// Hints are about days picked: none for the filters
+	if (!picked) return null;
+	const start = parseLocalDay(rangeStart);
+	if (start)
+		return `From ${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: now tap the last day`;
+	if (picked.from === picked.to) return 'Tip: hold a day to pick a range';
+	return null;
+}

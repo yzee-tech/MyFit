@@ -1,8 +1,18 @@
 <script lang="ts">
+	import ShowingBox from '$lib/components/ShowingBox.svelte';
 	import WorkoutCalendar from '$lib/components/WorkoutCalendar.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { calendarDayNames, compareMonths, localDayKey, monthOf, type CalendarMonth } from '$lib/utils/calendarDays';
+	import {
+		calendarDayNames,
+		compareMonths,
+		describePick,
+		localDayKey,
+		monthOf,
+		parseLocalDay,
+		pickHint,
+		type CalendarMonth
+	} from '$lib/utils/calendarDays';
 	import { onMount } from 'svelte';
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
@@ -39,7 +49,10 @@
 			compareMonths(opening, firstMonth) < 0 ? firstMonth : compareMonths(opening, lastMonth) > 0 ? lastMonth : opening;
 	});
 
-	let picked: { from: string; to: string } | null = $state(null);
+	let picked = $state<{ from: string; to: string } | null>(null);
+	// A held day waiting for the other end of its range
+	let rangeStart: string | null = $state(null);
+	let showing = $derived(picked && describePick(parseLocalDay(picked.from)!, parseLocalDay(picked.to)!));
 	let shownWorkouts = $derived(
 		mesocycle.workoutsOfMesocycle.filter(({ workout }) => {
 			if (!picked) return true;
@@ -56,9 +69,23 @@
 		minMonth={firstMonth}
 		{month}
 		onMonthChange={(next) => (month = next)}
-		onPick={(next) => (picked = next)}
+		onPick={(next) => {
+			picked = next;
+			if (!next) rangeStart = null;
+		}}
 		{picked}
+		bind:rangeStart
 	/>
+	{#if showing}
+		<ShowingBox
+			hint={pickHint(picked, rangeStart)}
+			onClear={() => {
+				picked = null;
+				rangeStart = null;
+			}}
+			{showing}
+		/>
+	{/if}
 
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
 		{#each shownWorkouts as { workout }}

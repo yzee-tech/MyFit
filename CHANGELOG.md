@@ -2,6 +2,19 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-23: Workouts page and menu (PR #49)
+
+### Changed
+
+- **Workouts:** a Hide calendar button (remembered on this phone) for more room for the list, bigger month
+  arrows (also on a block's Workouts tab), and Filters and Start workout side by side.
+- **Calendar hints:** no line under the calendar any more. Holding a day picks it straight away; the Showing box
+  then says what to do next ("From Oct 5: now tap the last day"), or for one day, how to pick a range. A block's
+  Workouts tab has the same Showing box, with Show all.
+- **Menu:** Dashboard and Stats first, then Exercises, My routines, Mesocycles and Workouts.
+- **Changelog:** this page shows these notes (it used to look for GitHub releases, of which there are none); the
+  unused "What's new?" pop-up is gone.
+
 ## 2026-10-23: cleanup (PR #48)
 
 ### Removed

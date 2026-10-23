@@ -98,7 +98,9 @@ test('Workouts calendar: tap a day, tap it again to clear; hold a day then tap a
 
 	// Hold the 19th, then tap the 1st: the two swap into Oct 1 – 19
 	await hold(page, 19);
-	await expect(page.getByTestId('calendar-hint')).toHaveText('From Oct 19: now tap the last day');
+	await expect(page.getByTestId('showing').getByTestId('calendar-hint')).toHaveText(
+		'From Oct 19: now tap the last day'
+	);
 	await calendarDay(page, 1).click();
 	await expect(page).toHaveURL(/\?from=2026-10-01&to=2026-10-19$/);
 	await expect(page.getByTestId('showing')).toContainText('Showing Oct 1 – 19');
@@ -253,6 +255,166 @@ test('A block’s Workouts tab: its own workouts done, months within the block, 
 		await hold(page, 1);
 		await calendarDay(page, 16).click();
 		await expect(cards).toHaveCount(2);
+	} finally {
+		await prisma.workout.deleteMany({ where: { userId } });
+		await prisma.mesocycle.deleteMany({ where: { userId } });
+	}
+});
+
+test('Workouts calendar: no hint until a day is picked; then it is the Showing box’s second line', async ({
+	page,
+	userData
+}) => {
+	await seedMonth(userData.userId);
+	await page.clock.setFixedTime(TODAY);
+	await page.goto('/workouts');
+	await expect(names(page)).toHaveCount(5);
+	// Nothing picked: no line under the calendar, no Showing box
+	await expect(page.getByTestId('workout-calendar')).not.toContainText('Hold');
+	await expect(page.getByTestId('calendar-hint')).toHaveCount(0);
+	await expect(page.getByTestId('showing')).toHaveCount(0);
+
+	// One day: the tip, inside the Showing box
+	await calendarDay(page, 16).click();
+	await expect(page.getByTestId('showing').getByTestId('calendar-hint')).toHaveText('Tip: hold a day to pick a range');
+
+	// A hold picks that day at once and waits for the last one
+	await hold(page, 19);
+	await expect(page).toHaveURL(/\?from=2026-10-19$/);
+	await expect(names(page)).toHaveText(['Legs A']);
+	await expect(page.getByTestId('showing').getByTestId('calendar-hint')).toHaveText(
+		'From Oct 19: now tap the last day'
+	);
+	// A reload keeps the day, not the waiting
+	await page.reload();
+	await expect(page.getByTestId('showing')).toContainText('Showing Mon, Oct 19');
+	await expect(page.getByTestId('calendar-hint')).toHaveText('Tip: hold a day to pick a range');
+	await calendarDay(page, 1).click();
+	await expect(page).toHaveURL(/\?from=2026-10-01$/);
+
+	// A range: no second line
+	await hold(page, 19);
+	await calendarDay(page, 1).click();
+	await expect(page.getByTestId('showing')).toContainText('Showing Oct 1 – 19');
+	await expect(page.getByTestId('calendar-hint')).toHaveCount(0);
+
+	// Show all clears the pick and the waiting: the next taps are single days
+	await hold(page, 5);
+	await page.getByRole('button', { name: 'Show all' }).click();
+	await expect(page).toHaveURL('/workouts');
+	await expect(page.getByTestId('showing')).toHaveCount(0);
+	await calendarDay(page, 10).click();
+	await expect(page).toHaveURL(/\?from=2026-10-10$/);
+	await calendarDay(page, 12).click();
+	await expect(page).toHaveURL(/\?from=2026-10-12$/);
+});
+
+test('Workouts calendar: Hide calendar keeps it hidden on this phone, with the days picked', async ({
+	page,
+	userData
+}) => {
+	await seedMonth(userData.userId);
+	await page.clock.setFixedTime(TODAY);
+	await page.goto('/workouts?from=2026-10-16');
+	await expect(names(page)).toHaveText(['Pull A', 'Morning workout']);
+	await page.getByRole('button', { name: 'Hide calendar' }).click();
+	await expect(page.getByTestId('workout-calendar')).toHaveCount(0);
+	await expect(page.getByTestId('showing')).toContainText('Showing Fri, Oct 16');
+	const cookie = (await page.context().cookies()).find(({ name }) => name === 'myfit-calendar-hidden');
+	expect(cookie).toMatchObject({ value: '1', path: '/workouts' });
+
+	// Still hidden after a reload, from the first paint, with the days picked
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Show calendar' })).toBeVisible();
+	await expect(page.getByTestId('workout-calendar')).toHaveCount(0);
+	await expect(page.getByTestId('showing')).toContainText('Showing Fri, Oct 16');
+	await expect(names(page)).toHaveText(['Pull A', 'Morning workout']);
+	const html = await (await page.request.get('/workouts')).text();
+	expect(html).not.toContain('data-testid="workout-calendar"');
+
+	// Shown again, and that's remembered too
+	await page.getByRole('button', { name: 'Show calendar' }).click();
+	await expect(page.getByTestId('workout-calendar')).toBeVisible();
+	await expect(calendarDay(page, 16)).toHaveAttribute('data-picked', 'true');
+	await page.reload();
+	await expect(page.getByTestId('workout-calendar')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Hide calendar' })).toBeVisible();
+});
+
+test('Workouts calendar: month arrows big enough to tap; Filters and Start workout share a row', async ({
+	page,
+	userData
+}) => {
+	await seedMonth(userData.userId);
+	await page.clock.setFixedTime(TODAY);
+	await page.goto('/workouts');
+	await expect(page.getByTestId('calendar-month')).toHaveText('October 2026');
+	for (const name of ['Previous month', 'Next month']) {
+		const arrow = (await page.getByRole('button', { name }).boundingBox())!;
+		expect(arrow.width).toBeGreaterThanOrEqual(44);
+		expect(arrow.height).toBeGreaterThanOrEqual(44);
+	}
+	const filters = (await page.getByRole('button', { name: 'search' }).boundingBox())!;
+	const start = (await page.getByRole('button', { name: 'create-workout' }).boundingBox())!;
+	expect(filters.y).toBeCloseTo(start.y, 0);
+	expect(filters.x).toBeLessThan(start.x);
+	expect(filters.width).toBeCloseTo(start.width, -1);
+	// Both still work
+	await page.getByRole('button', { name: 'search' }).click();
+	await expect(page.getByText('Date range')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await page.getByRole('button', { name: 'create-workout' }).click();
+	await page.waitForURL('/workouts/manage/start');
+});
+
+test('A block’s Workouts tab: a Showing box while days are picked, with the hint; Show all clears it', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.workout.deleteMany({ where: { userId } });
+	await prisma.mesocycle.deleteMany({ where: { userId } });
+	const block = await prisma.mesocycle.create({
+		data: {
+			userId,
+			name: 'Hypertrophy',
+			weeklyRIR: [3, 2, 2, 1, 0, -1],
+			startDate: hk(9, 28, 9),
+			startOverloadPercentage: 2.5,
+			lastSetToFailure: false,
+			forceRIRMatching: false
+		}
+	});
+	try {
+		await seedWorkout(userId, hk(10, 1, 18), 'Pull A', { id: block.id });
+		await seedWorkout(userId, hk(10, 16, 6), 'Push A', { id: block.id });
+		await page.clock.setFixedTime(TODAY);
+		await page.goto(`/mesocycles/${block.id}`);
+		await page.getByRole('tab', { name: 'Workouts' }).click();
+		const cards = page.locator('[data-tabs-content] a[href^="/workouts/"]');
+		await expect(cards).toHaveCount(2);
+		await expect(page.getByTestId('showing')).toHaveCount(0);
+		for (const name of ['Previous month', 'Next month']) {
+			const arrow = (await page.getByRole('button', { name }).boundingBox())!;
+			expect(arrow.width).toBeGreaterThanOrEqual(44);
+		}
+
+		await calendarDay(page, 16).click();
+		await expect(page.getByTestId('showing')).toContainText('Showing Fri, Oct 16');
+		await expect(page.getByTestId('calendar-hint')).toHaveText('Tip: hold a day to pick a range');
+		await expect(cards).toHaveCount(1);
+
+		await hold(page, 1);
+		await expect(page.getByTestId('showing')).toContainText('Showing Thu, Oct 1');
+		await expect(page.getByTestId('calendar-hint')).toHaveText('From Oct 1: now tap the last day');
+		await page.getByRole('button', { name: 'Show all' }).click();
+		await expect(page.getByTestId('showing')).toHaveCount(0);
+		await expect(cards).toHaveCount(2);
+		// Nothing left waiting: two taps are two single days
+		await calendarDay(page, 1).click();
+		await calendarDay(page, 16).click();
+		await expect(page.getByTestId('showing')).toContainText('Showing Fri, Oct 16');
+		await expect(cards).toHaveCount(1);
 	} finally {
 		await prisma.workout.deleteMany({ where: { userId } });
 		await prisma.mesocycle.deleteMany({ where: { userId } });

@@ -12,12 +12,15 @@
 	import type { DateRange } from 'bits-ui';
 	import { type InfiniteLoadingEvents } from 'svelte-infinite-loading';
 	import AddIcon from 'virtual:icons/lucide/plus';
+	import CalendarIcon from 'virtual:icons/lucide/calendar';
 	import StickyNoteIcon from 'virtual:icons/lucide/sticky-note';
 	import FilterComponent from './(components)/FilterComponent.svelte';
 	import NoWorkoutsFilterComponent from './(components)/NoWorkoutsFilterComponent.svelte';
 	import { workoutRunes } from './manage/workoutRunes.svelte.js';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import WorkoutCalendar from '$lib/components/WorkoutCalendar.svelte';
+	import ShowingBox from '$lib/components/ShowingBox.svelte';
+	import { rememberCalendarHidden } from './calendarCookie';
 	import {
 		addMonths,
 		calendarDayNames,
@@ -29,6 +32,7 @@
 		nextDay,
 		parseLocalDay,
 		pickedBounds,
+		pickHint,
 		type CalendarMonth
 	} from '$lib/utils/calendarDays';
 	import { onMount } from 'svelte';
@@ -43,6 +47,18 @@
 	let workouts: RouterOutputs['workouts']['load'] = $state([]);
 	let currentFilters = $derived(getCurrentFilters());
 	let picked = $derived(getPicked());
+	let pickedKeys = $derived(picked && { from: localDayKey(picked.from), to: localDayKey(picked.to) });
+	// A held day waiting for the other end of its range (the calendar's; not in the link)
+	let rangeStart: string | null = $state(null);
+
+	// Hidden on this phone: from the cookie at first, then from the button straight away
+	let calendarHidden = $state(data.calendarHidden);
+	function toggleCalendar() {
+		calendarHidden = !calendarHidden;
+		// A range left waiting can't be finished on a hidden calendar
+		if (calendarHidden) rangeStart = null;
+		rememberCalendarHidden(calendarHidden);
+	}
 
 	/** The days picked on the calendar (from the link, as the phone's days), if they're real days */
 	function getPicked() {
@@ -122,6 +138,7 @@
 
 	/** Days picked on the calendar (or none): they replace the filters, and the filters replace them */
 	function pickDays(days: { from: string; to: string } | null) {
+		if (!days) rangeStart = null;
 		const newURL = new URL($page.url);
 		const params = ['from', 'to', 'startDate', 'endDate', 'selectedMesocycleIds', 'selectedMesocycles'];
 		for (const param of [...params, 'selectedWorkoutStatuses']) newURL.searchParams.delete(param);
@@ -163,6 +180,7 @@
 	}
 
 	function setFilters(selectedDateRange: DateRange, selectedMesocycleIds: (string | null)[]) {
+		rangeStart = null;
 		const newURL = new URL($page.url);
 
 		if (selectedDateRange.start) {
@@ -197,24 +215,32 @@
 	}
 </script>
 
-<H2>Workouts</H2>
+<H2>
+	Workouts
+	{#snippet action()}
+		<Button class="shrink-0 gap-1.5" onclick={toggleCalendar} size="sm" variant="outline">
+			<CalendarIcon class="h-4 w-4" />
+			{calendarHidden ? 'Show calendar' : 'Hide calendar'}
+		</Button>
+	{/snippet}
+</H2>
 
 <div class="flex grow flex-col gap-2">
-	<WorkoutCalendar
-		days={calendarDays}
-		month={calendarMonth}
-		onMonthChange={showMonth}
-		onPick={pickDays}
-		picked={picked && { from: localDayKey(picked.from), to: localDayKey(picked.to) }}
-	/>
-	<Button class="w-full gap-1" aria-label="create-workout" onclick={createNewWorkout}>
-		<AddIcon class="h-5 w-5" /> Start workout
-	</Button>
-	{#await data.filterData}
-		<Skeleton class="h-10 w-full" />
-	{:then filterData}
-		{@const showing = describeShowing(filterData)}
-		<div class="flex">
+	{#if !calendarHidden}
+		<WorkoutCalendar
+			bind:rangeStart
+			days={calendarDays}
+			month={calendarMonth}
+			onMonthChange={showMonth}
+			onPick={pickDays}
+			picked={pickedKeys}
+		/>
+	{/if}
+	<!-- Filters on the left, Start workout on the right, half each -->
+	<div class="grid grid-cols-2 gap-2">
+		{#await data.filterData}
+			<Skeleton class="h-10 w-full" />
+		{:then filterData}
 			{#if filterData}
 				<!-- Made again when the link changes: it shows the filters in use (a day picked clears them) -->
 				{#key $page.url.search}
@@ -223,12 +249,15 @@
 			{:else}
 				<NoWorkoutsFilterComponent />
 			{/if}
-		</div>
+		{/await}
+		<Button class="w-full gap-1" aria-label="create-workout" onclick={createNewWorkout}>
+			<AddIcon class="h-5 w-5" /> Start workout
+		</Button>
+	</div>
+	{#await data.filterData then filterData}
+		{@const showing = describeShowing(filterData)}
 		{#if showing}
-			<div class="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1 text-sm" data-testid="showing">
-				<span class="min-w-0 truncate">Showing <span class="font-semibold">{showing}</span></span>
-				<Button class="h-7 shrink-0 px-1" onclick={() => pickDays(null)} variant="link">Show all ✕</Button>
-			</div>
+			<ShowingBox hint={pickHint(pickedKeys, rangeStart)} onClear={() => pickDays(null)} {showing} />
 		{/if}
 	{/await}
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
