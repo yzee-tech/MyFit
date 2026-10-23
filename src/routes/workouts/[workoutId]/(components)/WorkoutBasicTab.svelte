@@ -97,11 +97,9 @@
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end">
 					<DropdownMenu.Group>
-						{#if workout.workoutOfMesocycle === null || workout.workoutOfMesocycle.workoutStatus === null}
-							<DropdownMenu.Item class="gap-2" onclick={() => editWorkout()}>
-								<EditIcon /> Edit
-							</DropdownMenu.Item>
-						{/if}
+						<DropdownMenu.Item class="gap-2" onclick={() => editWorkout()}>
+							<EditIcon /> Edit
+						</DropdownMenu.Item>
 						{#if workout.workoutExercises.length > 0}
 							<DropdownMenu.Item class="gap-2" onclick={openSaveAsRoutine}>
 								<SaveIcon /> Save as routine
@@ -144,9 +142,7 @@
 					<a class="font-semibold underline" href="/mesocycles/{wm.mesocycle.id}">
 						{wm.mesocycle.name}
 					</a>
-					<Badge class="whitespace-nowrap" variant={wm.workoutStatus === null ? 'secondary' : 'outline'}>
-						{wm.workoutStatus === null ? (workout.routineName ?? '') : convertCamelCaseToNormal(wm.workoutStatus)}
-					</Badge>
+					<Badge class="whitespace-nowrap" variant="secondary">{workout.routineName ?? ''}</Badge>
 				</div>
 			{:else}
 				<div class="flex items-center justify-between">
@@ -165,7 +161,7 @@
 				<span class="font-semibold">{workout.note}</span>
 			</div>
 		{/if}
-		{#if workout.workoutOfMesocycle?.workoutStatus === null}
+		{#if workout.workoutOfMesocycle}
 			<div class="flex flex-col gap-1">
 				<span class="text-sm text-muted-foreground">Targeted muscle groups</span>
 				<div class="flex flex-wrap gap-1">

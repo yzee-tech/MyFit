@@ -7,11 +7,12 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	// The block's workouts done (its old skipped and rest days aren't), on the phone's days
+	// The block's workouts, on the phone's days
 	const days = calendarDayNames(
-		mesocycle.workoutsOfMesocycle
-			.filter((wm) => wm.workoutStatus === null)
-			.map(({ workout }) => ({ startedAt: workout.startedAt, routineName: workout.routineName }))
+		mesocycle.workoutsOfMesocycle.map(({ workout }) => ({
+			startedAt: workout.startedAt,
+			routineName: workout.routineName
+		}))
 	);
 
 	// The months it covers: from its first, to its planned last (or this month, if it runs longer) while
@@ -60,7 +61,7 @@
 	/>
 
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
-		{#each shownWorkouts as { workout, ...workoutOfMesocycle }}
+		{#each shownWorkouts as { workout }}
 			<Button
 				class="flex h-12 items-center justify-between rounded-md border bg-card p-2"
 				href="/workouts/{workout.id}"
@@ -72,12 +73,7 @@
 						month: 'long'
 					})}
 				</span>
-				{#if workoutOfMesocycle}
-					<span class="truncate text-muted-foreground">
-						{workoutOfMesocycle.workoutStatus === 'RestDay' ? 'Rest' : (workout.routineName ?? '')}
-						{workoutOfMesocycle.workoutStatus === 'Skipped' ? '(skipped)' : ''}
-					</span>
-				{/if}
+				<span class="truncate text-muted-foreground">{workout.routineName ?? ''}</span>
 			</Button>
 		{/each}
 	</div>

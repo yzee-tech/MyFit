@@ -102,7 +102,6 @@ async function setUpLastTime(userId: string) {
 					{
 						name: 'Test day',
 						dayIndex: 0,
-						isRestDay: false,
 						exercises: {
 							create: [
 								routineExercise(0, exercises.rows, {}),

@@ -10,12 +10,7 @@ const TODAY = new Date('2026-10-22T12:00:00+08:00');
 /** A moment in UTC+8 */
 const hk = (month: number, day: number, hour: number) => new Date(Date.UTC(2026, month - 1, day, hour - 8));
 
-async function seedWorkout(
-	userId: string,
-	startedAt: Date,
-	routineName: string | null,
-	block?: { id: string; skipped?: boolean }
-) {
+async function seedWorkout(userId: string, startedAt: Date, routineName: string | null, block?: { id: string }) {
 	await prisma.workout.create({
 		data: {
 			userId,
@@ -24,7 +19,7 @@ async function seedWorkout(
 			endedAt: new Date(startedAt.getTime() + 45 * 60000),
 			routineName,
 			...(block && {
-				workoutOfMesocycle: { create: { mesocycleId: block.id, workoutStatus: block.skipped ? 'Skipped' : null } }
+				workoutOfMesocycle: { create: { mesocycleId: block.id } }
 			})
 		}
 	});
@@ -223,7 +218,6 @@ test('A block’s Workouts tab: its own workouts done, months within the block, 
 	try {
 		await seedWorkout(userId, hk(9, 28, 18), 'Push A', { id: block.id });
 		await seedWorkout(userId, hk(10, 1, 18), 'Pull A', { id: block.id });
-		await seedWorkout(userId, hk(10, 5, 18), 'Legs A', { id: block.id, skipped: true });
 		await seedWorkout(userId, hk(10, 16, 6), 'Push A', { id: block.id });
 		// Not in the block
 		await seedWorkout(userId, hk(10, 19, 18), null);
@@ -235,8 +229,7 @@ test('A block’s Workouts tab: its own workouts done, months within the block, 
 		await expect(calendarDay(page, 1)).toHaveAttribute('data-done', 'true');
 		await expect(calendarDay(page, 16)).toHaveAttribute('data-done', 'true');
 		await expect(calendarDay(page, 15)).toHaveAttribute('data-done', 'false');
-		// A skipped day and a workout outside the block: no circle
-		await expect(calendarDay(page, 5)).toHaveAttribute('data-done', 'false');
+		// A workout outside the block: no circle
 		await expect(calendarDay(page, 19)).toHaveAttribute('data-done', 'false');
 
 		// Its months: September to November
@@ -250,16 +243,16 @@ test('A block’s Workouts tab: its own workouts done, months within the block, 
 
 		// A day, then a range, filter its list
 		const cards = page.locator('[data-tabs-content] a[href^="/workouts/"]');
-		await expect(cards).toHaveCount(4);
+		await expect(cards).toHaveCount(3);
 		await page.getByRole('button', { name: 'Next month' }).click();
 		await calendarDay(page, 16).click();
 		await expect(cards).toHaveCount(1);
 		await expect(cards).toContainText('October 16');
 		await calendarDay(page, 16).click();
-		await expect(cards).toHaveCount(4);
+		await expect(cards).toHaveCount(3);
 		await hold(page, 1);
 		await calendarDay(page, 16).click();
-		await expect(cards).toHaveCount(3);
+		await expect(cards).toHaveCount(2);
 	} finally {
 		await prisma.workout.deleteMany({ where: { userId } });
 		await prisma.mesocycle.deleteMany({ where: { userId } });
@@ -287,9 +280,9 @@ test('Dashboard: Get started first while not done, then This week, then the acti
 		create: {
 			userId,
 			name: 'My routines',
-			exerciseSplitDays: { create: [{ name: 'Push A', dayIndex: 0, isRestDay: false }] }
+			exerciseSplitDays: { create: [{ name: 'Push A', dayIndex: 0 }] }
 		},
-		update: { exerciseSplitDays: { create: [{ name: 'Push A', dayIndex: 0, isRestDay: false }] } }
+		update: { exerciseSplitDays: { create: [{ name: 'Push A', dayIndex: 0 }] } }
 	});
 	await prisma.mesocycle.create({
 		data: {

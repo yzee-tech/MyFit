@@ -16,17 +16,13 @@ export const ExerciseScalarFieldEnumSchema = z.enum(['id','name','targetMuscleGr
 
 export const ExerciseSplitScalarFieldEnumSchema = z.enum(['id','name','userId']);
 
-export const ExerciseSplitDayScalarFieldEnumSchema = z.enum(['id','name','dayIndex','isRestDay','weightUnit','exerciseSplitId']);
+export const ExerciseSplitDayScalarFieldEnumSchema = z.enum(['id','name','dayIndex','weightUnit','exerciseSplitId']);
 
 export const ExerciseTemplateScalarFieldEnumSchema = z.enum(['id','name','exerciseIndex','targetMuscleGroup','customMuscleGroup','bodyweightFraction','sets','setType','repRangeStart','repRangeEnd','changeType','changeAmount','note','exerciseSplitDayId','topRepRangeStart','topRepRangeEnd','weightSetId','exerciseId','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','weightUnit']);
 
 export const MesocycleScalarFieldEnumSchema = z.enum(['id','name','userId','exerciseSplitId','weeklyRIR','startDate','endDate','startOverloadPercentage','lastSetToFailure','forceRIRMatching']);
 
 export const MesocycleCyclicSetChangeScalarFieldEnumSchema = z.enum(['id','mesocycleId','muscleGroup','customMuscleGroup','regardlessOfProgress','setIncreaseAmount','maxVolume']);
-
-export const MesocycleExerciseSplitDayScalarFieldEnumSchema = z.enum(['id','name','dayIndex','isRestDay','weightUnit','hidden','mesocycleId']);
-
-export const MesocycleExerciseTemplateScalarFieldEnumSchema = z.enum(['id','name','exerciseIndex','targetMuscleGroup','customMuscleGroup','bodyweightFraction','sets','setType','repRangeStart','repRangeEnd','changeType','changeAmount','note','mesocycleExerciseSplitDayId','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
 
 export const UserScalarFieldEnumSchema = z.enum(['id','name','email','emailVerified','image','createdAt','updatedAt','migratedFromV2']);
 
@@ -40,7 +36,7 @@ export const VerificationTokenScalarFieldEnumSchema = z.enum(['identifier','toke
 
 export const UserSettingsScalarFieldEnumSchema = z.enum(['id','userId','motivationalQuotesEnabled','quotesDisplayModes','welcomeBackEnabled','welcomeBackAfterDays','homeWeightUnit']);
 
-export const WorkoutOfMesocycleScalarFieldEnumSchema = z.enum(['id','workoutId','mesocycleId','splitDayIndex','workoutStatus']);
+export const WorkoutOfMesocycleScalarFieldEnumSchema = z.enum(['id','workoutId','mesocycleId']);
 
 export const WorkoutScalarFieldEnumSchema = z.enum(['id','userBodyweight','startedAt','endedAt','userId','note','isDeload','routineName']);
 
@@ -67,10 +63,6 @@ export type SetTypeType = `${z.infer<typeof SetTypeSchema>}`
 export const ChangeTypeSchema = z.enum(['Percentage','AbsoluteLoad']);
 
 export type ChangeTypeType = `${z.infer<typeof ChangeTypeSchema>}`
-
-export const WorkoutStatusSchema = z.enum(['Skipped','RestDay']);
-
-export type WorkoutStatusType = `${z.infer<typeof WorkoutStatusSchema>}`
 
 export const QuotesDisplayModeSchema = z.enum(['PRE_WORKOUT','POST_WORKOUT','BETWEEN_SETS']);
 
@@ -155,7 +147,6 @@ export const ExerciseSplitDaySchema = z.object({
   id: z.string().cuid2(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   exerciseSplitId: z.string(),
 })
 
@@ -242,63 +233,6 @@ export const MesocycleCyclicSetChangeSchema = z.object({
 })
 
 export type MesocycleCyclicSetChange = z.infer<typeof MesocycleCyclicSetChangeSchema>
-
-/////////////////////////////////////////
-// MESOCYCLE EXERCISE SPLIT DAY SCHEMA
-/////////////////////////////////////////
-
-export const MesocycleExerciseSplitDaySchema = z.object({
-  weightUnit: RoutineWeightUnitSchema,
-  id: z.string().cuid2(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  /**
-   * No longer in My routines. Kept, not deleted: workouts point at a routine by its position (dayIndex)
-   */
-  hidden: z.boolean(),
-  mesocycleId: z.string(),
-})
-
-export type MesocycleExerciseSplitDay = z.infer<typeof MesocycleExerciseSplitDaySchema>
-
-/////////////////////////////////////////
-// MESOCYCLE EXERCISE TEMPLATE SCHEMA
-/////////////////////////////////////////
-
-export const MesocycleExerciseTemplateSchema = z.object({
-  targetMuscleGroup: MuscleGroupSchema,
-  setType: SetTypeSchema,
-  changeType: ChangeTypeSchema.nullable(),
-  /**
-   * Unit chosen for this exercise when it differs from the routine's (e.g. lb machines at a kg gym)
-   */
-  weightUnit: WeightUnitSchema.nullable(),
-  id: z.string().cuid2(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  customMuscleGroup: z.string().nullable(),
-  bodyweightFraction: z.number().nullable(),
-  sets: z.number().int(),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeAmount: z.number().nullable(),
-  note: z.string().nullable(),
-  mesocycleExerciseSplitDayId: z.string(),
-  overloadPercentage: z.number().nullable(),
-  lastSetToFailure: z.boolean().nullable(),
-  forceRIRMatching: z.boolean().nullable(),
-  minimumWeightChange: z.number().nullable(),
-  topRepRangeStart: z.number().int().nullable(),
-  topRepRangeEnd: z.number().int().nullable(),
-  /**
-   * Weights available for this exercise (a WeightSet id); none means standard steps
-   */
-  weightSetId: z.string().nullable(),
-  exerciseId: z.string().nullable(),
-})
-
-export type MesocycleExerciseTemplate = z.infer<typeof MesocycleExerciseTemplateSchema>
 
 /////////////////////////////////////////
 // USER SCHEMA
@@ -416,14 +350,9 @@ export type UserSettings = z.infer<typeof UserSettingsSchema>
 /////////////////////////////////////////
 
 export const WorkoutOfMesocycleSchema = z.object({
-  workoutStatus: WorkoutStatusSchema.nullable(),
   id: z.string().cuid2(),
   workoutId: z.string(),
   mesocycleId: z.string(),
-  /**
-   * Old: a position in the mesocycle's copy of the routines. No longer written; workouts use routineName
-   */
-  splitDayIndex: z.number().int().nullable(),
 })
 
 export type WorkoutOfMesocycle = z.infer<typeof WorkoutOfMesocycleSchema>
@@ -536,7 +465,6 @@ export type WorkoutExerciseMiniSet = z.infer<typeof WorkoutExerciseMiniSetSchema
 export const ExerciseIncludeSchema: z.ZodType<Prisma.ExerciseInclude> = z.object({
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
   exerciseTemplates: z.union([z.boolean(),z.lazy(() => ExerciseTemplateFindManyArgsSchema)]).optional(),
-  mesocycleExerciseTemplates: z.union([z.boolean(),z.lazy(() => MesocycleExerciseTemplateFindManyArgsSchema)]).optional(),
   workoutExercises: z.union([z.boolean(),z.lazy(() => WorkoutExerciseFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ExerciseCountOutputTypeArgsSchema)]).optional(),
 }).strict()
@@ -552,7 +480,6 @@ export const ExerciseCountOutputTypeArgsSchema: z.ZodType<Prisma.ExerciseCountOu
 
 export const ExerciseCountOutputTypeSelectSchema: z.ZodType<Prisma.ExerciseCountOutputTypeSelect> = z.object({
   exerciseTemplates: z.boolean().optional(),
-  mesocycleExerciseTemplates: z.boolean().optional(),
   workoutExercises: z.boolean().optional(),
 }).strict();
 
@@ -572,7 +499,6 @@ export const ExerciseSelectSchema: z.ZodType<Prisma.ExerciseSelect> = z.object({
   userId: z.boolean().optional(),
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
   exerciseTemplates: z.union([z.boolean(),z.lazy(() => ExerciseTemplateFindManyArgsSchema)]).optional(),
-  mesocycleExerciseTemplates: z.union([z.boolean(),z.lazy(() => MesocycleExerciseTemplateFindManyArgsSchema)]).optional(),
   workoutExercises: z.union([z.boolean(),z.lazy(() => WorkoutExerciseFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ExerciseCountOutputTypeArgsSchema)]).optional(),
 }).strict()
@@ -637,7 +563,6 @@ export const ExerciseSplitDaySelectSchema: z.ZodType<Prisma.ExerciseSplitDaySele
   id: z.boolean().optional(),
   name: z.boolean().optional(),
   dayIndex: z.boolean().optional(),
-  isRestDay: z.boolean().optional(),
   weightUnit: z.boolean().optional(),
   exerciseSplitId: z.boolean().optional(),
   exercises: z.union([z.boolean(),z.lazy(() => ExerciseTemplateFindManyArgsSchema)]).optional(),
@@ -692,7 +617,6 @@ export const ExerciseTemplateSelectSchema: z.ZodType<Prisma.ExerciseTemplateSele
 export const MesocycleIncludeSchema: z.ZodType<Prisma.MesocycleInclude> = z.object({
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
   exerciseSplit: z.union([z.boolean(),z.lazy(() => ExerciseSplitArgsSchema)]).optional(),
-  mesocycleExerciseSplitDays: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayFindManyArgsSchema)]).optional(),
   mesocycleCyclicSetChanges: z.union([z.boolean(),z.lazy(() => MesocycleCyclicSetChangeFindManyArgsSchema)]).optional(),
   workoutsOfMesocycle: z.union([z.boolean(),z.lazy(() => WorkoutOfMesocycleFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => MesocycleCountOutputTypeArgsSchema)]).optional(),
@@ -708,7 +632,6 @@ export const MesocycleCountOutputTypeArgsSchema: z.ZodType<Prisma.MesocycleCount
 }).strict();
 
 export const MesocycleCountOutputTypeSelectSchema: z.ZodType<Prisma.MesocycleCountOutputTypeSelect> = z.object({
-  mesocycleExerciseSplitDays: z.boolean().optional(),
   mesocycleCyclicSetChanges: z.boolean().optional(),
   workoutsOfMesocycle: z.boolean().optional(),
 }).strict();
@@ -726,7 +649,6 @@ export const MesocycleSelectSchema: z.ZodType<Prisma.MesocycleSelect> = z.object
   forceRIRMatching: z.boolean().optional(),
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
   exerciseSplit: z.union([z.boolean(),z.lazy(() => ExerciseSplitArgsSchema)]).optional(),
-  mesocycleExerciseSplitDays: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayFindManyArgsSchema)]).optional(),
   mesocycleCyclicSetChanges: z.union([z.boolean(),z.lazy(() => MesocycleCyclicSetChangeFindManyArgsSchema)]).optional(),
   workoutsOfMesocycle: z.union([z.boolean(),z.lazy(() => WorkoutOfMesocycleFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => MesocycleCountOutputTypeArgsSchema)]).optional(),
@@ -753,82 +675,6 @@ export const MesocycleCyclicSetChangeSelectSchema: z.ZodType<Prisma.MesocycleCyc
   setIncreaseAmount: z.boolean().optional(),
   maxVolume: z.boolean().optional(),
   mesocycle: z.union([z.boolean(),z.lazy(() => MesocycleArgsSchema)]).optional(),
-}).strict()
-
-// MESOCYCLE EXERCISE SPLIT DAY
-//------------------------------------------------------
-
-export const MesocycleExerciseSplitDayIncludeSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayInclude> = z.object({
-  mesocycle: z.union([z.boolean(),z.lazy(() => MesocycleArgsSchema)]).optional(),
-  mesocycleSplitDayExercises: z.union([z.boolean(),z.lazy(() => MesocycleExerciseTemplateFindManyArgsSchema)]).optional(),
-  _count: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayCountOutputTypeArgsSchema)]).optional(),
-}).strict()
-
-export const MesocycleExerciseSplitDayArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayDefaultArgs> = z.object({
-  select: z.lazy(() => MesocycleExerciseSplitDaySelectSchema).optional(),
-  include: z.lazy(() => MesocycleExerciseSplitDayIncludeSchema).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayCountOutputTypeArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCountOutputTypeDefaultArgs> = z.object({
-  select: z.lazy(() => MesocycleExerciseSplitDayCountOutputTypeSelectSchema).nullish(),
-}).strict();
-
-export const MesocycleExerciseSplitDayCountOutputTypeSelectSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCountOutputTypeSelect> = z.object({
-  mesocycleSplitDayExercises: z.boolean().optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDaySelectSchema: z.ZodType<Prisma.MesocycleExerciseSplitDaySelect> = z.object({
-  id: z.boolean().optional(),
-  name: z.boolean().optional(),
-  dayIndex: z.boolean().optional(),
-  isRestDay: z.boolean().optional(),
-  weightUnit: z.boolean().optional(),
-  hidden: z.boolean().optional(),
-  mesocycleId: z.boolean().optional(),
-  mesocycle: z.union([z.boolean(),z.lazy(() => MesocycleArgsSchema)]).optional(),
-  mesocycleSplitDayExercises: z.union([z.boolean(),z.lazy(() => MesocycleExerciseTemplateFindManyArgsSchema)]).optional(),
-  _count: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayCountOutputTypeArgsSchema)]).optional(),
-}).strict()
-
-// MESOCYCLE EXERCISE TEMPLATE
-//------------------------------------------------------
-
-export const MesocycleExerciseTemplateIncludeSchema: z.ZodType<Prisma.MesocycleExerciseTemplateInclude> = z.object({
-  mesocycleExerciseSplitDay: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayArgsSchema)]).optional(),
-  exercise: z.union([z.boolean(),z.lazy(() => ExerciseArgsSchema)]).optional(),
-}).strict()
-
-export const MesocycleExerciseTemplateArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateDefaultArgs> = z.object({
-  select: z.lazy(() => MesocycleExerciseTemplateSelectSchema).optional(),
-  include: z.lazy(() => MesocycleExerciseTemplateIncludeSchema).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateSelectSchema: z.ZodType<Prisma.MesocycleExerciseTemplateSelect> = z.object({
-  id: z.boolean().optional(),
-  name: z.boolean().optional(),
-  exerciseIndex: z.boolean().optional(),
-  targetMuscleGroup: z.boolean().optional(),
-  customMuscleGroup: z.boolean().optional(),
-  bodyweightFraction: z.boolean().optional(),
-  sets: z.boolean().optional(),
-  setType: z.boolean().optional(),
-  repRangeStart: z.boolean().optional(),
-  repRangeEnd: z.boolean().optional(),
-  changeType: z.boolean().optional(),
-  changeAmount: z.boolean().optional(),
-  note: z.boolean().optional(),
-  mesocycleExerciseSplitDayId: z.boolean().optional(),
-  overloadPercentage: z.boolean().optional(),
-  lastSetToFailure: z.boolean().optional(),
-  forceRIRMatching: z.boolean().optional(),
-  minimumWeightChange: z.boolean().optional(),
-  topRepRangeStart: z.boolean().optional(),
-  topRepRangeEnd: z.boolean().optional(),
-  weightUnit: z.boolean().optional(),
-  weightSetId: z.boolean().optional(),
-  exerciseId: z.boolean().optional(),
-  mesocycleExerciseSplitDay: z.union([z.boolean(),z.lazy(() => MesocycleExerciseSplitDayArgsSchema)]).optional(),
-  exercise: z.union([z.boolean(),z.lazy(() => ExerciseArgsSchema)]).optional(),
 }).strict()
 
 // USER
@@ -1005,8 +851,6 @@ export const WorkoutOfMesocycleSelectSchema: z.ZodType<Prisma.WorkoutOfMesocycle
   id: z.boolean().optional(),
   workoutId: z.boolean().optional(),
   mesocycleId: z.boolean().optional(),
-  splitDayIndex: z.boolean().optional(),
-  workoutStatus: z.boolean().optional(),
   workout: z.union([z.boolean(),z.lazy(() => WorkoutArgsSchema)]).optional(),
   mesocycle: z.union([z.boolean(),z.lazy(() => MesocycleArgsSchema)]).optional(),
 }).strict()
@@ -1183,7 +1027,6 @@ export const ExerciseWhereInputSchema: z.ZodType<Prisma.ExerciseWhereInput> = z.
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateListRelationFilterSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateListRelationFilterSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseListRelationFilterSchema).optional()
 }).strict();
 
@@ -1203,7 +1046,6 @@ export const ExerciseOrderByWithRelationInputSchema: z.ZodType<Prisma.ExerciseOr
   userId: z.lazy(() => SortOrderSchema).optional(),
   user: z.lazy(() => UserOrderByWithRelationInputSchema).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateOrderByRelationAggregateInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateOrderByRelationAggregateInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseOrderByRelationAggregateInputSchema).optional()
 }).strict();
 
@@ -1239,7 +1081,6 @@ export const ExerciseWhereUniqueInputSchema: z.ZodType<Prisma.ExerciseWhereUniqu
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateListRelationFilterSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateListRelationFilterSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseListRelationFilterSchema).optional()
 }).strict());
 
@@ -1353,7 +1194,6 @@ export const ExerciseSplitDayWhereInputSchema: z.ZodType<Prisma.ExerciseSplitDay
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
   exerciseSplitId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateListRelationFilterSchema).optional(),
@@ -1364,7 +1204,6 @@ export const ExerciseSplitDayOrderByWithRelationInputSchema: z.ZodType<Prisma.Ex
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
   weightUnit: z.lazy(() => SortOrderSchema).optional(),
   exerciseSplitId: z.lazy(() => SortOrderSchema).optional(),
   exercises: z.lazy(() => ExerciseTemplateOrderByRelationAggregateInputSchema).optional(),
@@ -1381,7 +1220,6 @@ export const ExerciseSplitDayWhereUniqueInputSchema: z.ZodType<Prisma.ExerciseSp
   NOT: z.union([ z.lazy(() => ExerciseSplitDayWhereInputSchema),z.lazy(() => ExerciseSplitDayWhereInputSchema).array() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
   exerciseSplitId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateListRelationFilterSchema).optional(),
@@ -1392,7 +1230,6 @@ export const ExerciseSplitDayOrderByWithAggregationInputSchema: z.ZodType<Prisma
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
   weightUnit: z.lazy(() => SortOrderSchema).optional(),
   exerciseSplitId: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => ExerciseSplitDayCountOrderByAggregateInputSchema).optional(),
@@ -1409,7 +1246,6 @@ export const ExerciseSplitDayScalarWhereWithAggregatesInputSchema: z.ZodType<Pri
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   dayIndex: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
   weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitWithAggregatesFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
   exerciseSplitId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
 }).strict();
@@ -1583,7 +1419,6 @@ export const MesocycleWhereInputSchema: z.ZodType<Prisma.MesocycleWhereInput> = 
   forceRIRMatching: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
   exerciseSplit: z.union([ z.lazy(() => ExerciseSplitNullableScalarRelationFilterSchema),z.lazy(() => ExerciseSplitWhereInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayListRelationFilterSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeListRelationFilterSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleListRelationFilterSchema).optional()
 }).strict();
@@ -1601,7 +1436,6 @@ export const MesocycleOrderByWithRelationInputSchema: z.ZodType<Prisma.Mesocycle
   forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
   user: z.lazy(() => UserOrderByWithRelationInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitOrderByWithRelationInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayOrderByRelationAggregateInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeOrderByRelationAggregateInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleOrderByRelationAggregateInputSchema).optional()
 }).strict();
@@ -1625,7 +1459,6 @@ export const MesocycleWhereUniqueInputSchema: z.ZodType<Prisma.MesocycleWhereUni
   forceRIRMatching: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
   exerciseSplit: z.union([ z.lazy(() => ExerciseSplitNullableScalarRelationFilterSchema),z.lazy(() => ExerciseSplitWhereInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayListRelationFilterSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeListRelationFilterSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleListRelationFilterSchema).optional()
 }).strict());
@@ -1732,232 +1565,6 @@ export const MesocycleCyclicSetChangeScalarWhereWithAggregatesInputSchema: z.Zod
   regardlessOfProgress: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
   setIncreaseAmount: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
   maxVolume: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayWhereInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayWhereInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
-  hidden: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  mesocycle: z.union([ z.lazy(() => MesocycleScalarRelationFilterSchema),z.lazy(() => MesocycleWhereInputSchema) ]).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateListRelationFilterSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayOrderByWithRelationInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayOrderByWithRelationInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  hidden: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  mesocycle: z.lazy(() => MesocycleOrderByWithRelationInputSchema).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateOrderByRelationAggregateInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayWhereUniqueInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayWhereUniqueInput> = z.object({
-  id: z.string().cuid2()
-})
-.and(z.object({
-  id: z.string().cuid2().optional(),
-  AND: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).array() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
-  hidden: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  mesocycle: z.union([ z.lazy(() => MesocycleScalarRelationFilterSchema),z.lazy(() => MesocycleWhereInputSchema) ]).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateListRelationFilterSchema).optional()
-}).strict());
-
-export const MesocycleExerciseSplitDayOrderByWithAggregationInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayOrderByWithAggregationInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  hidden: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  _count: z.lazy(() => MesocycleExerciseSplitDayCountOrderByAggregateInputSchema).optional(),
-  _avg: z.lazy(() => MesocycleExerciseSplitDayAvgOrderByAggregateInputSchema).optional(),
-  _max: z.lazy(() => MesocycleExerciseSplitDayMaxOrderByAggregateInputSchema).optional(),
-  _min: z.lazy(() => MesocycleExerciseSplitDayMinOrderByAggregateInputSchema).optional(),
-  _sum: z.lazy(() => MesocycleExerciseSplitDaySumOrderByAggregateInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayScalarWhereWithAggregatesInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  dayIndex: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
-  weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitWithAggregatesFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
-  hidden: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
-  mesocycleId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateWhereInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateWhereInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  sets: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
-  repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  changeType: z.union([ z.lazy(() => EnumChangeTypeNullableFilterSchema),z.lazy(() => ChangeTypeSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  exerciseId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDay: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarRelationFilterSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema) ]).optional(),
-  exercise: z.union([ z.lazy(() => ExerciseNullableScalarRelationFilterSchema),z.lazy(() => ExerciseWhereInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateOrderByWithRelationInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateOrderByWithRelationInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  setType: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeType: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  changeAmount: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  mesocycleExerciseSplitDayId: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  lastSetToFailure: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  forceRIRMatching: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  minimumWeightChange: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  topRepRangeStart: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  topRepRangeEnd: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  weightSetId: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  exerciseId: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  mesocycleExerciseSplitDay: z.lazy(() => MesocycleExerciseSplitDayOrderByWithRelationInputSchema).optional(),
-  exercise: z.lazy(() => ExerciseOrderByWithRelationInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateWhereUniqueInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateWhereUniqueInput> = z.object({
-  id: z.string().cuid2()
-})
-.and(z.object({
-  id: z.string().cuid2().optional(),
-  AND: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).array() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  sets: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
-  repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
-  changeType: z.union([ z.lazy(() => EnumChangeTypeNullableFilterSchema),z.lazy(() => ChangeTypeSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.lazy(() => IntNullableFilterSchema),z.number().int() ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.lazy(() => IntNullableFilterSchema),z.number().int() ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  exerciseId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDay: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarRelationFilterSchema),z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema) ]).optional(),
-  exercise: z.union([ z.lazy(() => ExerciseNullableScalarRelationFilterSchema),z.lazy(() => ExerciseWhereInputSchema) ]).optional().nullable(),
-}).strict());
-
-export const MesocycleExerciseTemplateOrderByWithAggregationInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateOrderByWithAggregationInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  setType: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeType: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  changeAmount: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  mesocycleExerciseSplitDayId: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  lastSetToFailure: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  forceRIRMatching: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  minimumWeightChange: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  topRepRangeStart: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  topRepRangeEnd: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  weightSetId: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  exerciseId: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  _count: z.lazy(() => MesocycleExerciseTemplateCountOrderByAggregateInputSchema).optional(),
-  _avg: z.lazy(() => MesocycleExerciseTemplateAvgOrderByAggregateInputSchema).optional(),
-  _max: z.lazy(() => MesocycleExerciseTemplateMaxOrderByAggregateInputSchema).optional(),
-  _min: z.lazy(() => MesocycleExerciseTemplateMinOrderByAggregateInputSchema).optional(),
-  _sum: z.lazy(() => MesocycleExerciseTemplateSumOrderByAggregateInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateScalarWhereWithAggregatesInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  exerciseIndex: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupWithAggregatesFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  sets: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  setType: z.union([ z.lazy(() => EnumSetTypeWithAggregatesFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
-  repRangeStart: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  repRangeEnd: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
-  changeType: z.union([ z.lazy(() => EnumChangeTypeNullableWithAggregatesFilterSchema),z.lazy(() => ChangeTypeSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  note: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  overloadPercentage: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.lazy(() => BoolNullableWithAggregatesFilterSchema),z.boolean() ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.lazy(() => BoolNullableWithAggregatesFilterSchema),z.boolean() ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => EnumWeightUnitNullableWithAggregatesFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
-  exerciseId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
 }).strict();
 
 export const UserWhereInputSchema: z.ZodType<Prisma.UserWhereInput> = z.object({
@@ -2419,8 +2026,6 @@ export const WorkoutOfMesocycleWhereInputSchema: z.ZodType<Prisma.WorkoutOfMesoc
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  splitDayIndex: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => EnumWorkoutStatusNullableFilterSchema),z.lazy(() => WorkoutStatusSchema) ]).optional().nullable(),
   workout: z.union([ z.lazy(() => WorkoutScalarRelationFilterSchema),z.lazy(() => WorkoutWhereInputSchema) ]).optional(),
   mesocycle: z.union([ z.lazy(() => MesocycleScalarRelationFilterSchema),z.lazy(() => MesocycleWhereInputSchema) ]).optional(),
 }).strict();
@@ -2429,8 +2034,6 @@ export const WorkoutOfMesocycleOrderByWithRelationInputSchema: z.ZodType<Prisma.
   id: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
   mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  splitDayIndex: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  workoutStatus: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   workout: z.lazy(() => WorkoutOrderByWithRelationInputSchema).optional(),
   mesocycle: z.lazy(() => MesocycleOrderByWithRelationInputSchema).optional()
 }).strict();
@@ -2454,8 +2057,6 @@ export const WorkoutOfMesocycleWhereUniqueInputSchema: z.ZodType<Prisma.WorkoutO
   OR: z.lazy(() => WorkoutOfMesocycleWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => WorkoutOfMesocycleWhereInputSchema),z.lazy(() => WorkoutOfMesocycleWhereInputSchema).array() ]).optional(),
   mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  splitDayIndex: z.union([ z.lazy(() => IntNullableFilterSchema),z.number().int() ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => EnumWorkoutStatusNullableFilterSchema),z.lazy(() => WorkoutStatusSchema) ]).optional().nullable(),
   workout: z.union([ z.lazy(() => WorkoutScalarRelationFilterSchema),z.lazy(() => WorkoutWhereInputSchema) ]).optional(),
   mesocycle: z.union([ z.lazy(() => MesocycleScalarRelationFilterSchema),z.lazy(() => MesocycleWhereInputSchema) ]).optional(),
 }).strict());
@@ -2464,13 +2065,9 @@ export const WorkoutOfMesocycleOrderByWithAggregationInputSchema: z.ZodType<Pris
   id: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
   mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  splitDayIndex: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
-  workoutStatus: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   _count: z.lazy(() => WorkoutOfMesocycleCountOrderByAggregateInputSchema).optional(),
-  _avg: z.lazy(() => WorkoutOfMesocycleAvgOrderByAggregateInputSchema).optional(),
   _max: z.lazy(() => WorkoutOfMesocycleMaxOrderByAggregateInputSchema).optional(),
-  _min: z.lazy(() => WorkoutOfMesocycleMinOrderByAggregateInputSchema).optional(),
-  _sum: z.lazy(() => WorkoutOfMesocycleSumOrderByAggregateInputSchema).optional()
+  _min: z.lazy(() => WorkoutOfMesocycleMinOrderByAggregateInputSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleScalarWhereWithAggregatesInput> = z.object({
@@ -2480,8 +2077,6 @@ export const WorkoutOfMesocycleScalarWhereWithAggregatesInputSchema: z.ZodType<P
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   mesocycleId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  splitDayIndex: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => EnumWorkoutStatusNullableWithAggregatesFilterSchema),z.lazy(() => WorkoutStatusSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutWhereInputSchema: z.ZodType<Prisma.WorkoutWhereInput> = z.object({
@@ -2874,7 +2469,6 @@ export const ExerciseCreateInputSchema: z.ZodType<Prisma.ExerciseCreateInput> = 
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
   exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -2893,7 +2487,6 @@ export const ExerciseUncheckedCreateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   archived: z.boolean().optional(),
   userId: z.string(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -2912,7 +2505,6 @@ export const ExerciseUpdateInputSchema: z.ZodType<Prisma.ExerciseUpdateInput> = 
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -2931,7 +2523,6 @@ export const ExerciseUncheckedUpdateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -3035,7 +2626,6 @@ export const ExerciseSplitDayCreateInputSchema: z.ZodType<Prisma.ExerciseSplitDa
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exercises: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseSplitDayInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutExerciseSplitDaysInputSchema)
@@ -3045,7 +2635,6 @@ export const ExerciseSplitDayUncheckedCreateInputSchema: z.ZodType<Prisma.Exerci
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exerciseSplitId: z.string(),
   exercises: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseSplitDayInputSchema).optional()
@@ -3055,7 +2644,6 @@ export const ExerciseSplitDayUpdateInputSchema: z.ZodType<Prisma.ExerciseSplitDa
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseSplitDayNestedInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneRequiredWithoutExerciseSplitDaysNestedInputSchema).optional()
@@ -3065,7 +2653,6 @@ export const ExerciseSplitDayUncheckedUpdateInputSchema: z.ZodType<Prisma.Exerci
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseSplitId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseSplitDayNestedInputSchema).optional()
@@ -3075,7 +2662,6 @@ export const ExerciseSplitDayCreateManyInputSchema: z.ZodType<Prisma.ExerciseSpl
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exerciseSplitId: z.string()
 }).strict();
@@ -3084,7 +2670,6 @@ export const ExerciseSplitDayUpdateManyMutationInputSchema: z.ZodType<Prisma.Exe
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -3092,7 +2677,6 @@ export const ExerciseSplitDayUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Ex
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseSplitId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
@@ -3288,7 +2872,6 @@ export const MesocycleCreateInputSchema: z.ZodType<Prisma.MesocycleCreateInput> 
   forceRIRMatching: z.boolean(),
   user: z.lazy(() => UserCreateNestedOneWithoutMesocyclesInputSchema),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -3304,7 +2887,6 @@ export const MesocycleUncheckedCreateInputSchema: z.ZodType<Prisma.MesocycleUnch
   startOverloadPercentage: z.number(),
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -3320,7 +2902,6 @@ export const MesocycleUpdateInputSchema: z.ZodType<Prisma.MesocycleUpdateInput> 
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutMesocyclesNestedInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -3336,7 +2917,6 @@ export const MesocycleUncheckedUpdateInputSchema: z.ZodType<Prisma.MesocycleUnch
   startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -3445,259 +3025,6 @@ export const MesocycleCyclicSetChangeUncheckedUpdateManyInputSchema: z.ZodType<P
   regardlessOfProgress: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   setIncreaseAmount: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   maxVolume: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycle: z.lazy(() => MesocycleCreateNestedOneWithoutMesocycleExerciseSplitDaysInputSchema),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedCreateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedCreateInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycleId: z.string(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycle: z.lazy(() => MesocycleUpdateOneRequiredWithoutMesocycleExerciseSplitDaysNestedInputSchema).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateManyInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateManyInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycleId: z.string()
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateManyMutationInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateManyMutationInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateManyInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateManyInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  mesocycleExerciseSplitDay: z.lazy(() => MesocycleExerciseSplitDayCreateNestedOneWithoutMesocycleSplitDayExercisesInputSchema),
-  exercise: z.lazy(() => ExerciseCreateNestedOneWithoutMesocycleExerciseTemplatesInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedCreateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedCreateInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  mesocycleExerciseSplitDayId: z.string(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  exerciseId: z.string().optional().nullable()
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDay: z.lazy(() => MesocycleExerciseSplitDayUpdateOneRequiredWithoutMesocycleSplitDayExercisesNestedInputSchema).optional(),
-  exercise: z.lazy(() => ExerciseUpdateOneWithoutMesocycleExerciseTemplatesNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  exerciseId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateManyInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  mesocycleExerciseSplitDayId: z.string(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  exerciseId: z.string().optional().nullable()
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateManyMutationInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyMutationInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateManyInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateManyInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  exerciseId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const UserCreateInputSchema: z.ZodType<Prisma.UserCreateInput> = z.object({
@@ -4150,8 +3477,6 @@ export const UserSettingsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.UserSe
 
 export const WorkoutOfMesocycleCreateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateInput> = z.object({
   id: z.string().cuid2().optional(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
   workout: z.lazy(() => WorkoutCreateNestedOneWithoutWorkoutOfMesocycleInputSchema),
   mesocycle: z.lazy(() => MesocycleCreateNestedOneWithoutWorkoutsOfMesocycleInputSchema)
 }).strict();
@@ -4159,15 +3484,11 @@ export const WorkoutOfMesocycleCreateInputSchema: z.ZodType<Prisma.WorkoutOfMeso
 export const WorkoutOfMesocycleUncheckedCreateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedCreateInput> = z.object({
   id: z.string().cuid2().optional(),
   workoutId: z.string(),
-  mesocycleId: z.string(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable()
+  mesocycleId: z.string()
 }).strict();
 
 export const WorkoutOfMesocycleUpdateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUpdateInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   workout: z.lazy(() => WorkoutUpdateOneRequiredWithoutWorkoutOfMesocycleNestedInputSchema).optional(),
   mesocycle: z.lazy(() => MesocycleUpdateOneRequiredWithoutWorkoutsOfMesocycleNestedInputSchema).optional()
 }).strict();
@@ -4176,30 +3497,22 @@ export const WorkoutOfMesocycleUncheckedUpdateInputSchema: z.ZodType<Prisma.Work
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutOfMesocycleCreateManyInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateManyInput> = z.object({
   id: z.string().cuid2().optional(),
   workoutId: z.string(),
-  mesocycleId: z.string(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable()
+  mesocycleId: z.string()
 }).strict();
 
 export const WorkoutOfMesocycleUpdateManyMutationInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUpdateManyMutationInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedUpdateManyInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedUpdateManyInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutCreateInputSchema: z.ZodType<Prisma.WorkoutCreateInput> = z.object({
@@ -4680,12 +3993,6 @@ export const ExerciseTemplateListRelationFilterSchema: z.ZodType<Prisma.Exercise
   none: z.lazy(() => ExerciseTemplateWhereInputSchema).optional()
 }).strict();
 
-export const MesocycleExerciseTemplateListRelationFilterSchema: z.ZodType<Prisma.MesocycleExerciseTemplateListRelationFilter> = z.object({
-  every: z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).optional(),
-  some: z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).optional(),
-  none: z.lazy(() => MesocycleExerciseTemplateWhereInputSchema).optional()
-}).strict();
-
 export const WorkoutExerciseListRelationFilterSchema: z.ZodType<Prisma.WorkoutExerciseListRelationFilter> = z.object({
   every: z.lazy(() => WorkoutExerciseWhereInputSchema).optional(),
   some: z.lazy(() => WorkoutExerciseWhereInputSchema).optional(),
@@ -4698,10 +4005,6 @@ export const SortOrderInputSchema: z.ZodType<Prisma.SortOrderInput> = z.object({
 }).strict();
 
 export const ExerciseTemplateOrderByRelationAggregateInputSchema: z.ZodType<Prisma.ExerciseTemplateOrderByRelationAggregateInput> = z.object({
-  _count: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateOrderByRelationAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateOrderByRelationAggregateInput> = z.object({
   _count: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -4929,7 +4232,6 @@ export const ExerciseSplitDayCountOrderByAggregateInputSchema: z.ZodType<Prisma.
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
   weightUnit: z.lazy(() => SortOrderSchema).optional(),
   exerciseSplitId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -4942,7 +4244,6 @@ export const ExerciseSplitDayMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Ex
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
   weightUnit: z.lazy(() => SortOrderSchema).optional(),
   exerciseSplitId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -4951,7 +4252,6 @@ export const ExerciseSplitDayMinOrderByAggregateInputSchema: z.ZodType<Prisma.Ex
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
   weightUnit: z.lazy(() => SortOrderSchema).optional(),
   exerciseSplitId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -5199,12 +4499,6 @@ export const ExerciseSplitNullableScalarRelationFilterSchema: z.ZodType<Prisma.E
   isNot: z.lazy(() => ExerciseSplitWhereInputSchema).optional().nullable()
 }).strict();
 
-export const MesocycleExerciseSplitDayListRelationFilterSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayListRelationFilter> = z.object({
-  every: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional(),
-  some: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional(),
-  none: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional()
-}).strict();
-
 export const MesocycleCyclicSetChangeListRelationFilterSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeListRelationFilter> = z.object({
   every: z.lazy(() => MesocycleCyclicSetChangeWhereInputSchema).optional(),
   some: z.lazy(() => MesocycleCyclicSetChangeWhereInputSchema).optional(),
@@ -5215,10 +4509,6 @@ export const WorkoutOfMesocycleListRelationFilterSchema: z.ZodType<Prisma.Workou
   every: z.lazy(() => WorkoutOfMesocycleWhereInputSchema).optional(),
   some: z.lazy(() => WorkoutOfMesocycleWhereInputSchema).optional(),
   none: z.lazy(() => WorkoutOfMesocycleWhereInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayOrderByRelationAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayOrderByRelationAggregateInput> = z.object({
-  _count: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const MesocycleCyclicSetChangeOrderByRelationAggregateInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeOrderByRelationAggregateInput> = z.object({
@@ -5349,153 +4639,6 @@ export const MesocycleCyclicSetChangeMinOrderByAggregateInputSchema: z.ZodType<P
 export const MesocycleCyclicSetChangeSumOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeSumOrderByAggregateInput> = z.object({
   setIncreaseAmount: z.lazy(() => SortOrderSchema).optional(),
   maxVolume: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayCountOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCountOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  hidden: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayAvgOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayAvgOrderByAggregateInput> = z.object({
-  dayIndex: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayMaxOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayMaxOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  hidden: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayMinOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayMinOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  dayIndex: z.lazy(() => SortOrderSchema).optional(),
-  isRestDay: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  hidden: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDaySumOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDaySumOrderByAggregateInput> = z.object({
-  dayIndex: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayScalarRelationFilterSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayScalarRelationFilter> = z.object({
-  is: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional(),
-  isNot: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateCountOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCountOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  setType: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeType: z.lazy(() => SortOrderSchema).optional(),
-  changeAmount: z.lazy(() => SortOrderSchema).optional(),
-  note: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleExerciseSplitDayId: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
-  lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
-  forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
-  minimumWeightChange: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  weightSetId: z.lazy(() => SortOrderSchema).optional(),
-  exerciseId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateAvgOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateAvgOrderByAggregateInput> = z.object({
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeAmount: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
-  minimumWeightChange: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeEnd: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateMaxOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateMaxOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  setType: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeType: z.lazy(() => SortOrderSchema).optional(),
-  changeAmount: z.lazy(() => SortOrderSchema).optional(),
-  note: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleExerciseSplitDayId: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
-  lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
-  forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
-  minimumWeightChange: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  weightSetId: z.lazy(() => SortOrderSchema).optional(),
-  exerciseId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateMinOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateMinOrderByAggregateInput> = z.object({
-  id: z.lazy(() => SortOrderSchema).optional(),
-  name: z.lazy(() => SortOrderSchema).optional(),
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
-  bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  setType: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeType: z.lazy(() => SortOrderSchema).optional(),
-  changeAmount: z.lazy(() => SortOrderSchema).optional(),
-  note: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleExerciseSplitDayId: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
-  lastSetToFailure: z.lazy(() => SortOrderSchema).optional(),
-  forceRIRMatching: z.lazy(() => SortOrderSchema).optional(),
-  minimumWeightChange: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  weightUnit: z.lazy(() => SortOrderSchema).optional(),
-  weightSetId: z.lazy(() => SortOrderSchema).optional(),
-  exerciseId: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateSumOrderByAggregateInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateSumOrderByAggregateInput> = z.object({
-  exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
-  bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
-  sets: z.lazy(() => SortOrderSchema).optional(),
-  repRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  repRangeEnd: z.lazy(() => SortOrderSchema).optional(),
-  changeAmount: z.lazy(() => SortOrderSchema).optional(),
-  overloadPercentage: z.lazy(() => SortOrderSchema).optional(),
-  minimumWeightChange: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeStart: z.lazy(() => SortOrderSchema).optional(),
-  topRepRangeEnd: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const DateTimeFilterSchema: z.ZodType<Prisma.DateTimeFilter> = z.object({
@@ -5821,13 +4964,6 @@ export const UserSettingsSumOrderByAggregateInputSchema: z.ZodType<Prisma.UserSe
   welcomeBackAfterDays: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
-export const EnumWorkoutStatusNullableFilterSchema: z.ZodType<Prisma.EnumWorkoutStatusNullableFilter> = z.object({
-  equals: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
-  in: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  notIn: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  not: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema) ]).optional().nullable(),
-}).strict();
-
 export const WorkoutScalarRelationFilterSchema: z.ZodType<Prisma.WorkoutScalarRelationFilter> = z.object({
   is: z.lazy(() => WorkoutWhereInputSchema).optional(),
   isNot: z.lazy(() => WorkoutWhereInputSchema).optional()
@@ -5836,43 +4972,19 @@ export const WorkoutScalarRelationFilterSchema: z.ZodType<Prisma.WorkoutScalarRe
 export const WorkoutOfMesocycleCountOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCountOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  splitDayIndex: z.lazy(() => SortOrderSchema).optional(),
-  workoutStatus: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const WorkoutOfMesocycleAvgOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleAvgOrderByAggregateInput> = z.object({
-  splitDayIndex: z.lazy(() => SortOrderSchema).optional()
+  mesocycleId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleMaxOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleMaxOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  splitDayIndex: z.lazy(() => SortOrderSchema).optional(),
-  workoutStatus: z.lazy(() => SortOrderSchema).optional()
+  mesocycleId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleMinOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleMinOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
-  mesocycleId: z.lazy(() => SortOrderSchema).optional(),
-  splitDayIndex: z.lazy(() => SortOrderSchema).optional(),
-  workoutStatus: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const WorkoutOfMesocycleSumOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleSumOrderByAggregateInput> = z.object({
-  splitDayIndex: z.lazy(() => SortOrderSchema).optional()
-}).strict();
-
-export const EnumWorkoutStatusNullableWithAggregatesFilterSchema: z.ZodType<Prisma.EnumWorkoutStatusNullableWithAggregatesFilter> = z.object({
-  equals: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
-  in: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  notIn: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  not: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NestedEnumWorkoutStatusNullableWithAggregatesFilterSchema) ]).optional().nullable(),
-  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
-  _min: z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema).optional(),
-  _max: z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema).optional()
+  mesocycleId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleNullableScalarRelationFilterSchema: z.ZodType<Prisma.WorkoutOfMesocycleNullableScalarRelationFilter> = z.object({
@@ -6151,13 +5263,6 @@ export const ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema: z.ZodTy
   connect: z.union([ z.lazy(() => ExerciseTemplateWhereUniqueInputSchema),z.lazy(() => ExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
 }).strict();
 
-export const MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
 export const WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseCreateNestedManyWithoutExerciseInput> = z.object({
   create: z.union([ z.lazy(() => WorkoutExerciseCreateWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseCreateWithoutExerciseInputSchema).array(),z.lazy(() => WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => WorkoutExerciseCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
@@ -6170,13 +5275,6 @@ export const ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema
   connectOrCreate: z.union([ z.lazy(() => ExerciseTemplateCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => ExerciseTemplateCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
   createMany: z.lazy(() => ExerciseTemplateCreateManyExerciseInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => ExerciseTemplateWhereUniqueInputSchema),z.lazy(() => ExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
 }).strict();
 
 export const WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInput> = z.object({
@@ -6240,20 +5338,6 @@ export const ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema: z.ZodTy
   deleteMany: z.union([ z.lazy(() => ExerciseTemplateScalarWhereInputSchema),z.lazy(() => ExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
 }).strict();
 
-export const MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
 export const WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema: z.ZodType<Prisma.WorkoutExerciseUpdateManyWithoutExerciseNestedInput> = z.object({
   create: z.union([ z.lazy(() => WorkoutExerciseCreateWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseCreateWithoutExerciseInputSchema).array(),z.lazy(() => WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => WorkoutExerciseCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
@@ -6280,20 +5364,6 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema
   update: z.union([ z.lazy(() => ExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema),z.lazy(() => ExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => ExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema),z.lazy(() => ExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => ExerciseTemplateScalarWhereInputSchema),z.lazy(() => ExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
 }).strict();
 
 export const WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema: z.ZodType<Prisma.WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInput> = z.object({
@@ -6538,13 +5608,6 @@ export const ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema: z.Z
   connect: z.lazy(() => ExerciseSplitWhereUniqueInputSchema).optional()
 }).strict();
 
-export const MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
 export const MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInput> = z.object({
   create: z.union([ z.lazy(() => MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => MesocycleCyclicSetChangeCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
@@ -6557,13 +5620,6 @@ export const WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema: z.Zo
   connectOrCreate: z.union([ z.lazy(() => WorkoutOfMesocycleCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => WorkoutOfMesocycleCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
   createMany: z.lazy(() => WorkoutOfMesocycleCreateManyMesocycleInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => WorkoutOfMesocycleWhereUniqueInputSchema),z.lazy(() => WorkoutOfMesocycleWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
 }).strict();
 
 export const MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInput> = z.object({
@@ -6615,20 +5671,6 @@ export const ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema: z.Z
   update: z.union([ z.lazy(() => ExerciseSplitUpdateToOneWithWhereWithoutUsedByMesocyclesInputSchema),z.lazy(() => ExerciseSplitUpdateWithoutUsedByMesocyclesInputSchema),z.lazy(() => ExerciseSplitUncheckedUpdateWithoutUsedByMesocyclesInputSchema) ]).optional(),
 }).strict();
 
-export const MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
 export const MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInput> = z.object({
   create: z.union([ z.lazy(() => MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => MesocycleCyclicSetChangeCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
@@ -6655,20 +5697,6 @@ export const WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema: z.Zo
   update: z.union([ z.lazy(() => WorkoutOfMesocycleUpdateWithWhereUniqueWithoutMesocycleInputSchema),z.lazy(() => WorkoutOfMesocycleUpdateWithWhereUniqueWithoutMesocycleInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => WorkoutOfMesocycleUpdateManyWithWhereWithoutMesocycleInputSchema),z.lazy(() => WorkoutOfMesocycleUpdateManyWithWhereWithoutMesocycleInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => WorkoutOfMesocycleScalarWhereInputSchema),z.lazy(() => WorkoutOfMesocycleScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema).array(),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema).array() ]).optional(),
 }).strict();
 
 export const MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInput> = z.object({
@@ -6711,92 +5739,6 @@ export const MesocycleUpdateOneRequiredWithoutMesocycleCyclicSetChangesNestedInp
   upsert: z.lazy(() => MesocycleUpsertWithoutMesocycleCyclicSetChangesInputSchema).optional(),
   connect: z.lazy(() => MesocycleWhereUniqueInputSchema).optional(),
   update: z.union([ z.lazy(() => MesocycleUpdateToOneWithWhereWithoutMesocycleCyclicSetChangesInputSchema),z.lazy(() => MesocycleUpdateWithoutMesocycleCyclicSetChangesInputSchema),z.lazy(() => MesocycleUncheckedUpdateWithoutMesocycleCyclicSetChangesInputSchema) ]).optional(),
-}).strict();
-
-export const MesocycleCreateNestedOneWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleCreateNestedOneWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleCreateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => MesocycleCreateOrConnectWithoutMesocycleExerciseSplitDaysInputSchema).optional(),
-  connect: z.lazy(() => MesocycleWhereUniqueInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateNestedManyWithoutMesocycleExerciseSplitDayInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutMesocycleExerciseSplitDayInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelopeSchema).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleUpdateOneRequiredWithoutMesocycleExerciseSplitDaysNestedInputSchema: z.ZodType<Prisma.MesocycleUpdateOneRequiredWithoutMesocycleExerciseSplitDaysNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleCreateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => MesocycleCreateOrConnectWithoutMesocycleExerciseSplitDaysInputSchema).optional(),
-  upsert: z.lazy(() => MesocycleUpsertWithoutMesocycleExerciseSplitDaysInputSchema).optional(),
-  connect: z.lazy(() => MesocycleWhereUniqueInputSchema).optional(),
-  update: z.union([ z.lazy(() => MesocycleUpdateToOneWithWhereWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUpdateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedUpdateWithoutMesocycleExerciseSplitDaysInputSchema) ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyWithoutMesocycleExerciseSplitDayNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema).array(),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  connectOrCreate: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  upsert: z.union([ z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  createMany: z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelopeSchema).optional(),
-  set: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  disconnect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  delete: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  connect: z.union([ z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema).array() ]).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  updateMany: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInputSchema).array() ]).optional(),
-  deleteMany: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateNestedOneWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateNestedOneWithoutMesocycleSplitDayExercisesInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleSplitDayExercisesInputSchema).optional(),
-  connect: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).optional()
-}).strict();
-
-export const ExerciseCreateNestedOneWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseCreateNestedOneWithoutMesocycleExerciseTemplatesInput> = z.object({
-  create: z.union([ z.lazy(() => ExerciseCreateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => ExerciseCreateOrConnectWithoutMesocycleExerciseTemplatesInputSchema).optional(),
-  connect: z.lazy(() => ExerciseWhereUniqueInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateOneRequiredWithoutMesocycleSplitDayExercisesNestedInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateOneRequiredWithoutMesocycleSplitDayExercisesNestedInput> = z.object({
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleSplitDayExercisesInputSchema).optional(),
-  upsert: z.lazy(() => MesocycleExerciseSplitDayUpsertWithoutMesocycleSplitDayExercisesInputSchema).optional(),
-  connect: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema).optional(),
-  update: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateToOneWithWhereWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUpdateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleSplitDayExercisesInputSchema) ]).optional(),
-}).strict();
-
-export const ExerciseUpdateOneWithoutMesocycleExerciseTemplatesNestedInputSchema: z.ZodType<Prisma.ExerciseUpdateOneWithoutMesocycleExerciseTemplatesNestedInput> = z.object({
-  create: z.union([ z.lazy(() => ExerciseCreateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInputSchema) ]).optional(),
-  connectOrCreate: z.lazy(() => ExerciseCreateOrConnectWithoutMesocycleExerciseTemplatesInputSchema).optional(),
-  upsert: z.lazy(() => ExerciseUpsertWithoutMesocycleExerciseTemplatesInputSchema).optional(),
-  disconnect: z.union([ z.boolean(),z.lazy(() => ExerciseWhereInputSchema) ]).optional(),
-  delete: z.union([ z.boolean(),z.lazy(() => ExerciseWhereInputSchema) ]).optional(),
-  connect: z.lazy(() => ExerciseWhereUniqueInputSchema).optional(),
-  update: z.union([ z.lazy(() => ExerciseUpdateToOneWithWhereWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUpdateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedUpdateWithoutMesocycleExerciseTemplatesInputSchema) ]).optional(),
 }).strict();
 
 export const AccountCreateNestedManyWithoutUserInputSchema: z.ZodType<Prisma.AccountCreateNestedManyWithoutUserInput> = z.object({
@@ -7207,10 +6149,6 @@ export const MesocycleCreateNestedOneWithoutWorkoutsOfMesocycleInputSchema: z.Zo
   create: z.union([ z.lazy(() => MesocycleCreateWithoutWorkoutsOfMesocycleInputSchema),z.lazy(() => MesocycleUncheckedCreateWithoutWorkoutsOfMesocycleInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => MesocycleCreateOrConnectWithoutWorkoutsOfMesocycleInputSchema).optional(),
   connect: z.lazy(() => MesocycleWhereUniqueInputSchema).optional()
-}).strict();
-
-export const NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema: z.ZodType<Prisma.NullableEnumWorkoutStatusFieldUpdateOperationsInput> = z.object({
-  set: z.lazy(() => WorkoutStatusSchema).optional().nullable()
 }).strict();
 
 export const WorkoutUpdateOneRequiredWithoutWorkoutOfMesocycleNestedInputSchema: z.ZodType<Prisma.WorkoutUpdateOneRequiredWithoutWorkoutOfMesocycleNestedInput> = z.object({
@@ -7807,23 +6745,6 @@ export const NestedEnumWeightUnitWithAggregatesFilterSchema: z.ZodType<Prisma.Ne
   _max: z.lazy(() => NestedEnumWeightUnitFilterSchema).optional()
 }).strict();
 
-export const NestedEnumWorkoutStatusNullableFilterSchema: z.ZodType<Prisma.NestedEnumWorkoutStatusNullableFilter> = z.object({
-  equals: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
-  in: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  notIn: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  not: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema) ]).optional().nullable(),
-}).strict();
-
-export const NestedEnumWorkoutStatusNullableWithAggregatesFilterSchema: z.ZodType<Prisma.NestedEnumWorkoutStatusNullableWithAggregatesFilter> = z.object({
-  equals: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
-  in: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  notIn: z.lazy(() => WorkoutStatusSchema).array().optional().nullable(),
-  not: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NestedEnumWorkoutStatusNullableWithAggregatesFilterSchema) ]).optional().nullable(),
-  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
-  _min: z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema).optional(),
-  _max: z.lazy(() => NestedEnumWorkoutStatusNullableFilterSchema).optional()
-}).strict();
-
 export const UserCreateWithoutExercisesInputSchema: z.ZodType<Prisma.UserCreateWithoutExercisesInput> = z.object({
   id: z.string().cuid2().optional(),
   name: z.string().optional().nullable(),
@@ -7922,66 +6843,6 @@ export const ExerciseTemplateCreateOrConnectWithoutExerciseInputSchema: z.ZodTyp
 
 export const ExerciseTemplateCreateManyExerciseInputEnvelopeSchema: z.ZodType<Prisma.ExerciseTemplateCreateManyExerciseInputEnvelope> = z.object({
   data: z.union([ z.lazy(() => ExerciseTemplateCreateManyExerciseInputSchema),z.lazy(() => ExerciseTemplateCreateManyExerciseInputSchema).array() ]),
-  skipDuplicates: z.boolean().optional()
-}).strict();
-
-export const MesocycleExerciseTemplateCreateWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateWithoutExerciseInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  mesocycleExerciseSplitDay: z.lazy(() => MesocycleExerciseSplitDayCreateNestedOneWithoutMesocycleSplitDayExercisesInputSchema)
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  mesocycleExerciseSplitDayId: z.string(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable()
-}).strict();
-
-export const MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateOrConnectWithoutExerciseInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateManyExerciseInputEnvelopeSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyExerciseInputEnvelope> = z.object({
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateManyExerciseInputSchema).array() ]),
   skipDuplicates: z.boolean().optional()
 }).strict();
 
@@ -8139,51 +7000,6 @@ export const ExerciseTemplateScalarWhereInputSchema: z.ZodType<Prisma.ExerciseTe
   weightUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
 }).strict();
 
-export const MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutExerciseInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateWithoutExerciseInputSchema) ]),
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutExerciseInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutExerciseInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithoutExerciseInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateWithoutExerciseInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyWithWhereWithoutExerciseInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyMutationInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateScalarWhereInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateScalarWhereInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  sets: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
-  repRangeStart: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  repRangeEnd: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  changeType: z.union([ z.lazy(() => EnumChangeTypeNullableFilterSchema),z.lazy(() => ChangeTypeSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  overloadPercentage: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.lazy(() => BoolNullableFilterSchema),z.boolean() ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-  exerciseId: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
-}).strict();
-
 export const WorkoutExerciseUpsertWithWhereUniqueWithoutExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseUpsertWithWhereUniqueWithoutExerciseInput> = z.object({
   where: z.lazy(() => WorkoutExerciseWhereUniqueInputSchema),
   update: z.union([ z.lazy(() => WorkoutExerciseUpdateWithoutExerciseInputSchema),z.lazy(() => WorkoutExerciseUncheckedUpdateWithoutExerciseInputSchema) ]),
@@ -8274,7 +7090,6 @@ export const ExerciseSplitDayCreateWithoutExerciseSplitInputSchema: z.ZodType<Pr
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exercises: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseSplitDayInputSchema).optional()
 }).strict();
@@ -8283,7 +7098,6 @@ export const ExerciseSplitDayUncheckedCreateWithoutExerciseSplitInputSchema: z.Z
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exercises: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseSplitDayInputSchema).optional()
 }).strict();
@@ -8308,7 +7122,6 @@ export const MesocycleCreateWithoutExerciseSplitInputSchema: z.ZodType<Prisma.Me
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
   user: z.lazy(() => UserCreateNestedOneWithoutMesocyclesInputSchema),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -8323,7 +7136,6 @@ export const MesocycleUncheckedCreateWithoutExerciseSplitInputSchema: z.ZodType<
   startOverloadPercentage: z.number(),
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -8408,7 +7220,6 @@ export const ExerciseSplitDayScalarWhereInputSchema: z.ZodType<Prisma.ExerciseSp
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
   exerciseSplitId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
 }).strict();
@@ -8569,7 +7380,6 @@ export const ExerciseSplitDayCreateWithoutExercisesInputSchema: z.ZodType<Prisma
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutExerciseSplitDaysInputSchema)
 }).strict();
@@ -8578,7 +7388,6 @@ export const ExerciseSplitDayUncheckedCreateWithoutExercisesInputSchema: z.ZodTy
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
   exerciseSplitId: z.string()
 }).strict();
@@ -8602,7 +7411,6 @@ export const ExerciseCreateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -8620,7 +7428,6 @@ export const ExerciseUncheckedCreateWithoutExerciseTemplatesInputSchema: z.ZodTy
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -8644,7 +7451,6 @@ export const ExerciseSplitDayUpdateWithoutExercisesInputSchema: z.ZodType<Prisma
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneRequiredWithoutExerciseSplitDaysNestedInputSchema).optional()
 }).strict();
@@ -8653,7 +7459,6 @@ export const ExerciseSplitDayUncheckedUpdateWithoutExercisesInputSchema: z.ZodTy
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseSplitId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
@@ -8683,7 +7488,6 @@ export const ExerciseUpdateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -8701,7 +7505,6 @@ export const ExerciseUncheckedUpdateWithoutExerciseTemplatesInputSchema: z.ZodTy
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -8765,36 +7568,6 @@ export const ExerciseSplitCreateOrConnectWithoutUsedByMesocyclesInputSchema: z.Z
   create: z.union([ z.lazy(() => ExerciseSplitCreateWithoutUsedByMesocyclesInputSchema),z.lazy(() => ExerciseSplitUncheckedCreateWithoutUsedByMesocyclesInputSchema) ]),
 }).strict();
 
-export const MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateWithoutMesocycleInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutMesocycleExerciseSplitDayInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelopeSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateManyMesocycleInputEnvelope> = z.object({
-  data: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayCreateManyMesocycleInputSchema).array() ]),
-  skipDuplicates: z.boolean().optional()
-}).strict();
-
 export const MesocycleCyclicSetChangeCreateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeCreateWithoutMesocycleInput> = z.object({
   id: z.string().cuid2().optional(),
   muscleGroup: z.lazy(() => MuscleGroupSchema),
@@ -8825,16 +7598,12 @@ export const MesocycleCyclicSetChangeCreateManyMesocycleInputEnvelopeSchema: z.Z
 
 export const WorkoutOfMesocycleCreateWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateWithoutMesocycleInput> = z.object({
   id: z.string().cuid2().optional(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
   workout: z.lazy(() => WorkoutCreateNestedOneWithoutWorkoutOfMesocycleInputSchema)
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedCreateWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedCreateWithoutMesocycleInput> = z.object({
   id: z.string().cuid2().optional(),
-  workoutId: z.string(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable()
+  workoutId: z.string()
 }).strict();
 
 export const WorkoutOfMesocycleCreateOrConnectWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateOrConnectWithoutMesocycleInput> = z.object({
@@ -8919,35 +7688,6 @@ export const ExerciseSplitUncheckedUpdateWithoutUsedByMesocyclesInputSchema: z.Z
   exerciseSplitDays: z.lazy(() => ExerciseSplitDayUncheckedUpdateManyWithoutExerciseSplitNestedInputSchema).optional()
 }).strict();
 
-export const MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpsertWithWhereUniqueWithoutMesocycleInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),
-  update: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleInputSchema) ]),
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateWithWhereUniqueWithoutMesocycleInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithoutMesocycleInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateManyWithWhereWithoutMesocycleInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateManyMutationInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayScalarWhereInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayScalarWhereInput> = z.object({
-  AND: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema),z.lazy(() => MesocycleExerciseSplitDayScalarWhereInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  dayIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
-  isRestDay: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  weightUnit: z.union([ z.lazy(() => EnumRoutineWeightUnitFilterSchema),z.lazy(() => RoutineWeightUnitSchema) ]).optional(),
-  hidden: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
-  mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-}).strict();
-
 export const MesocycleCyclicSetChangeUpsertWithWhereUniqueWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeUpsertWithWhereUniqueWithoutMesocycleInput> = z.object({
   where: z.lazy(() => MesocycleCyclicSetChangeWhereUniqueInputSchema),
   update: z.union([ z.lazy(() => MesocycleCyclicSetChangeUpdateWithoutMesocycleInputSchema),z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateWithoutMesocycleInputSchema) ]),
@@ -9000,8 +7740,6 @@ export const WorkoutOfMesocycleScalarWhereInputSchema: z.ZodType<Prisma.WorkoutO
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   mesocycleId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  splitDayIndex: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => EnumWorkoutStatusNullableFilterSchema),z.lazy(() => WorkoutStatusSchema) ]).optional().nullable(),
 }).strict();
 
 export const MesocycleCreateWithoutMesocycleCyclicSetChangesInputSchema: z.ZodType<Prisma.MesocycleCreateWithoutMesocycleCyclicSetChangesInput> = z.object({
@@ -9015,7 +7753,6 @@ export const MesocycleCreateWithoutMesocycleCyclicSetChangesInputSchema: z.ZodTy
   forceRIRMatching: z.boolean(),
   user: z.lazy(() => UserCreateNestedOneWithoutMesocyclesInputSchema),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
 
@@ -9030,7 +7767,6 @@ export const MesocycleUncheckedCreateWithoutMesocycleCyclicSetChangesInputSchema
   startOverloadPercentage: z.number(),
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
 
@@ -9061,7 +7797,6 @@ export const MesocycleUpdateWithoutMesocycleCyclicSetChangesInputSchema: z.ZodTy
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutMesocyclesNestedInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
 
@@ -9076,304 +7811,7 @@ export const MesocycleUncheckedUpdateWithoutMesocycleCyclicSetChangesInputSchema
   startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleCreateWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleCreateWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  weeklyRIR: z.union([ z.lazy(() => MesocycleCreateweeklyRIRInputSchema),z.number().int().array() ]).optional(),
-  startDate: z.coerce.date().optional().nullable(),
-  endDate: z.coerce.date().optional().nullable(),
-  startOverloadPercentage: z.number(),
-  lastSetToFailure: z.boolean(),
-  forceRIRMatching: z.boolean(),
-  user: z.lazy(() => UserCreateNestedOneWithoutMesocyclesInputSchema),
-  exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema).optional(),
-  mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema).optional(),
-  workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema).optional()
-}).strict();
-
-export const MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  userId: z.string(),
-  exerciseSplitId: z.string().optional().nullable(),
-  weeklyRIR: z.union([ z.lazy(() => MesocycleCreateweeklyRIRInputSchema),z.number().int().array() ]).optional(),
-  startDate: z.coerce.date().optional().nullable(),
-  endDate: z.coerce.date().optional().nullable(),
-  startOverloadPercentage: z.number(),
-  lastSetToFailure: z.boolean(),
-  forceRIRMatching: z.boolean(),
-  mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
-  workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
-}).strict();
-
-export const MesocycleCreateOrConnectWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleCreateOrConnectWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  where: z.lazy(() => MesocycleWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => MesocycleCreateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  exercise: z.lazy(() => ExerciseCreateNestedOneWithoutMesocycleExerciseTemplatesInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  exerciseId: z.string().optional().nullable()
-}).strict();
-
-export const MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateOrConnectWithoutMesocycleExerciseSplitDayInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelopeSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputEnvelope> = z.object({
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputSchema).array() ]),
-  skipDuplicates: z.boolean().optional()
-}).strict();
-
-export const MesocycleUpsertWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleUpsertWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  update: z.union([ z.lazy(() => MesocycleUpdateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedUpdateWithoutMesocycleExerciseSplitDaysInputSchema) ]),
-  create: z.union([ z.lazy(() => MesocycleCreateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedCreateWithoutMesocycleExerciseSplitDaysInputSchema) ]),
-  where: z.lazy(() => MesocycleWhereInputSchema).optional()
-}).strict();
-
-export const MesocycleUpdateToOneWithWhereWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleUpdateToOneWithWhereWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  where: z.lazy(() => MesocycleWhereInputSchema).optional(),
-  data: z.union([ z.lazy(() => MesocycleUpdateWithoutMesocycleExerciseSplitDaysInputSchema),z.lazy(() => MesocycleUncheckedUpdateWithoutMesocycleExerciseSplitDaysInputSchema) ]),
-}).strict();
-
-export const MesocycleUpdateWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleUpdateWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  weeklyRIR: z.union([ z.lazy(() => MesocycleUpdateweeklyRIRInputSchema),z.number().int().array() ]).optional(),
-  startDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  endDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  user: z.lazy(() => UserUpdateOneRequiredWithoutMesocyclesNestedInputSchema).optional(),
-  exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema).optional(),
-  mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema).optional(),
-  workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleUncheckedUpdateWithoutMesocycleExerciseSplitDaysInputSchema: z.ZodType<Prisma.MesocycleUncheckedUpdateWithoutMesocycleExerciseSplitDaysInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseSplitId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weeklyRIR: z.union([ z.lazy(() => MesocycleUpdateweeklyRIRInputSchema),z.number().int().array() ]).optional(),
-  startDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  endDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
-  workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpsertWithWhereUniqueWithoutMesocycleExerciseSplitDayInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  update: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateWithoutMesocycleExerciseSplitDayInputSchema) ]),
-  create: z.union([ z.lazy(() => MesocycleExerciseTemplateCreateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedCreateWithoutMesocycleExerciseSplitDayInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateWithWhereUniqueWithoutMesocycleExerciseSplitDayInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateWhereUniqueInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateWithoutMesocycleExerciseSplitDayInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateWithoutMesocycleExerciseSplitDayInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyWithWhereWithoutMesocycleExerciseSplitDayInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseTemplateScalarWhereInputSchema),
-  data: z.union([ z.lazy(() => MesocycleExerciseTemplateUpdateManyMutationInputSchema),z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycle: z.lazy(() => MesocycleCreateNestedOneWithoutMesocycleExerciseSplitDaysInputSchema)
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional(),
-  mesocycleId: z.string()
-}).strict();
-
-export const MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateOrConnectWithoutMesocycleSplitDayExercisesInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInputSchema) ]),
-}).strict();
-
-export const ExerciseCreateWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseCreateWithoutMesocycleExerciseTemplatesInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  repsOnly: z.boolean().optional(),
-  maxReps: z.number().int().optional().nullable(),
-  levelsFrom: z.number().optional().nullable(),
-  levelsTo: z.number().optional().nullable(),
-  levelStep: z.number().optional().nullable(),
-  archived: z.boolean().optional(),
-  user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
-  workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
-}).strict();
-
-export const ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  repsOnly: z.boolean().optional(),
-  maxReps: z.number().int().optional().nullable(),
-  levelsFrom: z.number().optional().nullable(),
-  levelsTo: z.number().optional().nullable(),
-  levelStep: z.number().optional().nullable(),
-  archived: z.boolean().optional(),
-  userId: z.string(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
-  workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
-}).strict();
-
-export const ExerciseCreateOrConnectWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseCreateOrConnectWithoutMesocycleExerciseTemplatesInput> = z.object({
-  where: z.lazy(() => ExerciseWhereUniqueInputSchema),
-  create: z.union([ z.lazy(() => ExerciseCreateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayUpsertWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpsertWithoutMesocycleSplitDayExercisesInput> = z.object({
-  update: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleSplitDayExercisesInputSchema) ]),
-  create: z.union([ z.lazy(() => MesocycleExerciseSplitDayCreateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateWithoutMesocycleSplitDayExercisesInputSchema) ]),
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateToOneWithWhereWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateToOneWithWhereWithoutMesocycleSplitDayExercisesInput> = z.object({
-  where: z.lazy(() => MesocycleExerciseSplitDayWhereInputSchema).optional(),
-  data: z.union([ z.lazy(() => MesocycleExerciseSplitDayUpdateWithoutMesocycleSplitDayExercisesInputSchema),z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleSplitDayExercisesInputSchema) ]),
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateWithoutMesocycleSplitDayExercisesInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycle: z.lazy(() => MesocycleUpdateOneRequiredWithoutMesocycleExerciseSplitDaysNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleSplitDayExercisesInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleSplitDayExercisesInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-}).strict();
-
-export const ExerciseUpsertWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseUpsertWithoutMesocycleExerciseTemplatesInput> = z.object({
-  update: z.union([ z.lazy(() => ExerciseUpdateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedUpdateWithoutMesocycleExerciseTemplatesInputSchema) ]),
-  create: z.union([ z.lazy(() => ExerciseCreateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedCreateWithoutMesocycleExerciseTemplatesInputSchema) ]),
-  where: z.lazy(() => ExerciseWhereInputSchema).optional()
-}).strict();
-
-export const ExerciseUpdateToOneWithWhereWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseUpdateToOneWithWhereWithoutMesocycleExerciseTemplatesInput> = z.object({
-  where: z.lazy(() => ExerciseWhereInputSchema).optional(),
-  data: z.union([ z.lazy(() => ExerciseUpdateWithoutMesocycleExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedUpdateWithoutMesocycleExerciseTemplatesInputSchema) ]),
-}).strict();
-
-export const ExerciseUpdateWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseUpdateWithoutMesocycleExerciseTemplatesInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  repsOnly: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  maxReps: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelsFrom: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelsTo: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
-}).strict();
-
-export const ExerciseUncheckedUpdateWithoutMesocycleExerciseTemplatesInputSchema: z.ZodType<Prisma.ExerciseUncheckedUpdateWithoutMesocycleExerciseTemplatesInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  repsOnly: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  maxReps: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelsFrom: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelsTo: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
 export const AccountCreateWithoutUserInputSchema: z.ZodType<Prisma.AccountCreateWithoutUserInput> = z.object({
@@ -9469,7 +7907,6 @@ export const MesocycleCreateWithoutUserInputSchema: z.ZodType<Prisma.MesocycleCr
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -9484,7 +7921,6 @@ export const MesocycleUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.Me
   startOverloadPercentage: z.number(),
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
@@ -9596,7 +8032,6 @@ export const ExerciseCreateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseCrea
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -9614,7 +8049,6 @@ export const ExerciseUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
@@ -10245,7 +8679,6 @@ export const MesocycleCreateWithoutWorkoutsOfMesocycleInputSchema: z.ZodType<Pri
   forceRIRMatching: z.boolean(),
   user: z.lazy(() => UserCreateNestedOneWithoutMesocyclesInputSchema),
   exerciseSplit: z.lazy(() => ExerciseSplitCreateNestedOneWithoutUsedByMesocyclesInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
 
@@ -10260,7 +8693,6 @@ export const MesocycleUncheckedCreateWithoutWorkoutsOfMesocycleInputSchema: z.Zo
   startOverloadPercentage: z.number(),
   lastSetToFailure: z.boolean(),
   forceRIRMatching: z.boolean(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedCreateNestedManyWithoutMesocycleInputSchema).optional()
 }).strict();
 
@@ -10326,7 +8758,6 @@ export const MesocycleUpdateWithoutWorkoutsOfMesocycleInputSchema: z.ZodType<Pri
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutMesocyclesNestedInputSchema).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
 
@@ -10341,7 +8772,6 @@ export const MesocycleUncheckedUpdateWithoutWorkoutsOfMesocycleInputSchema: z.Zo
   startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
 
@@ -10388,16 +8818,12 @@ export const UserCreateOrConnectWithoutWorkoutsInputSchema: z.ZodType<Prisma.Use
 
 export const WorkoutOfMesocycleCreateWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateWithoutWorkoutInput> = z.object({
   id: z.string().cuid2().optional(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable(),
   mesocycle: z.lazy(() => MesocycleCreateNestedOneWithoutWorkoutsOfMesocycleInputSchema)
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedCreateWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedCreateWithoutWorkoutInput> = z.object({
   id: z.string().cuid2().optional(),
-  mesocycleId: z.string(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable()
+  mesocycleId: z.string()
 }).strict();
 
 export const WorkoutOfMesocycleCreateOrConnectWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateOrConnectWithoutWorkoutInput> = z.object({
@@ -10527,16 +8953,12 @@ export const WorkoutOfMesocycleUpdateToOneWithWhereWithoutWorkoutInputSchema: z.
 
 export const WorkoutOfMesocycleUpdateWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUpdateWithoutWorkoutInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mesocycle: z.lazy(() => MesocycleUpdateOneRequiredWithoutWorkoutsOfMesocycleNestedInputSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedUpdateWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedUpdateWithoutWorkoutInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mesocycleId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutExerciseUpsertWithWhereUniqueWithoutWorkoutInputSchema: z.ZodType<Prisma.WorkoutExerciseUpsertWithWhereUniqueWithoutWorkoutInput> = z.object({
@@ -10628,8 +9050,7 @@ export const ExerciseCreateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional()
+  exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
 export const ExerciseUncheckedCreateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.ExerciseUncheckedCreateWithoutWorkoutExercisesInput> = z.object({
@@ -10646,8 +9067,7 @@ export const ExerciseUncheckedCreateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   levelStep: z.number().optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
+  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
 }).strict();
 
 export const ExerciseCreateOrConnectWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.ExerciseCreateOrConnectWithoutWorkoutExercisesInput> = z.object({
@@ -10744,8 +9164,7 @@ export const ExerciseUpdateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional()
+  exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
 export const ExerciseUncheckedUpdateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.ExerciseUncheckedUpdateWithoutWorkoutExercisesInput> = z.object({
@@ -10762,8 +9181,7 @@ export const ExerciseUncheckedUpdateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
+  exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
 export const WorkoutExerciseCreateWithoutSetsInputSchema: z.ZodType<Prisma.WorkoutExerciseCreateWithoutSetsInput> = z.object({
@@ -11021,31 +9439,6 @@ export const ExerciseTemplateCreateManyExerciseInputSchema: z.ZodType<Prisma.Exe
   weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable()
 }).strict();
 
-export const MesocycleExerciseTemplateCreateManyExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyExerciseInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  mesocycleExerciseSplitDayId: z.string(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable()
-}).strict();
-
 export const WorkoutExerciseCreateManyExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseCreateManyExerciseInput> = z.object({
   id: z.string().cuid2().optional(),
   exerciseIndex: z.number().int(),
@@ -11146,81 +9539,6 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseInputSchema: z.Zo
   weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
-export const MesocycleExerciseTemplateUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateWithoutExerciseInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDay: z.lazy(() => MesocycleExerciseSplitDayUpdateOneRequiredWithoutMesocycleSplitDayExercisesNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateWithoutExerciseInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  mesocycleExerciseSplitDayId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
 export const WorkoutExerciseUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseUpdateWithoutExerciseInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
@@ -11302,7 +9620,6 @@ export const ExerciseSplitDayCreateManyExerciseSplitInputSchema: z.ZodType<Prism
   id: z.string().cuid2().optional(),
   name: z.string(),
   dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
   weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional()
 }).strict();
 
@@ -11322,7 +9639,6 @@ export const ExerciseSplitDayUpdateWithoutExerciseSplitInputSchema: z.ZodType<Pr
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseSplitDayNestedInputSchema).optional()
 }).strict();
@@ -11331,7 +9647,6 @@ export const ExerciseSplitDayUncheckedUpdateWithoutExerciseSplitInputSchema: z.Z
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
   exercises: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseSplitDayNestedInputSchema).optional()
 }).strict();
@@ -11340,7 +9655,6 @@ export const ExerciseSplitDayUncheckedUpdateManyWithoutExerciseSplitInputSchema:
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -11354,7 +9668,6 @@ export const MesocycleUpdateWithoutExerciseSplitInputSchema: z.ZodType<Prisma.Me
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutMesocyclesNestedInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -11369,7 +9682,6 @@ export const MesocycleUncheckedUpdateWithoutExerciseSplitInputSchema: z.ZodType<
   startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -11486,15 +9798,6 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseSplitDayInputSche
   weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
-export const MesocycleExerciseSplitDayCreateManyMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateManyMesocycleInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  dayIndex: z.number().int(),
-  isRestDay: z.boolean(),
-  weightUnit: z.lazy(() => RoutineWeightUnitSchema).optional(),
-  hidden: z.boolean().optional()
-}).strict();
-
 export const MesocycleCyclicSetChangeCreateManyMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeCreateManyMesocycleInput> = z.object({
   id: z.string().cuid2().optional(),
   muscleGroup: z.lazy(() => MuscleGroupSchema),
@@ -11506,38 +9809,7 @@ export const MesocycleCyclicSetChangeCreateManyMesocycleInputSchema: z.ZodType<P
 
 export const WorkoutOfMesocycleCreateManyMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleCreateManyMesocycleInput> = z.object({
   id: z.string().cuid2().optional(),
-  workoutId: z.string(),
-  splitDayIndex: z.number().int().optional().nullable(),
-  workoutStatus: z.lazy(() => WorkoutStatusSchema).optional().nullable()
-}).strict();
-
-export const MesocycleExerciseSplitDayUpdateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateWithoutMesocycleInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateWithoutMesocycleInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleSplitDayExercises: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  dayIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  isRestDay: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  weightUnit: z.union([ z.lazy(() => RoutineWeightUnitSchema),z.lazy(() => EnumRoutineWeightUnitFieldUpdateOperationsInputSchema) ]).optional(),
-  hidden: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  workoutId: z.string()
 }).strict();
 
 export const MesocycleCyclicSetChangeUpdateWithoutMesocycleInputSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeUpdateWithoutMesocycleInput> = z.object({
@@ -11569,123 +9841,17 @@ export const MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleInputSch
 
 export const WorkoutOfMesocycleUpdateWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUpdateWithoutMesocycleInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   workout: z.lazy(() => WorkoutUpdateOneRequiredWithoutWorkoutOfMesocycleNestedInputSchema).optional()
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedUpdateWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedUpdateWithoutMesocycleInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleInputSchema: z.ZodType<Prisma.WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleInput> = z.object({
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  splitDayIndex: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  workoutStatus: z.union([ z.lazy(() => WorkoutStatusSchema),z.lazy(() => NullableEnumWorkoutStatusFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyMesocycleExerciseSplitDayInput> = z.object({
-  id: z.string().cuid2().optional(),
-  name: z.string(),
-  exerciseIndex: z.number().int(),
-  targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
-  customMuscleGroup: z.string().optional().nullable(),
-  bodyweightFraction: z.number().optional().nullable(),
-  sets: z.number().int(),
-  setType: z.lazy(() => SetTypeSchema),
-  repRangeStart: z.number().int(),
-  repRangeEnd: z.number().int(),
-  changeType: z.lazy(() => ChangeTypeSchema).optional().nullable(),
-  changeAmount: z.number().optional().nullable(),
-  note: z.string().optional().nullable(),
-  overloadPercentage: z.number().optional().nullable(),
-  lastSetToFailure: z.boolean().optional().nullable(),
-  forceRIRMatching: z.boolean().optional().nullable(),
-  minimumWeightChange: z.number().optional().nullable(),
-  topRepRangeStart: z.number().int().optional().nullable(),
-  topRepRangeEnd: z.number().int().optional().nullable(),
-  weightUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
-  weightSetId: z.string().optional().nullable(),
-  exerciseId: z.string().optional().nullable()
-}).strict();
-
-export const MesocycleExerciseTemplateUpdateWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateWithoutMesocycleExerciseSplitDayInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  exercise: z.lazy(() => ExerciseUpdateOneWithoutMesocycleExerciseTemplatesNestedInputSchema).optional()
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateWithoutMesocycleExerciseSplitDayInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  exerciseId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-}).strict();
-
-export const MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayInputSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUncheckedUpdateManyWithoutMesocycleExerciseSplitDayInput> = z.object({
-  id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
-  customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  sets: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeStart: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  repRangeEnd: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
-  changeType: z.union([ z.lazy(() => ChangeTypeSchema),z.lazy(() => NullableEnumChangeTypeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  changeAmount: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  overloadPercentage: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  lastSetToFailure: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  forceRIRMatching: z.union([ z.boolean(),z.lazy(() => NullableBoolFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  minimumWeightChange: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeStart: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  topRepRangeEnd: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  weightSetId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
-  exerciseId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const AccountCreateManyUserInputSchema: z.ZodType<Prisma.AccountCreateManyUserInput> = z.object({
@@ -11831,7 +9997,6 @@ export const MesocycleUpdateWithoutUserInputSchema: z.ZodType<Prisma.MesocycleUp
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseSplit: z.lazy(() => ExerciseSplitUpdateOneWithoutUsedByMesocyclesNestedInputSchema).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -11846,7 +10011,6 @@ export const MesocycleUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.Me
   startOverloadPercentage: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   lastSetToFailure: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   forceRIRMatching: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
-  mesocycleExerciseSplitDays: z.lazy(() => MesocycleExerciseSplitDayUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   mesocycleCyclicSetChanges: z.lazy(() => MesocycleCyclicSetChangeUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional(),
   workoutsOfMesocycle: z.lazy(() => WorkoutOfMesocycleUncheckedUpdateManyWithoutMesocycleNestedInputSchema).optional()
 }).strict();
@@ -11935,7 +10099,6 @@ export const ExerciseUpdateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseUpda
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -11953,7 +10116,6 @@ export const ExerciseUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   levelStep: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
-  mesocycleExerciseTemplates: z.lazy(() => MesocycleExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
 }).strict();
 
@@ -12518,130 +10680,6 @@ export const MesocycleCyclicSetChangeFindUniqueOrThrowArgsSchema: z.ZodType<Pris
   select: MesocycleCyclicSetChangeSelectSchema.optional(),
   include: MesocycleCyclicSetChangeIncludeSchema.optional(),
   where: MesocycleCyclicSetChangeWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseSplitDayFindFirstArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayFindFirstArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseSplitDayOrderByWithRelationInputSchema.array(),MesocycleExerciseSplitDayOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseSplitDayWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseSplitDayScalarFieldEnumSchema,MesocycleExerciseSplitDayScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayFindFirstOrThrowArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayFindFirstOrThrowArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseSplitDayOrderByWithRelationInputSchema.array(),MesocycleExerciseSplitDayOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseSplitDayWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseSplitDayScalarFieldEnumSchema,MesocycleExerciseSplitDayScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayFindManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayFindManyArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseSplitDayOrderByWithRelationInputSchema.array(),MesocycleExerciseSplitDayOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseSplitDayWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseSplitDayScalarFieldEnumSchema,MesocycleExerciseSplitDayScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayAggregateArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayAggregateArgs> = z.object({
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseSplitDayOrderByWithRelationInputSchema.array(),MesocycleExerciseSplitDayOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseSplitDayWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayGroupByArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayGroupByArgs> = z.object({
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseSplitDayOrderByWithAggregationInputSchema.array(),MesocycleExerciseSplitDayOrderByWithAggregationInputSchema ]).optional(),
-  by: MesocycleExerciseSplitDayScalarFieldEnumSchema.array(),
-  having: MesocycleExerciseSplitDayScalarWhereWithAggregatesInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayFindUniqueArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayFindUniqueArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseSplitDayFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayFindUniqueOrThrowArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseTemplateFindFirstArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateFindFirstArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseTemplateOrderByWithRelationInputSchema.array(),MesocycleExerciseTemplateOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseTemplateWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseTemplateScalarFieldEnumSchema,MesocycleExerciseTemplateScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateFindFirstOrThrowArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateFindFirstOrThrowArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseTemplateOrderByWithRelationInputSchema.array(),MesocycleExerciseTemplateOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseTemplateWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseTemplateScalarFieldEnumSchema,MesocycleExerciseTemplateScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateFindManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateFindManyArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseTemplateOrderByWithRelationInputSchema.array(),MesocycleExerciseTemplateOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseTemplateWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-  distinct: z.union([ MesocycleExerciseTemplateScalarFieldEnumSchema,MesocycleExerciseTemplateScalarFieldEnumSchema.array() ]).optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateAggregateArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateAggregateArgs> = z.object({
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseTemplateOrderByWithRelationInputSchema.array(),MesocycleExerciseTemplateOrderByWithRelationInputSchema ]).optional(),
-  cursor: MesocycleExerciseTemplateWhereUniqueInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateGroupByArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateGroupByArgs> = z.object({
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-  orderBy: z.union([ MesocycleExerciseTemplateOrderByWithAggregationInputSchema.array(),MesocycleExerciseTemplateOrderByWithAggregationInputSchema ]).optional(),
-  by: MesocycleExerciseTemplateScalarFieldEnumSchema.array(),
-  having: MesocycleExerciseTemplateScalarWhereWithAggregatesInputSchema.optional(),
-  take: z.number().optional(),
-  skip: z.number().optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateFindUniqueArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateFindUniqueArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseTemplateFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateFindUniqueOrThrowArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereUniqueInputSchema,
 }).strict() ;
 
 export const UserFindFirstArgsSchema: z.ZodType<Prisma.UserFindFirstArgs> = z.object({
@@ -13595,98 +11633,6 @@ export const MesocycleCyclicSetChangeUpdateManyArgsSchema: z.ZodType<Prisma.Meso
 
 export const MesocycleCyclicSetChangeDeleteManyArgsSchema: z.ZodType<Prisma.MesocycleCyclicSetChangeDeleteManyArgs> = z.object({
   where: MesocycleCyclicSetChangeWhereInputSchema.optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayCreateArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  data: z.union([ MesocycleExerciseSplitDayCreateInputSchema,MesocycleExerciseSplitDayUncheckedCreateInputSchema ]),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayUpsertArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpsertArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereUniqueInputSchema,
-  create: z.union([ MesocycleExerciseSplitDayCreateInputSchema,MesocycleExerciseSplitDayUncheckedCreateInputSchema ]),
-  update: z.union([ MesocycleExerciseSplitDayUpdateInputSchema,MesocycleExerciseSplitDayUncheckedUpdateInputSchema ]),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayCreateManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateManyArgs> = z.object({
-  data: z.union([ MesocycleExerciseSplitDayCreateManyInputSchema,MesocycleExerciseSplitDayCreateManyInputSchema.array() ]),
-  skipDuplicates: z.boolean().optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayCreateManyAndReturnArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayCreateManyAndReturnArgs> = z.object({
-  data: z.union([ MesocycleExerciseSplitDayCreateManyInputSchema,MesocycleExerciseSplitDayCreateManyInputSchema.array() ]),
-  skipDuplicates: z.boolean().optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayDeleteArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayDeleteArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  where: MesocycleExerciseSplitDayWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseSplitDayUpdateArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateArgs> = z.object({
-  select: MesocycleExerciseSplitDaySelectSchema.optional(),
-  include: MesocycleExerciseSplitDayIncludeSchema.optional(),
-  data: z.union([ MesocycleExerciseSplitDayUpdateInputSchema,MesocycleExerciseSplitDayUncheckedUpdateInputSchema ]),
-  where: MesocycleExerciseSplitDayWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseSplitDayUpdateManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayUpdateManyArgs> = z.object({
-  data: z.union([ MesocycleExerciseSplitDayUpdateManyMutationInputSchema,MesocycleExerciseSplitDayUncheckedUpdateManyInputSchema ]),
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-}).strict() ;
-
-export const MesocycleExerciseSplitDayDeleteManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseSplitDayDeleteManyArgs> = z.object({
-  where: MesocycleExerciseSplitDayWhereInputSchema.optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateCreateArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  data: z.union([ MesocycleExerciseTemplateCreateInputSchema,MesocycleExerciseTemplateUncheckedCreateInputSchema ]),
-}).strict() ;
-
-export const MesocycleExerciseTemplateUpsertArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpsertArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereUniqueInputSchema,
-  create: z.union([ MesocycleExerciseTemplateCreateInputSchema,MesocycleExerciseTemplateUncheckedCreateInputSchema ]),
-  update: z.union([ MesocycleExerciseTemplateUpdateInputSchema,MesocycleExerciseTemplateUncheckedUpdateInputSchema ]),
-}).strict() ;
-
-export const MesocycleExerciseTemplateCreateManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyArgs> = z.object({
-  data: z.union([ MesocycleExerciseTemplateCreateManyInputSchema,MesocycleExerciseTemplateCreateManyInputSchema.array() ]),
-  skipDuplicates: z.boolean().optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateCreateManyAndReturnArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateCreateManyAndReturnArgs> = z.object({
-  data: z.union([ MesocycleExerciseTemplateCreateManyInputSchema,MesocycleExerciseTemplateCreateManyInputSchema.array() ]),
-  skipDuplicates: z.boolean().optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateDeleteArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateDeleteArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  where: MesocycleExerciseTemplateWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseTemplateUpdateArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateArgs> = z.object({
-  select: MesocycleExerciseTemplateSelectSchema.optional(),
-  include: MesocycleExerciseTemplateIncludeSchema.optional(),
-  data: z.union([ MesocycleExerciseTemplateUpdateInputSchema,MesocycleExerciseTemplateUncheckedUpdateInputSchema ]),
-  where: MesocycleExerciseTemplateWhereUniqueInputSchema,
-}).strict() ;
-
-export const MesocycleExerciseTemplateUpdateManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateUpdateManyArgs> = z.object({
-  data: z.union([ MesocycleExerciseTemplateUpdateManyMutationInputSchema,MesocycleExerciseTemplateUncheckedUpdateManyInputSchema ]),
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
-}).strict() ;
-
-export const MesocycleExerciseTemplateDeleteManyArgsSchema: z.ZodType<Prisma.MesocycleExerciseTemplateDeleteManyArgs> = z.object({
-  where: MesocycleExerciseTemplateWhereInputSchema.optional(),
 }).strict() ;
 
 export const UserCreateArgsSchema: z.ZodType<Prisma.UserCreateArgs> = z.object({

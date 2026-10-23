@@ -26,7 +26,8 @@
 			ExerciseSplitCreateWithoutUserInputSchema.parse(split);
 
 			exerciseSplitDays.forEach((data: { [x: string]: unknown; exercises: unknown[] }) => {
-				const { exercises, ...splitDay } = data;
+				// Files exported before rest days went say whether each one is (addToMyRoutines leaves those out)
+				const { exercises, isRestDay, ...splitDay } = data;
 				ExerciseSplitDayCreateWithoutExerciseSplitInputSchema.parse(splitDay);
 
 				exercises.forEach((data) => {

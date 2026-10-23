@@ -19,7 +19,7 @@
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	const performedWorkouts = $derived(mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null));
+	const performedWorkouts = $derived(mesocycle.workoutsOfMesocycle);
 	const plannedWeeks = $derived(mesocycle.weeklyRIR.length);
 	const weeksDone = $derived.by(() => {
 		if (!mesocycle.startDate) return 0;
@@ -37,7 +37,7 @@
 	const setsPerformedPerMuscleGroup = $derived(getSetsPerformedPerMuscleGroup(mesocycle.workoutsOfMesocycle));
 </script>
 
-{#if mesocycle.workoutsOfMesocycle.filter((wm) => wm.workoutStatus === null).length}
+{#if mesocycle.workoutsOfMesocycle.length}
 	<div class="grid grid-cols-2 gap-1">
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">

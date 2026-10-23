@@ -23,9 +23,8 @@ model Exercise {
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId             String
 
-  exerciseTemplates          ExerciseTemplate[]
-  mesocycleExerciseTemplates MesocycleExerciseTemplate[]
-  workoutExercises           WorkoutExercise[]
+  exerciseTemplates ExerciseTemplate[]
+  workoutExercises  WorkoutExercise[]
 
   @@unique([userId, name])
 }

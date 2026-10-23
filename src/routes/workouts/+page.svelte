@@ -233,9 +233,7 @@
 	{/await}
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
 		{#each workouts as workout}
-			{@const { workoutOfMesocycle } = workout}
-			{@const status = workoutOfMesocycle?.workoutStatus ?? null}
-			<!-- Date and name, then length and volume. Skipped and rest days (only in old history) say so -->
+			<!-- Date and name, then length and volume -->
 			<Button
 				class="flex h-auto flex-col items-stretch gap-0.5 rounded-md border bg-card p-2 font-normal"
 				href="/workouts/{workout.id}"
@@ -252,24 +250,14 @@
 						{#if workout.note}
 							<StickyNoteIcon class="shrink-0" />
 						{/if}
-						<span class="truncate" data-testid="workout-name">
-							{#if status === 'RestDay'}
-								Rest
-							{:else}
-								{workoutName(workout)}{status === 'Skipped' ? ' (skipped)' : ''}
-							{/if}
-						</span>
+						<span class="truncate" data-testid="workout-name">{workoutName(workout)}</span>
 					</span>
 				</span>
 				<span class="flex gap-4 text-sm text-muted-foreground">
-					{#if status === null}
-						<span data-testid="workout-length">{formatWorkoutLength(workout.startedAt, workout.endedAt)}</span>
-						<span data-testid="workout-volume">
-							Volume <span class="font-medium text-foreground">{formatVolume(workout.volume)}</span>
-						</span>
-					{:else}
-						<span>{status === 'RestDay' ? 'Rest day' : 'Skipped'}</span>
-					{/if}
+					<span data-testid="workout-length">{formatWorkoutLength(workout.startedAt, workout.endedAt)}</span>
+					<span data-testid="workout-volume">
+						Volume <span class="font-medium text-foreground">{formatVolume(workout.volume)}</span>
+					</span>
 				</span>
 			</Button>
 		{/each}

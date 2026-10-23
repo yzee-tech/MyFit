@@ -14,14 +14,7 @@ export const load = async (event) => {
 			userId: session.user?.id,
 			startedAt: { gte: oneYearAgo }
 		},
-		select: {
-			startedAt: true,
-			workoutOfMesocycle: {
-				select: {
-					workoutStatus: true
-				}
-			}
-		},
+		select: { startedAt: true },
 		orderBy: { startedAt: 'asc' }
 	});
 

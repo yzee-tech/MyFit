@@ -12,7 +12,6 @@ model ExerciseSplitDay {
   id              String             @id @default(cuid()) /// @zod.string.cuid2()
   name            String
   dayIndex        Int
-  isRestDay       Boolean
   weightUnit      RoutineWeightUnit  @default(KG)
   exercises       ExerciseTemplate[]
   exerciseSplit   ExerciseSplit      @relation(fields: [exerciseSplitId], references: [id], onDelete: Cascade)

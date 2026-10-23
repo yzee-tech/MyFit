@@ -8,17 +8,9 @@ const prisma = new PrismaClient();
 const day = (page: Page, idx: number) => page.getByTestId(`week-day-${idx}`);
 
 /** A saved workout at a moment */
-async function seedWorkout(userId: string, startedAt: Date, mesocycle?: { id: string; skipped: true }) {
+async function seedWorkout(userId: string, startedAt: Date) {
 	await prisma.workout.create({
-		data: {
-			userId,
-			userBodyweight: 80,
-			startedAt,
-			endedAt: new Date(startedAt.getTime() + 45 * 60000),
-			...(mesocycle && {
-				workoutOfMesocycle: { create: { mesocycleId: mesocycle.id, workoutStatus: 'Skipped' } }
-			})
-		}
+		data: { userId, userBodyweight: 80, startedAt, endedAt: new Date(startedAt.getTime() + 45 * 60000) }
 	});
 }
 
@@ -26,7 +18,6 @@ test('Dashboard: this week Sunday to Saturday, a check on each day with a workou
 	const userId = userData.userId;
 	await page.goto('/exercise-splits');
 	await createMesocycle(page);
-	const mesocycle = await prisma.mesocycle.findFirstOrThrow({ where: { userId } });
 	await prisma.workout.deleteMany({ where: { userId } });
 
 	// The page's clock stays at midday today, so passing midnight during the test can't move the days
@@ -50,8 +41,6 @@ test('Dashboard: this week Sunday to Saturday, a check on each day with a workou
 	const after = new Date(week.to);
 	after.setMinutes(10);
 	await seedWorkout(userId, after);
-	// An old skipped day of a block isn't a workout done
-	await seedWorkout(userId, at(5, 9), { id: mesocycle.id, skipped: true });
 
 	await page.goto('/dashboard');
 	await expect(page.getByRole('heading', { level: 2 })).toHaveText('Dashboard');
