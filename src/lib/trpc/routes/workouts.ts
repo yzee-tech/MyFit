@@ -1,9 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { resolveExerciseUnit } from '$lib/utils/weightUnits';
-import { ownUnit, routineChanges } from '$lib/utils/routineChanges';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
-import { withRoutinesTransaction } from '$lib/server/blockCache';
 import { routineSetCount } from '$lib/utils/routineSets';
 import {
 	comparablePerformances,
@@ -179,9 +177,7 @@ const createWorkoutSchema = z.strictObject({
 	workoutData: workoutInputDataSchema,
 	workoutExercises: z.array(ignoreExerciseLink(WorkoutExerciseCreateWithoutWorkoutInputSchema)),
 	workoutExercisesSets: z.array(z.array(WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema)),
-	workoutExercisesMiniSets: z.array(z.array(z.array(WorkoutExerciseMiniSetCreateWithoutParentSetInputSchema))),
-	/** Also save the workout's changes to its routine in My routines (the block follows) */
-	updateRoutine: z.boolean().optional()
+	workoutExercisesMiniSets: z.array(z.array(z.array(WorkoutExerciseMiniSetCreateWithoutParentSetInputSchema)))
 });
 
 /**
@@ -192,17 +188,6 @@ function routineNameOf(workoutData: z.infer<typeof workoutInputDataSchema>) {
 	return workoutData.routineName ?? workoutData.workoutOfMesocycle?.splitDayName ?? null;
 }
 
-/** The routine in My routines a workout is from (by name), if it's still there */
-async function findWorkoutRoutine(userId: string, routineName: string | null) {
-	if (routineName === null) return null;
-	return prisma.exerciseSplitDay.findFirst({
-		where: { exerciseSplit: { userId }, name: routineName },
-		include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
-	});
-}
-
-type WorkoutRoutine = NonNullable<Awaited<ReturnType<typeof findWorkoutRoutine>>>;
-
 /** A new workout's end time: the one given (its last ticked set), kept between its start and now */
 function newWorkoutEnd(startedAt: Date, endedAt: Date | string | undefined) {
 	const now = new Date();
@@ -210,45 +195,6 @@ function newWorkoutEnd(startedAt: Date, endedAt: Date | string | undefined) {
 	const end = new Date(endedAt);
 	if (isNaN(end.getTime())) return now;
 	return new Date(Math.min(Math.max(end.getTime(), startedAt.getTime()), now.getTime()));
-}
-
-/** A routine's exercises as a plan, each with its set count (the usual 3 where none is set) */
-function routinePlan(routine: WorkoutRoutine) {
-	return routine.exercises.map((exercise) => ({ ...exercise, sets: routineSetCount(exercise.sets) }));
-}
-
-/**
- * The routine as this workout did it: its exercises in order, each with the sets done (skipped ones
- * too: skipping keeps the plan; in a deload, the routine's own counts) and its settings. "Ask each time" routines keep their own weight sets
- * and units, as those are picked again each workout.
- */
-function workoutAsRoutine(input: z.infer<typeof createWorkoutSchema>, routine: WorkoutRoutine, deload: boolean) {
-	const plan = routinePlan(routine);
-	const routineWeightSetIds = new Map(plan.map((ex) => [ex.name, ex.weightSetId]));
-	// A deload halves the sets on purpose: the routine keeps its own counts
-	const routineSets = new Map(plan.map((ex) => [ex.name, ex.sets]));
-	return input.workoutExercises.map((ex, exerciseIndex) => ({
-		name: ex.name,
-		exerciseIndex,
-		targetMuscleGroup: ex.targetMuscleGroup,
-		customMuscleGroup: ex.customMuscleGroup ?? null,
-		bodyweightFraction: ex.bodyweightFraction ?? null,
-		sets: (deload ? routineSets.get(ex.name) : undefined) ?? input.workoutExercisesSets[exerciseIndex]?.length ?? 0,
-		setType: ex.setType,
-		repRangeStart: ex.repRangeStart,
-		repRangeEnd: ex.repRangeEnd,
-		topRepRangeStart: ex.topRepRangeStart ?? null,
-		topRepRangeEnd: ex.topRepRangeEnd ?? null,
-		changeType: ex.changeType ?? null,
-		changeAmount: ex.changeAmount ?? null,
-		note: ex.note ?? null,
-		overloadPercentage: ex.overloadPercentage ?? null,
-		lastSetToFailure: ex.lastSetToFailure ?? null,
-		forceRIRMatching: ex.forceRIRMatching ?? null,
-		minimumWeightChange: ex.minimumWeightChange ?? null,
-		weightUnit: ownUnit(ex.weightUnit, routine.weightUnit),
-		weightSetId: routine.weightUnit === 'ASK' ? (routineWeightSetIds.get(ex.name) ?? null) : (ex.weightSetId ?? null)
-	}));
 }
 
 /**
@@ -726,27 +672,6 @@ export const workouts = t.router({
 			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets, previous };
 		}),
 
-	/**
-	 * What a new workout changed about its routine's plan, for the "Update routine?" prompt. Read-only:
-	 * a mutation only so the whole workout is POSTed rather than packed into a URL.
-	 */
-	previewRoutineChanges: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
-		const { workoutOfMesocycle } = input.workoutData;
-		// A blank workout has no routine
-		if (!workoutOfMesocycle && !routineNameOf(input.workoutData)) return null;
-		const routine = await findWorkoutRoutine(ctx.userId, routineNameOf(input.workoutData));
-		// Removed from My routines during the workout: nothing to update
-		if (!routine) return null;
-		const deload = workoutOfMesocycle
-			? await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycle.id, input.workoutData.startedAt ?? new Date())
-			: false;
-		const changes = routineChanges(routinePlan(routine), workoutAsRoutine(input, routine, deload), {
-			routineUnit: routine.weightUnit,
-			deload
-		});
-		return { routineName: routine.name, changes };
-	}),
-
 	create: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
 		const startedAt = new Date(input.workoutData.startedAt ?? new Date());
 		const routineName = routineNameOf(input.workoutData);
@@ -775,7 +700,7 @@ export const workouts = t.router({
 		}
 
 		// Exercises as they are: their details change only on the Exercises page
-		const { byName, syncQueries, restoreIds } = await resolveExercises(ctx.userId, input.workoutExercises, {
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.workoutExercises, {
 			restore: false
 		});
 		const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.workoutExercises.map((ex) => ({
@@ -814,29 +739,7 @@ export const workouts = t.router({
 			...syncQueries
 		];
 
-		// Only when chosen: the routine in My routines becomes what this workout did, and the block follows
-		const routine = input.updateRoutine ? await findWorkoutRoutine(ctx.userId, routineName) : null;
-		if (!routine) {
-			await prisma.$transaction(transactionQueries);
-			return { message: 'Workout created successfully', workoutId: workout.id as string };
-		}
-
-		const plan = workoutAsRoutine(input, routine, workout.isDeload ?? false).map((exercise) =>
-			linkToExercise(exercise, byName)
-		);
-		await withRoutinesTransaction(async (tx) => {
-			await tx.workout.create({ data: workout });
-			await tx.workoutExercise.createMany({ data: workoutExercises });
-			await tx.workoutExerciseSet.createMany({ data: workoutExercisesSets });
-			await tx.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets });
-			if (restoreIds.length > 0) {
-				await tx.exercise.updateMany({ where: { id: { in: restoreIds } }, data: { archived: false } });
-			}
-			await tx.exerciseTemplate.deleteMany({ where: { exerciseSplitDayId: routine.id } });
-			await tx.exerciseTemplate.createMany({
-				data: plan.map((exercise) => ({ ...exercise, exerciseSplitDayId: routine.id }))
-			});
-		});
+		await prisma.$transaction(transactionQueries);
 		return { message: 'Workout created successfully', workoutId: workout.id as string };
 	}),
 

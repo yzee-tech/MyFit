@@ -255,34 +255,3 @@ test('a block workout from today’s app: named by its routine of My routines, n
 	});
 	expect((await prisma.workout.findUniqueOrThrow({ where: { id: workoutId } })).routineName).toEqual('Pull A');
 });
-
-test('no block: Update routine is offered from the routine’s name; a deleted routine or a blank workout isn’t', async () => {
-	const { userId, caller } = await seedPerson();
-	const withExtraSet = {
-		...pullAWorkout(),
-		workoutExercisesSets: [
-			[0, 1, 2, 3].map((setIndex) => ({ setIndex, reps: 12, load: 42.5, RIR: 2, skipped: false }))
-		],
-		workoutExercisesMiniSets: [[[], [], [], []]]
-	};
-	expect((await caller.workouts.previewRoutineChanges(withExtraSet))?.changes).toEqual([
-		'Barbell rows: 4 sets (routine: 3)'
-	]);
-	expect(
-		await caller.workouts.previewRoutineChanges({
-			...withExtraSet,
-			workoutData: { userBodyweight: 80, routineName: null }
-		})
-	).toBeNull();
-
-	await caller.workouts.create({ ...withExtraSet, updateRoutine: true });
-	const routine = await prisma.exerciseTemplate.findFirstOrThrow({
-		where: { exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId } } }
-	});
-	expect(routine.sets).toEqual(4);
-
-	await prisma.exerciseSplitDay.deleteMany({ where: { exerciseSplit: { userId } } });
-	expect(await caller.workouts.previewRoutineChanges(withExtraSet)).toBeNull();
-	const { workoutId } = await caller.workouts.create({ ...withExtraSet, updateRoutine: true });
-	expect((await prisma.workout.findUniqueOrThrow({ where: { id: workoutId } })).routineName).toEqual('Pull A');
-});
