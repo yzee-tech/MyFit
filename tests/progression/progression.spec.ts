@@ -33,6 +33,8 @@ import {
 	expandRange,
 	formatWeightList,
 	levelSetsFor,
+	machineSetOf,
+	machineSetsFor,
 	nextWeightUp,
 	pickableWeightSets,
 	normalizeWeights,
@@ -628,7 +630,122 @@ test('levels: down sets move up together, keeping their gaps', () => {
 	]);
 });
 
-// Reps only: Barbell rows at 8–12 reps, no set to failure, steady effort (RIR 3 every week)
+// Machines on the exercise: their own levels or weights, whatever weight set the routine links
+const machineExercise = (overrides: Partial<Parameters<typeof machineSetsFor>[0][number]> = {}) => ({
+	id: 'rows',
+	name: 'Barbell rows',
+	machineWeights: [5, 10, 15, 20, 102.5],
+	machineUnit: 'KG' as const,
+	assisted: false,
+	...overrides
+});
+
+test('machine weights: the exercise’s own stack, in its unit, beats any weight set; help is negative', () => {
+	const [stack] = machineSetsFor([machineExercise({ machineWeights: [20, 5, 15, 10, 102.5] })]);
+	expect(stack).toMatchObject({ unit: 'KG', weights: [5, 10, 15, 20, 102.5], machineOf: 'Barbell rows' });
+	// No unit or no weights: not a machine
+	expect(machineSetsFor([machineExercise({ machineUnit: null }), machineExercise({ machineWeights: [] })])).toEqual([]);
+
+	const weightSets = [buildingDumbbells, stack];
+	expect(machineSetOf('Barbell rows', weightSets)).toBe(stack);
+	// Linked to the building's dumbbells: the machine's own weights win
+	expect(
+		availableWeightsFor({ name: 'Barbell rows', weightSetId: 'building-db', weightUnit: 'KG' }, weightSets)
+	).toEqual(stack.weights);
+	expect(availableWeightsFor({ name: 'Barbell rows', weightUnit: 'LB' }, weightSets)).toBeNull();
+	// Not one to pick in a routine, and not a gym's weights
+	expect(pickableWeightSets(weightSets)).toEqual([buildingDumbbells]);
+
+	const [assisted] = machineSetsFor([machineExercise({ machineWeights: [5, 10, 15], assisted: true })]);
+	expect(availableWeightsFor({ name: 'Barbell rows', weightUnit: 'KG' }, [assisted])).toEqual([-15, -10, -5]);
+});
+
+test('machine weights: shown in the machine’s unit, over the exercise’s, the routine’s and the gym’s', () => {
+	expect(resolveExerciseUnit('KG', 'KG', 'KG', undefined, 'LB')).toEqual('LB');
+	expect(resolveExerciseUnit(null, 'ASK', 'KG', undefined, 'LB')).toEqual('LB');
+	expect(resolveExerciseUnit(null, 'LB', 'LB', 'LB', 'KG')).toEqual('KG');
+	// Levels still win, and without a machine nothing changes
+	expect(resolveExerciseUnit(null, 'KG', 'KG', 'LEVEL', 'LB')).toEqual('LEVEL');
+	expect(resolveExerciseUnit(null, 'ASK', 'LB', 'KG')).toEqual('LB');
+});
+
+test('machine weights: suggestions move along the machine’s stack, not the linked dumbbells', () => {
+	const stack = machineSetsFor([machineExercise({ machineWeights: [30, 35, 45, 60] })]);
+	const history: ExerciseHistory = { 'Barbell rows': [performance('Barbell rows', sets(35, 13, 13, 13))] };
+	const output = progressiveOverloadMagic(blockWithWeightSet(), 1, 100, history, 'normal', [
+		buildingDumbbells,
+		...stack
+	]);
+	const rows = output.find((exercise) => exercise.name === 'Barbell rows')!;
+	rows.sets.forEach((set) => expect([35, 45]).toContain(set.load));
+});
+
+/** Barbell rows on an assisted level machine (a higher level is more help), levels 1–10, 10–15 reps */
+function assistedLevelSuggestion(history: PreviousPerformance[], setType: 'Straight' | 'Down' = 'Straight') {
+	const block = blockWithWeightSet(null);
+	block.settings.weeklyRIR = [3];
+	const rows = block.exercises.find((ex) => ex.name === 'Barbell rows')!;
+	Object.assign(rows, { repRangeStart: 10, repRangeEnd: 15, weightUnit: 'LEVEL', setType, changeType: null });
+	const levels = levelSetsFor([
+		{ id: 'dips', name: 'Barbell rows', levelsFrom: 1, levelsTo: 10, levelStep: 1, assisted: true }
+	]);
+	const output = progressiveOverloadMagic(block, 1, 100, { 'Barbell rows': history }, 'normal', levels);
+	return output.find((exercise) => exercise.name === 'Barbell rows')!;
+}
+
+test('assisted levels: a rep more each time, then a level DOWN (less help) at the bottom of the range', () => {
+	const shape = (rows: ReturnType<typeof assistedLevelSuggestion>) => rows.sets.map((set) => [set.load, set.reps]);
+	expect(shape(assistedLevelSuggestion([levelPerformance(levelSets(6, 12, 13, 12))]))).toEqual([
+		[6, 13],
+		[6, 14],
+		[6, 13]
+	]);
+	expect(shape(assistedLevelSuggestion([levelPerformance(levelSets(6, 15, 15, 15))]))).toEqual([
+		[5, 10],
+		[5, 10],
+		[5, 10]
+	]);
+	// At the lowest level there's no less help: reps keep going up
+	expect(shape(assistedLevelSuggestion([levelPerformance(levelSets(1, 15, 15, 15))]))).toEqual([
+		[1, 16],
+		[1, 16],
+		[1, 16]
+	]);
+	// Down sets (more help each set) move down together, keeping their gaps
+	const downSets = levelPerformance([4, 5, 6].map((level) => ({ reps: 15, load: level, RIR: 3 })));
+	expect(shape(assistedLevelSuggestion([downSets], 'Down'))).toEqual([
+		[3, 10],
+		[4, 10],
+		[5, 10]
+	]);
+});
+
+test('assisted weights without a bodyweight share: the help stays the same and reps go up', () => {
+	const assist: WeightSetLike = {
+		id: 'assist',
+		name: 'Assist',
+		unit: 'KG',
+		weights: [5, 10, 15, 20],
+		isAssistance: true
+	};
+	const history = () => ({ 'Barbell rows': [performance('Barbell rows', sets(-20, 13, 13, 13), 100)] });
+	const suggest = (weightSets: WeightSetLike[], weightSetId: string | null = 'assist') => {
+		const output = progressiveOverloadMagic(blockWithWeightSet(weightSetId), 1, 100, history(), 'normal', weightSets);
+		return output.find((exercise) => exercise.name === 'Barbell rows')!.sets.map((set) => [set.load, set.reps]);
+	};
+	const heldWithMoreReps = [
+		[-20, 14],
+		[-20, 14],
+		[-20, 14]
+	];
+	// An assistance weight set, the exercise's own assisted machine, or just help logged as negative loads
+	expect(suggest([assist])).toEqual(heldWithMoreReps);
+	expect(suggest(machineSetsFor([machineExercise({ machineWeights: [5, 10, 15, 20], assisted: true })]), null)).toEqual(
+		heldWithMoreReps
+	);
+	expect(suggest([], null)).toEqual(heldWithMoreReps);
+});
+
 function repsOnlySuggestion(
 	history: PreviousPerformance[],
 	options: {

@@ -38,12 +38,13 @@ import {
 import { TRPCError } from '@trpc/server';
 import { monthInput } from './stats';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
+import { APP_UPDATED_MESSAGE } from '$lib/trpc/appUpdated';
 import { createId } from '@paralleldrive/cuid2';
-import { levelSetOf, levelSetsFor, type WeightSetLike } from '$lib/utils/weightSets';
+import { levelSetOf, machineSetOf } from '$lib/utils/weightSets';
+import { userWeightSets } from '$lib/server/weightSets';
 import { z } from 'zod';
 
 /** What an app version too old to name its routine is told: reopening loads the current version */
-const APP_UPDATED_MESSAGE = 'MyFit was updated, please close and reopen the app';
 
 type TodaysWorkoutData = {
 	startedAt: Date | string;
@@ -87,21 +88,6 @@ type ActiveBlockData = {
 };
 
 /** Reps-only exercises by name, with their rep cap */
-/** A gym's weights, and each machine's levels (from its exercise) */
-async function userWeightSets(userId: string): Promise<WeightSetLike[]> {
-	const [weightSets, levelExercises] = await Promise.all([
-		prisma.weightSet.findMany({
-			where: { userId, unit: { not: 'LEVEL' } },
-			select: { id: true, name: true, unit: true, weights: true, isAssistance: true }
-		}),
-		prisma.exercise.findMany({
-			where: { userId, levelsFrom: { not: null } },
-			select: { id: true, name: true, levelsFrom: true, levelsTo: true, levelStep: true }
-		})
-	]);
-	return [...weightSets, ...levelSetsFor(levelExercises)];
-}
-
 function repsOnlySettings(exercises: { name: string; repsOnly: boolean; maxReps: number | null }[]): RepsOnlySettings {
 	return new Map(
 		exercises.filter((exercise) => exercise.repsOnly).map((exercise) => [exercise.name, exercise.maxReps])
@@ -588,19 +574,20 @@ export const workouts = t.router({
 			const sessionUnit = input.sessionUnit ?? userSettings?.homeWeightUnit ?? 'KG';
 			const sessionWeightSet = input.sessionWeightSetId ? weightSetById.get(input.sessionWeightSetId) : undefined;
 			plan.exercises.forEach((exercise) => {
-				// A machine with levels always uses its own levels
+				// A machine always uses its own levels or weights, in its own unit
 				const levels = levelSetOf(exercise.name, weightSets);
-				const ownWeightSet = exercise.weightSetId ? weightSetById.get(exercise.weightSetId) : undefined;
+				const machine = machineSetOf(exercise.name, weightSets);
+				// At many gyms the gym picked for this workout decides the weights, never the exercise's own set
+				const ownWeightSet = exercise.weightSetId && !askEachTime ? weightSetById.get(exercise.weightSetId) : undefined;
 				exercise.weightUnit = resolveExerciseUnit(
 					exercise.weightUnit,
 					routineWeightUnit,
 					sessionUnit,
-					levels ? 'LEVEL' : ownWeightSet?.unit
+					levels ? 'LEVEL' : ownWeightSet?.unit,
+					machine?.unit
 				);
-				// At a gym picked for this workout, its weights apply unless the exercise has its own in this unit
-				if (!levels && askEachTime && sessionWeightSet && ownWeightSet?.unit !== exercise.weightUnit) {
-					exercise.weightSetId = sessionWeightSet.id;
-				}
+				if (levels || machine) exercise.weightSetId = null;
+				else if (askEachTime) exercise.weightSetId = sessionWeightSet?.id ?? null;
 			});
 			const unitByExerciseName = new Map(
 				plan.exercises.map((exercise) => [exercise.name, exercise.weightUnit ?? 'KG'])

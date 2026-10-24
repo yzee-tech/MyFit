@@ -14,6 +14,8 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { convertCamelCaseToNormal } from '$lib/utils';
+	import { formatWeightList } from '$lib/utils/weightSets';
+	import { unitLabel } from '$lib/utils/weightUnits';
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -198,7 +200,16 @@
 				{/if}
 				{#if exercise.levelsFrom !== null && exercise.levelsTo !== null}
 					<Badge variant="outline">
-						Levels {exercise.levelsFrom}–{exercise.levelsTo}{exercise.levelStep === 0.5 ? ' by ½' : ''}
+						Levels {exercise.levelsFrom}–{exercise.levelsTo}{exercise.levelStep === 0.5
+							? ' by ½'
+							: ''}{exercise.assisted ? ', assisted' : ''}
+					</Badge>
+				{/if}
+				{#if exercise.machineWeights.length > 0 && exercise.machineUnit}
+					<Badge variant="outline" data-testid="exercise-machine-weights">
+						{exercise.assisted ? 'Help' : 'Machine'}
+						{formatWeightList(exercise.machineWeights)}
+						{unitLabel(exercise.machineUnit)}
 					</Badge>
 				{/if}
 			</div>
@@ -250,7 +261,7 @@
 		</section>
 	</div>
 
-	<ResponsiveDialog title="Edit exercise" bind:open={editOpen}>
+	<ResponsiveDialog long title="Edit exercise" bind:open={editOpen}>
 		{#snippet description()}
 			Changes apply everywhere it's used, including past workouts.
 		{/snippet}

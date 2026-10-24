@@ -7,11 +7,12 @@ import { t } from '$lib/trpc/t';
 import { updateExerciseEverywhere } from '$lib/server/exercises';
 import { withRoutinesTransaction } from '$lib/server/blockCache';
 import { MuscleGroupSchema } from '$lib/zodSchemas';
-import type { ChangeType, Prisma, SetType } from '@prisma/client';
+import type { ChangeType, Prisma, SetType, WeightUnit } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
-import { MAX_WEIGHTS_PER_SET } from '$lib/utils/weightSets';
+import { MAX_WEIGHTS_PER_SET, normalizeWeights } from '$lib/utils/weightSets';
+import { APP_UPDATED_MESSAGE } from '$lib/trpc/appUpdated';
 import { z } from 'zod';
 
 export const exerciseDetailsInput = z
@@ -31,11 +32,33 @@ export const exerciseDetailsInput = z
 				step: z.union([z.literal(1), z.literal(0.5)])
 			})
 			.nullable()
-			.default(null)
+			.default(null),
+		/**
+		 * A machine with its own weights, in the unit printed on it; null for none. Missing (an app version from
+		 * before machines) leaves the exercise's machine as it is
+		 */
+		machine: z
+			.strictObject({
+				weights: z.array(z.number().positive().max(10000)).min(1).max(MAX_WEIGHTS_PER_SET),
+				unit: z.enum(['KG', 'LB'])
+			})
+			.nullable()
+			.optional(),
+		/** Its weights are help, or a higher level is more help. Missing leaves it as it is */
+		assisted: z.boolean().optional()
 	})
-	// Reps only never adds load, so it has no levels either
+	// Reps only never adds load, so it has no machine either; and a machine has weights or levels, not both
 	.refine((details) => !(details.repsOnly && details.levels !== null), {
 		message: 'Pick either Reps only or machine levels'
+	})
+	.refine((details) => !(details.repsOnly && details.machine), {
+		message: 'Pick either Reps only or a machine'
+	})
+	.refine((details) => !(details.levels !== null && details.machine), {
+		message: 'A machine has weights or levels, not both'
+	})
+	.refine((details) => !(details.assisted && details.machine === null && details.levels === null), {
+		message: 'Only a machine can be assisted'
 	})
 	.refine((details) => details.levels === null || details.levels.to >= details.levels.from, {
 		message: 'The highest level must be at least the lowest'
@@ -45,8 +68,11 @@ export const exerciseDetailsInput = z
 			details.levels === null || (details.levels.to - details.levels.from) / details.levels.step < MAX_WEIGHTS_PER_SET,
 		{ message: `At most ${MAX_WEIGHTS_PER_SET} levels` }
 	)
-	.transform(({ levels, ...details }) => ({
+	.transform(({ levels, machine, ...details }) => ({
 		...details,
+		// undefined: not sent, left as it is
+		machineWeights: machine === undefined ? undefined : machine ? normalizeWeights(machine.weights) : [],
+		machineUnit: machine === undefined ? undefined : (machine?.unit ?? null),
 		levelsFrom: levels?.from ?? null,
 		levelsTo: levels?.to ?? null,
 		levelStep: levels?.step ?? null,
@@ -150,6 +176,35 @@ async function combineWorkoutDuplicates(tx: Prisma.TransactionClient, exerciseId
 			});
 		}
 	}
+}
+
+type MachineSettings = { machineWeights: number[]; machineUnit: WeightUnit | null; assisted: boolean };
+
+/**
+ * The machine an exercise ends up with: what was sent, else what it has (an older app version doesn't know
+ * machines). Refused when an older version would turn on levels or reps only for an exercise that is a machine
+ * with weights: it can't see that setting, so it's asked to reopen the app
+ */
+function machineSettings(
+	details: Pick<
+		z.output<typeof exerciseDetailsInput>,
+		'repsOnly' | 'levelsFrom' | 'machineWeights' | 'machineUnit' | 'assisted'
+	>,
+	stored: MachineSettings
+): MachineSettings {
+	if (details.machineWeights === undefined && stored.machineWeights.length > 0) {
+		if (details.repsOnly || details.levelsFrom !== null) {
+			throw new TRPCError({ code: 'PRECONDITION_FAILED', message: APP_UPDATED_MESSAGE });
+		}
+	}
+	const machineWeights = details.machineWeights ?? stored.machineWeights;
+	const machineUnit = machineWeights.length > 0 ? (details.machineUnit ?? stored.machineUnit) : null;
+	if (machineWeights.length > 0 && machineUnit === null) {
+		throw new TRPCError({ code: 'BAD_REQUEST', message: 'Pick the machine’s unit' });
+	}
+	// Only a machine can be assisted: weights or levels
+	const isMachine = machineWeights.length > 0 || details.levelsFrom !== null;
+	return { machineWeights, machineUnit, assisted: isMachine && (details.assisted ?? stored.assisted) };
 }
 
 async function findOwnExercise(userId: string, id: string) {
@@ -276,7 +331,8 @@ export const exercises = t.router({
 
 	create: t.procedure.input(exerciseDetailsInput).mutation(async ({ ctx, input }) => {
 		await assertNameFree(ctx.userId, input.name);
-		return prisma.exercise.create({ data: { ...input, userId: ctx.userId } });
+		const machine = machineSettings(input, { machineWeights: [], machineUnit: null, assisted: false });
+		return prisma.exercise.create({ data: { ...input, ...machine, userId: ctx.userId } });
 	}),
 
 	/** Changes an exercise everywhere: routines, blocks and past workouts (a rename included) */
@@ -286,12 +342,24 @@ export const exercises = t.router({
 			const exercise = await findOwnExercise(ctx.userId, input.id);
 			if (input.details.name !== exercise.name) await assertNameFree(ctx.userId, input.details.name, exercise.id);
 			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
-			const { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...shared } = input.details;
+			const machine = machineSettings(input.details, exercise);
+			const {
+				note,
+				repsOnly,
+				maxReps,
+				levelsFrom,
+				levelsTo,
+				levelStep,
+				machineWeights,
+				machineUnit,
+				assisted,
+				...shared
+			} = input.details;
 			await withRoutinesTransaction(async (tx) => {
 				await updateExerciseEverywhere(tx, exercise.id, shared);
 				await tx.exercise.update({
 					where: { id: exercise.id },
-					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep }
+					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...machine }
 				});
 			});
 			return { message: 'Exercise saved' };

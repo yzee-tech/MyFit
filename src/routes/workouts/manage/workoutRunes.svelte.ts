@@ -1,8 +1,8 @@
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
-import { levelSetOf, type WeightSetLike } from '$lib/utils/weightSets';
+import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { WeightUnit } from '$lib/utils/prismaEnums';
-import { isLevelUnit } from '$lib/utils/weightUnits';
+import { convertWeight, isLevelUnit } from '$lib/utils/weightUnits';
 import { canWarmUp } from '$lib/utils/oneRepMax';
 import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
@@ -156,9 +156,13 @@ function createWorkoutRunes() {
 		// that weight set's unit, else the unit picked for this workout (or the home unit)
 		// A machine with levels always logs its own levels
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
+		// A machine with its own weights always uses them, in its unit
 		const levels = levelSetOf(exercise.name, weightSets);
-		const weightSetId = levels ? null : (exercise.weightSetId ?? workoutData?.sessionWeightSetId ?? null);
-		const weightSetUnit = levels ? 'LEVEL' : weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit;
+		const machine = machineSetOf(exercise.name, weightSets);
+		const weightSetId = levels || machine ? null : (exercise.weightSetId ?? workoutData?.sessionWeightSetId ?? null);
+		const weightSetUnit = levels
+			? 'LEVEL'
+			: (machine?.unit ?? weightSets.find((weightSet) => weightSet.id === weightSetId)?.unit);
 		const weightUnit = weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG';
 		workoutExercises.push({
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise),
@@ -220,16 +224,25 @@ function createWorkoutRunes() {
 		const current = workoutExercises[editingExerciseIndex];
 		// Switching between a machine's levels and weights: the loads so far mean something else
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
+		const machine = machineSetOf(exercise.name, weightSets);
 		const weightSetUnit = levelSetOf(exercise.name, weightSets)
 			? 'LEVEL'
-			: weightSets.find((weightSet) => weightSet.id === exercise.weightSetId)?.unit;
+			: (machine?.unit ?? weightSets.find((weightSet) => weightSet.id === exercise.weightSetId)?.unit);
 		const kindChanged = isLevelUnit(weightSetUnit) !== isLevelUnit(current.weightUnit);
-		const weightUnit = kindChanged
-			? (weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG')
-			: current.weightUnit;
+		// A machine with weights is shown in its own unit (it can't be switched, so it's set here)
+		const weightUnit =
+			kindChanged || machine
+				? (weightSetUnit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG')
+				: current.weightUnit;
+		const inUnit = (load: number | undefined) =>
+			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = kindChanged
 			? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
-			: current.sets;
+			: current.sets.map((set) => ({
+					...set,
+					load: inUnit(set.load),
+					miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
+				}));
 		workoutExercises[editingExerciseIndex] = {
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit

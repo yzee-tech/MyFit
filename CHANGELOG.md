@@ -2,6 +2,38 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-24: machines on the exercise, assisted machines (PR #52)
+
+### Added
+
+- **Machine** on the exercise (Exercises page): one switch, then **It shows: Weights or Levels**. A machine's weights
+  are its own, the same at every gym: its unit (fixed: its sets always show in it, with no kg/lb switch), a range
+  plus single weights for uneven stacks, and **Copy from a weight set**. Levels work as before.
+- **Assisted machine**, for both kinds. Weights are help (typed as −20 for 20 kg of help); turning it on also counts
+  bodyweight at 100%, with a warning if that's switched off. With levels, a higher level is more help, so suggestions
+  go **down** a level once every set reaches the top of the rep range.
+
+### Changed
+
+- Assisted weight sets moved onto their exercise automatically, when the exercise used exactly one of them (not for
+  reps-only or levels exercises). Its other weight-set links in routines were cleared, and the set deleted once
+  nothing else used it. Bodyweight settings weren't changed.
+- New weight sets are for dumbbells and plates: no Assisted switch. An assisted set that's left says to move it
+  onto its exercise.
+- A routine's exercise editor shows a machine's own weights instead of the weight set box.
+- **"Ask each time" routines:** no weight set box for exercises that aren't machines ("Weights come from the gym you
+  pick when you start the workout"). The gym picked at the start ("Weights here") now always decides, even over an
+  exercise's own weight set in that unit.
+- "Weights here" never changes a machine.
+
+### Fixed
+
+- Assisted exercises without a bodyweight share got backwards suggestions (more reps for less help): now the help
+  stays the same and reps go up. With a bodyweight share they already worked.
+- The exercise ⋯ menu in a workout (live or past) stuck to the top of the screen when its exercise was scrolled
+  away: it now closes.
+- Long forms in a dialog (e.g. an exercise with a machine) scroll, so Save stays reachable.
+
 ## 2026-10-23: estimated 1RM, exercise charts, Warm up (PR #51)
 
 ### Added

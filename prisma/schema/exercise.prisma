@@ -18,6 +18,14 @@ model Exercise {
   levelsFrom         Float?
   levelsTo           Float?
   levelStep          Float?
+  /// A machine with its own weights (a stack): the weights in `machineUnit`, sorted ascending; empty for
+  /// none. Never with levels or reps only
+  machineWeights     Float[]     @default([])
+  /// The unit printed on the machine (KG or LB): its sets always show in it. Set whenever it has weights
+  machineUnit        WeightUnit?
+  /// An assisted machine: its weights are help (logged as negative loads), or with levels, a higher level
+  /// is more help
+  assisted           Boolean     @default(false)
   /// Deleted but kept for the workouts that used it
   archived           Boolean     @default(false)
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)

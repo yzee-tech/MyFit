@@ -23,6 +23,11 @@
 
 	type Draft = { id?: string; name: string; unit: MassUnit; weights: number[]; isAssistance: boolean };
 	let draft: Draft | null = $state(null);
+	// The weight set being edited is an assisted machine already (new ones aren't: machines live on the exercise)
+	let draftWasAssistance = $derived.by(() => {
+		const editingId = (draft as Draft | null)?.id;
+		return editingId !== undefined && weightSets.some((set) => set.id === editingId && set.isAssistance);
+	});
 	let saving = $state(false);
 
 	let rangeFrom: number | undefined = $state();
@@ -131,15 +136,18 @@
 					<ToggleGroup.Item aria-label="Weight set in pounds" value="LB">lb</ToggleGroup.Item>
 				</ToggleGroup.Root>
 			</div>
-			<div class="flex items-start justify-between gap-4">
-				<div class="grid gap-0.5">
-					<Label for="weight-set-assistance">Assisted machine</Label>
-					<span class="text-xs text-muted-foreground">
-						The weights are help, e.g. an assisted pull-up machine's 5–50 kg. Logged as negative loads.
-					</span>
+			<!-- Machines live on their exercise now: only a set that's already an assisted machine keeps the switch -->
+			{#if draftWasAssistance}
+				<div class="flex items-start justify-between gap-4">
+					<div class="grid gap-0.5">
+						<Label for="weight-set-assistance">Assisted machine</Label>
+						<span class="text-xs text-muted-foreground">
+							The weights are help, e.g. an assisted pull-up machine's 5–50 kg. Logged as negative loads.
+						</span>
+					</div>
+					<Switch id="weight-set-assistance" bind:checked={draft.isAssistance} />
 				</div>
-				<Switch id="weight-set-assistance" bind:checked={draft.isAssistance} />
-			</div>
+			{/if}
 
 			<div class="grid gap-1.5">
 				<span class="text-sm font-medium">Add a range</span>
@@ -222,7 +230,8 @@
 		<Card.Description>
 			The weights a gym actually has, e.g. dumbbells 5–10 kg by 1, then 14 and 20. Link one to an exercise in a routine,
 			and suggestions only use those weights. Without one, weights go up by 2.5 kg or 5 lb. A machine that shows levels
-			instead of weights has them set on its exercise, on the Exercises page.
+			instead of weights, or has its own weights (a cable stack, an assisted machine), has them set on its exercise, on
+			the Exercises page.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="grid gap-2">
@@ -231,6 +240,11 @@
 				<div class="mr-auto flex min-w-0 flex-col">
 					<span class="font-medium">{weightSet.name}</span>
 					<span class="text-sm text-muted-foreground">{describeWeightSet(weightSet)}</span>
+					{#if weightSet.isAssistance}
+						<span class="text-xs text-muted-foreground" data-testid="weight-set-move-note">
+							Machines now live on the exercise: set its weights there, then delete this.
+						</span>
+					{/if}
 				</div>
 				<!-- A fixed size, so a long name wraps and every card's buttons line up -->
 				<Button class="shrink-0" onclick={() => startEditing(weightSet)} size="sm" variant="outline">Edit</Button>

@@ -79,6 +79,7 @@
 <div class="mb-2 flex gap-2">
 	<Input aria-label="Search exercises" placeholder="Search" bind:value={search} />
 	<ResponsiveDialog
+		long
 		title="New exercise"
 		triggerButtonAriaLabel="New exercise"
 		triggerButtonVariant="default"

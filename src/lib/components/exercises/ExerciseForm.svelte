@@ -1,5 +1,6 @@
 <script lang="ts" module>
-	import type { MuscleGroup } from '$lib/utils/prismaEnums';
+	import type { MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
+	import type { MassUnit } from '$lib/utils/weightUnits';
 
 	/** What belongs to the exercise itself, the same in every routine and workout */
 	export type ExerciseFormDetails = {
@@ -14,13 +15,20 @@
 		maxReps: number | null;
 		/** A machine that shows levels instead of weights; null for weights. Never with reps only */
 		levels: { from: number; to: number; step: 1 | 0.5 } | null;
+		/** A machine with its own weights, in the unit printed on it; null for none. Never with levels or reps only */
+		machine: { weights: number[]; unit: MassUnit } | null;
+		/** A machine whose weights are help, or whose higher levels are more help */
+		assisted: boolean;
 	};
 
-	/** An exercise as saved: its levels as three fields */
-	export type ExerciseFormInitial = Omit<ExerciseFormDetails, 'levels'> & {
+	/** An exercise as saved: its levels as three fields, its machine's weights and unit as two */
+	export type ExerciseFormInitial = Omit<ExerciseFormDetails, 'levels' | 'machine' | 'assisted'> & {
 		levelsFrom?: number | null;
 		levelsTo?: number | null;
 		levelStep?: number | null;
+		machineWeights?: number[];
+		machineUnit?: WeightUnit | null;
+		assisted?: boolean;
 	};
 
 	/** One of the user's exercises, for "Already on your list" */
@@ -37,6 +45,10 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { MuscleGroup as MuscleGroups } from '$lib/utils/prismaEnums';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import { page } from '$app/stores';
+	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { expandRange, formatWeightList, normalizeWeights, pickableWeightSets } from '$lib/utils/weightSets';
 	import AddIcon from 'virtual:icons/lucide/plus';
 
 	type PropsType = {
@@ -61,7 +73,28 @@
 	let note = $state(initial?.note ?? '');
 	let repsOnly = $state(initial?.repsOnly ?? false);
 	let maxReps: number | undefined = $state(initial?.maxReps ?? undefined);
-	let hasLevels = $state(typeof initial?.levelsFrom === 'number');
+	// A machine: its own levels, or its own weights (both off: dumbbells, a barbell, push-ups…)
+	let isMachine = $state(typeof initial?.levelsFrom === 'number' || (initial?.machineWeights?.length ?? 0) > 0);
+	let machineKind: 'weights' | 'levels' = $state(typeof initial?.levelsFrom === 'number' ? 'levels' : 'weights');
+	let hasLevels = $derived(isMachine && machineKind === 'levels');
+	let hasMachineWeights = $derived(isMachine && machineKind === 'weights');
+	const homeUnit: WeightUnit = $page.data.homeWeightUnit ?? 'KG';
+	let machineUnit: MassUnit = $state(
+		initial?.machineUnit === 'LB' || initial?.machineUnit === 'KG'
+			? initial.machineUnit
+			: isLevelUnit(homeUnit)
+				? 'KG'
+				: homeUnit
+	);
+	let machineWeights: number[] = $state(initial?.machineWeights ?? []);
+	let rangeFrom: number | undefined = $state();
+	let rangeTo: number | undefined = $state();
+	let rangeStep: number | undefined = $state();
+	let singleWeight: number | undefined = $state();
+	let assisted = $state(initial?.assisted ?? false);
+	let triedNoMachineWeights = $state(false);
+	// A weight set to start from, e.g. one made for this machine before machines had their own weights
+	let copyableWeightSets = $derived(pickableWeightSets($page.data.weightSets ?? []));
 	let levelsFrom: number | undefined = $state(initial?.levelsFrom ?? 1);
 	let levelsTo: number | undefined = $state(initial?.levelsTo ?? 20);
 	let halfLevels = $state(initial?.levelStep === 0.5);
@@ -95,6 +128,35 @@
 		note = suggestion.note ?? '';
 	}
 
+	function addRange() {
+		if (rangeFrom === undefined || rangeTo === undefined || rangeStep === undefined) return;
+		machineWeights = normalizeWeights([...machineWeights, ...expandRange(rangeFrom, rangeTo, rangeStep)]);
+		rangeFrom = rangeTo = rangeStep = undefined;
+	}
+
+	function addSingleWeight() {
+		if (singleWeight === undefined) return;
+		machineWeights = normalizeWeights([...machineWeights, singleWeight]);
+		singleWeight = undefined;
+	}
+
+	function copyWeightSet(id: string | undefined) {
+		const weightSet = copyableWeightSets.find((set) => set.id === id);
+		if (!weightSet || isLevelUnit(weightSet.unit)) return;
+		machineWeights = normalizeWeights(weightSet.weights);
+		machineUnit = weightSet.unit;
+		if (weightSet.isAssistance) setAssisted(true);
+	}
+
+	// Help only means something against your weight: turning it on for weights counts bodyweight
+	function setAssisted(on: boolean) {
+		assisted = on;
+		if (on && machineKind === 'weights' && !countsBodyweight) {
+			countsBodyweight = true;
+			bodyweightPercentage = 100;
+		}
+	}
+
 	// Spaces get past `required` but aren't a name
 	let triedBlankName = $state(false);
 	let nameIsBlank = $derived(triedBlankName && !name.trim());
@@ -106,6 +168,10 @@
 			return;
 		}
 		if (!targetMuscleGroup) return;
+		if (!repsOnly && hasMachineWeights && machineWeights.length === 0) {
+			triedNoMachineWeights = true;
+			return;
+		}
 		saving = true;
 		try {
 			await onSubmit({
@@ -121,7 +187,9 @@
 				levels:
 					!repsOnly && hasLevels && levelsFrom !== undefined && levelsTo !== undefined
 						? { from: levelsFrom, to: levelsTo, step: halfLevels ? 0.5 : 1 }
-						: null
+						: null,
+				machine: !repsOnly && hasMachineWeights ? { weights: machineWeights, unit: machineUnit } : null,
+				assisted: !repsOnly && isMachine && assisted
 			});
 		} finally {
 			saving = false;
@@ -243,45 +311,165 @@
 	<div class="grid gap-1.5" class:hidden={repsOnly}>
 		<div class="flex items-center justify-between gap-4">
 			<div class="grid gap-0.5">
-				<Label for="exercise-form-levels">Machine with levels</Label>
-				<span class="text-xs text-muted-foreground">It shows levels (1, 2, 3…) instead of weights.</span>
+				<Label for="exercise-form-machine">Machine</Label>
+				<span class="text-xs text-muted-foreground"
+					>Its weights or levels are the machine's own, the same at every gym.</span
+				>
 			</div>
-			<Switch id="exercise-form-levels" bind:checked={hasLevels} />
+			<Switch id="exercise-form-machine" bind:checked={isMachine} />
 		</div>
-		{#if hasLevels}
-			<div class="mt-1 grid grid-cols-2 gap-2">
-				<div class="grid gap-1">
-					<Label class="text-xs text-muted-foreground" for="exercise-form-levels-from">From level</Label>
-					<Input
-						id="exercise-form-levels-from"
-						max={1000}
-						min={0.5}
-						required={hasLevels && !repsOnly}
-						step={0.5}
-						type="number"
-						bind:value={levelsFrom}
-					/>
+		{#if isMachine}
+			<div class="mt-1 grid gap-3 rounded-md border p-3" data-testid="exercise-form-machine-settings">
+				<div class="flex items-center justify-between gap-4">
+					<span class="text-sm font-medium" id="exercise-form-machine-kind">It shows</span>
+					<ToggleGroup.Root
+						aria-labelledby="exercise-form-machine-kind"
+						onValueChange={(value) => {
+							if (value === 'weights' || value === 'levels') machineKind = value;
+						}}
+						type="single"
+						value={machineKind}
+						variant="outline"
+					>
+						<ToggleGroup.Item value="weights">Weights</ToggleGroup.Item>
+						<ToggleGroup.Item value="levels">Levels</ToggleGroup.Item>
+					</ToggleGroup.Root>
 				</div>
-				<div class="grid gap-1">
-					<Label class="text-xs text-muted-foreground" for="exercise-form-levels-to">To level</Label>
-					<Input
-						id="exercise-form-levels-to"
-						max={1000}
-						min={levelsFrom ?? 0.5}
-						required={hasLevels && !repsOnly}
-						step={0.5}
-						type="number"
-						bind:value={levelsTo}
-					/>
+				{#if hasMachineWeights}
+					<div class="flex items-center justify-between gap-4">
+						<span class="text-sm font-medium" id="exercise-form-machine-unit">Unit</span>
+						<ToggleGroup.Root
+							aria-labelledby="exercise-form-machine-unit"
+							onValueChange={(value) => {
+								if (value === 'KG' || value === 'LB') machineUnit = value;
+							}}
+							type="single"
+							value={machineUnit}
+							variant="outline"
+						>
+							<ToggleGroup.Item aria-label="Machine in kilograms" value="KG">kg</ToggleGroup.Item>
+							<ToggleGroup.Item aria-label="Machine in pounds" value="LB">lb</ToggleGroup.Item>
+						</ToggleGroup.Root>
+					</div>
+					<span class="-mt-2 text-xs text-muted-foreground">The machine's own unit. Its sets always show in it.</span>
+					<div class="grid gap-1">
+						<span class="text-sm font-medium">Add a range</span>
+						<div class="grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-2">
+							<div class="grid gap-1">
+								<Label class="text-xs text-muted-foreground" for="exercise-form-machine-from">From</Label>
+								<Input id="exercise-form-machine-from" min={0} step="any" type="number" bind:value={rangeFrom} />
+							</div>
+							<div class="grid gap-1">
+								<Label class="text-xs text-muted-foreground" for="exercise-form-machine-to">To</Label>
+								<Input id="exercise-form-machine-to" min={0} step="any" type="number" bind:value={rangeTo} />
+							</div>
+							<div class="grid gap-1">
+								<Label class="text-xs text-muted-foreground" for="exercise-form-machine-step">Every</Label>
+								<Input id="exercise-form-machine-step" min={0} step="any" type="number" bind:value={rangeStep} />
+							</div>
+							<Button aria-label="Add range" onclick={addRange} size="icon" type="button" variant="secondary">
+								<AddIcon />
+							</Button>
+						</div>
+					</div>
+					<div class="grid gap-1">
+						<Label for="exercise-form-machine-single">Add one weight</Label>
+						<div class="flex gap-2">
+							<Input
+								id="exercise-form-machine-single"
+								min={0}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') {
+										e.preventDefault();
+										addSingleWeight();
+									}
+								}}
+								placeholder="e.g. 52.5"
+								step="any"
+								type="number"
+								bind:value={singleWeight}
+							/>
+							<Button aria-label="Add weight" onclick={addSingleWeight} size="icon" type="button" variant="secondary">
+								<AddIcon />
+							</Button>
+						</div>
+					</div>
+					{#if copyableWeightSets.length > 0}
+						<Select.Root onSelectedChange={(v) => copyWeightSet(v?.value as string | undefined)} selected={undefined}>
+							<Select.Trigger aria-label="Copy from a weight set">
+								<Select.Value placeholder="Copy from a weight set" />
+							</Select.Trigger>
+							<Select.Content>
+								{#each copyableWeightSets as weightSet (weightSet.id)}
+									<Select.Item label="{weightSet.name} ({unitLabel(weightSet.unit)})" value={weightSet.id} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/if}
+					{#if machineWeights.length > 0}
+						<div class="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-2 text-sm">
+							<span data-testid="exercise-form-machine-weights">
+								<span class="text-muted-foreground">{assisted ? 'Help:' : 'Weights:'}</span>
+								{formatWeightList(machineWeights)}
+								{unitLabel(machineUnit)}
+							</span>
+							<Button class="h-7 px-2" onclick={() => (machineWeights = [])} size="sm" type="button" variant="ghost">
+								Clear
+							</Button>
+						</div>
+					{:else if triedNoMachineWeights}
+						<p class="text-sm text-destructive" role="alert">Add the machine's weights</p>
+					{/if}
+				{:else}
+					<div class="mt-1 grid grid-cols-2 gap-2">
+						<div class="grid gap-1">
+							<Label class="text-xs text-muted-foreground" for="exercise-form-levels-from">From level</Label>
+							<Input
+								id="exercise-form-levels-from"
+								max={1000}
+								min={0.5}
+								required={hasLevels && !repsOnly}
+								step={0.5}
+								type="number"
+								bind:value={levelsFrom}
+							/>
+						</div>
+						<div class="grid gap-1">
+							<Label class="text-xs text-muted-foreground" for="exercise-form-levels-to">To level</Label>
+							<Input
+								id="exercise-form-levels-to"
+								max={1000}
+								min={levelsFrom ?? 0.5}
+								required={hasLevels && !repsOnly}
+								step={0.5}
+								type="number"
+								bind:value={levelsTo}
+							/>
+						</div>
+					</div>
+					<div class="flex items-center justify-between gap-4">
+						<Label class="font-normal" for="exercise-form-half-levels">Has half levels (e.g. 7.5)</Label>
+						<Switch id="exercise-form-half-levels" bind:checked={halfLevels} />
+					</div>
+					<span class="text-xs text-muted-foreground">
+						Suggestions go {assisted ? 'down a level (less help)' : 'up a level'} once every set reaches the top of the rep
+						range.
+					</span>
+				{/if}
+				<div class="flex items-start justify-between gap-4 border-t pt-3">
+					<div class="grid gap-0.5">
+						<Label for="exercise-form-assisted">Assisted machine</Label>
+						<span class="text-xs text-muted-foreground">
+							{#if hasLevels}
+								Higher levels give more help, so going down a level is progress.
+							{:else}
+								The weights are help, e.g. assisted pull-ups: typed as −20 for 20 kg of help, and less help is progress.
+							{/if}
+						</span>
+					</div>
+					<Switch id="exercise-form-assisted" checked={assisted} onCheckedChange={(on) => setAssisted(on)} />
 				</div>
 			</div>
-			<div class="flex items-center justify-between gap-4">
-				<Label class="font-normal" for="exercise-form-half-levels">Has half levels (e.g. 7.5)</Label>
-				<Switch id="exercise-form-half-levels" bind:checked={halfLevels} />
-			</div>
-			<span class="text-xs text-muted-foreground">
-				Suggestions go up a level once every set reaches the top of the rep range.
-			</span>
 		{/if}
 	</div>
 
@@ -290,6 +478,16 @@
 			<Label for="exercise-form-bodyweight">Counts bodyweight</Label>
 			<Switch id="exercise-form-bodyweight" bind:checked={countsBodyweight} />
 		</div>
+		{#if !repsOnly && hasMachineWeights && assisted && !countsBodyweight}
+			<p
+				class="rounded-md border border-amber-600 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+				data-testid="exercise-form-assisted-warning"
+				role="alert"
+			>
+				Without bodyweight, less help can't be counted as progress. Suggestions will keep the help the same and add
+				reps.
+			</p>
+		{/if}
 		{#if countsBodyweight}
 			<Label class="mt-1" for="exercise-form-bodyweight-share">Share of bodyweight (%)</Label>
 			<Input
