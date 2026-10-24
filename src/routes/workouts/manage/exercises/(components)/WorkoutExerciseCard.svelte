@@ -11,7 +11,7 @@
 		switchExerciseUnit,
 		type WorkoutExerciseInProgress
 	} from '$lib/utils/workoutUtils';
-	import { availableWeightsFor, type WeightSetLike } from '$lib/utils/weightSets';
+	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { canWarmUp } from '$lib/utils/oneRepMax';
 	import { dragHandle } from 'svelte-dnd-action';
@@ -59,6 +59,7 @@
 
 	// Weights this gym has for the exercise; when the next one is a big jump, say how to get there
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
+	let machine = $derived(machineSetOf(exercise.name, weightSets));
 	let nextWeightHint = $derived(
 		readOnly
 			? null
@@ -83,11 +84,32 @@
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
+	// The open ⋯ menu closes once its button is scrolled out of the exercise list: left open, it would stick to
+	// the top of the screen. A small scroll that keeps the button in view (e.g. to show the whole menu) doesn't
+	let card: HTMLElement | undefined = $state();
+	$effect(() => {
+		if (!isContextMenuOpen || !card) return;
+		const button = card.querySelector('[data-menu-trigger]');
+		if (!button) return;
+		// The boxes around it that scroll (the list can sit in more than one)
+		const scrollers: HTMLElement[] = [];
+		for (let el = card.parentElement; el; el = el.parentElement) {
+			if (['auto', 'scroll'].includes(getComputedStyle(el).overflowY)) scrollers.push(el);
+		}
+		const closeOnceHidden = (e: Event) => {
+			const shown = (e.currentTarget as HTMLElement).getBoundingClientRect();
+			const { top, bottom } = button.getBoundingClientRect();
+			if (top < shown.top || bottom > shown.bottom) isContextMenuOpen = false;
+		};
+		scrollers.forEach((el) => el.addEventListener('scroll', closeOnceHidden, { passive: true }));
+		return () => scrollers.forEach((el) => el.removeEventListener('scroll', closeOnceHidden));
+	});
+
 	// A past workout: fix what was logged (the exercise itself, or sets); no planning for it
 	let editingPast = $derived(workoutRunes.editingWorkoutId !== null);
 </script>
 
-<div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
+<div bind:this={card} class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto truncate">{exercise.name}</span>
 		{#if isLevelUnit(exercise.weightUnit)}
@@ -97,6 +119,15 @@
 				title="Levels"
 			>
 				LVL
+			</span>
+		{:else if machine && !readOnly && !reordering}
+			<!-- A machine shows its own unit: no switching -->
+			<span
+				class="mr-1 rounded bg-secondary px-1.5 text-xs font-medium text-muted-foreground"
+				data-testid="{exercise.name}-machine-unit"
+				title="The machine's unit"
+			>
+				{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
 			</span>
 		{:else if !readOnly && !reordering}
 			<button

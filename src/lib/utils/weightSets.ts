@@ -17,6 +17,11 @@ export type WeightSetLike = {
 	 * exercise always uses them, whatever weight set it's linked to
 	 */
 	levelsOf?: string;
+	/**
+	 * A machine's own weights, made from its exercise's settings (never stored): the exercise's name. Such an
+	 * exercise always uses them, in their unit, whatever weight set it's linked to
+	 */
+	machineOf?: string;
 };
 
 /** The step between a machine's levels: whole levels, or half levels too */
@@ -28,6 +33,8 @@ type ExerciseLevels = {
 	levelsFrom: number | null;
 	levelsTo: number | null;
 	levelStep: number | null;
+	/** A higher level is more help */
+	assisted?: boolean;
 };
 
 /** The levels of each exercise that's a machine with levels, e.g. 1–20 by 1 */
@@ -38,9 +45,52 @@ export function levelSetsFor(exercises: ExerciseLevels[]): WeightSetLike[] {
 		const weights = expandRange(levelsFrom, levelsTo, levelStep);
 		if (weights.length === 0) return [];
 		return [
-			{ id: `levels:${exercise.id}`, name: exercise.name, unit: 'LEVEL' as const, weights, levelsOf: exercise.name }
+			{
+				id: `levels:${exercise.id}`,
+				name: exercise.name,
+				unit: 'LEVEL' as const,
+				weights,
+				isAssistance: exercise.assisted ?? false,
+				levelsOf: exercise.name
+			}
 		];
 	});
+}
+
+type ExerciseMachine = {
+	id: string;
+	name: string;
+	machineWeights: number[];
+	machineUnit: WeightUnit | null;
+	assisted: boolean;
+};
+
+/** The weights of each exercise that's a machine with its own weights, in the unit printed on it */
+export function machineSetsFor(exercises: ExerciseMachine[]): WeightSetLike[] {
+	return exercises.flatMap((exercise) => {
+		const { machineWeights, machineUnit } = exercise;
+		if (machineWeights.length === 0 || (machineUnit !== 'KG' && machineUnit !== 'LB')) return [];
+		return [
+			{
+				id: `machine:${exercise.id}`,
+				name: exercise.name,
+				unit: machineUnit,
+				weights: normalizeWeights(machineWeights),
+				isAssistance: exercise.assisted,
+				machineOf: exercise.name
+			}
+		];
+	});
+}
+
+/** The exercise's own machine weights, if it's a machine with weights */
+export function machineSetOf(exerciseName: string | undefined, weightSets: WeightSetLike[]): WeightSetLike | undefined {
+	return exerciseName === undefined ? undefined : weightSets.find((set) => set.machineOf === exerciseName);
+}
+
+/** A machine's own weights or levels, if the exercise is a machine */
+export function machineOrLevelsOf(exerciseName: string | undefined, weightSets: WeightSetLike[]) {
+	return levelSetOf(exerciseName, weightSets) ?? machineSetOf(exerciseName, weightSets);
 }
 
 /** An exercise's machine levels, if it has them */
@@ -48,9 +98,9 @@ export function levelSetOf(exerciseName: string | undefined, weightSets: WeightS
 	return exerciseName === undefined ? undefined : weightSets.find((set) => set.levelsOf === exerciseName);
 }
 
-/** The weight sets someone picks from: a gym's weights, not a machine's levels */
+/** The weight sets someone picks from: a gym's weights, not a machine's own levels or weights */
 export function pickableWeightSets(weightSets: WeightSetLike[]): WeightSetLike[] {
-	return weightSets.filter((set) => set.levelsOf === undefined && set.unit !== 'LEVEL');
+	return weightSets.filter((set) => set.levelsOf === undefined && set.machineOf === undefined && set.unit !== 'LEVEL');
 }
 
 export const MAX_WEIGHTS_PER_SET = 200;
@@ -79,8 +129,9 @@ export function availableWeightsFor(
 	// A machine with levels always uses its own levels
 	const levels = levelSetOf(exercise.name, weightSets);
 	if (levels) return exercise.weightUnit === 'LEVEL' ? levels.weights : null;
-	if (!exercise.weightSetId) return null;
-	const weightSet = weightSets.find((set) => set.id === exercise.weightSetId);
+	// A machine with weights always uses its own; there's no weight set to pick
+	const machine = machineSetOf(exercise.name, weightSets);
+	const weightSet = machine ?? weightSets.find((set) => exercise.weightSetId && set.id === exercise.weightSetId);
 	if (!weightSet || weightSet.weights.length === 0) return null;
 	if (weightSet.unit !== (exercise.weightUnit ?? 'KG')) return null;
 	// Help counts against you: 20 kg of help is a load of -20, and less help is the next step up

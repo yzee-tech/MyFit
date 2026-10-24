@@ -23,7 +23,13 @@
 	import type { Mesocycle } from '@prisma/client';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { formatWeightList, levelSetOf, pickableWeightSets, type WeightSetLike } from '$lib/utils/weightSets';
+	import {
+		formatWeightList,
+		levelSetOf,
+		machineSetOf,
+		pickableWeightSets,
+		type WeightSetLike
+	} from '$lib/utils/weightSets';
 	import { unitLabel } from '$lib/utils/weightUnits';
 	import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
 	import { toast } from 'svelte-sonner';
@@ -43,7 +49,11 @@
 	};
 
 	type PropsType =
-		| ({ context: 'exerciseSplit' } & CommonProps<SplitExerciseTemplateWithoutIdsOrIndex>)
+		| ({
+				context: 'exerciseSplit';
+				/** The routine asks for the gym's unit and weights at the start of each workout */
+				asksEachTime?: boolean;
+		  } & CommonProps<SplitExerciseTemplateWithoutIdsOrIndex>)
 		| ({
 				context: 'mesocycle';
 				mesocycle: Mesocycle;
@@ -133,6 +143,10 @@
 	let currentExercise: Partial<FullExerciseTemplate> = $state(structuredClone(defaultExercise));
 	// A machine with levels uses its own, set on the Exercises page
 	let machineLevels = $derived(levelSetOf(currentExercise.name, $page.data.weightSets ?? []));
+	// A machine with weights uses its own too, also set on the Exercises page
+	let machineWeights = $derived(machineSetOf(currentExercise.name, $page.data.weightSets ?? []));
+	// At many gyms, the gym picked at the start decides the weights: there's no weight set to pick here
+	let asksEachTime = $derived(props.context === 'exerciseSplit' && props.asksEachTime === true);
 	let selectedMuscleGroups = $state<MuscleGroup[]>([]);
 	let filterOpen = $state(false);
 
@@ -192,7 +206,8 @@
 			toast.error('Pick an exercise');
 			return;
 		}
-		if (repsOnly) currentExercise.weightSetId = null;
+		// A machine uses its own levels or weights: a link to a weight set would only mislead
+		if (repsOnly || machineLevels || machineWeights) currentExercise.weightSetId = null;
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
 		if (isBlockExercise(finishedExercise)) {
 			if (mode === 'Add') result = props.addExercise(finishedExercise);
@@ -512,6 +527,18 @@
 						<span class="text-sm text-muted-foreground" data-testid="exercise-machine-levels">
 							Levels {formatWeightList(machineLevels.weights)} (set on the exercise)
 						</span>
+					{:else if machineWeights}
+						<span class="text-sm font-medium leading-none">Weights available</span>
+						<span class="text-sm text-muted-foreground" data-testid="exercise-machine-weights">
+							{machineWeights.isAssistance ? 'Help' : 'Weights'}
+							{formatWeightList(machineWeights.weights)}
+							{unitLabel(machineWeights.unit)} (set on the exercise)
+						</span>
+					{:else if asksEachTime}
+						<span class="text-sm font-medium leading-none">Weights available</span>
+						<span class="text-sm text-muted-foreground" data-testid="exercise-weights-from-gym">
+							Weights come from the gym you pick when you start the workout.
+						</span>
 					{:else}
 						{#key currentExercise}
 							<Select.Root
@@ -562,7 +589,7 @@
 	</Sheet.Content>
 </Sheet.Root>
 
-<ResponsiveDialog title="New exercise" bind:open={newExerciseOpen}>
+<ResponsiveDialog long title="New exercise" bind:open={newExerciseOpen}>
 	{#snippet description()}
 		It's added to your exercises, and picked here.
 	{/snippet}

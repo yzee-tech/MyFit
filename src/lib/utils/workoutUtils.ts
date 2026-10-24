@@ -4,7 +4,14 @@ import type { Workout, WorkoutExercise } from './types';
 import { type Mesocycle, type Prisma } from '@prisma/client';
 import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
 import type { WeightUnit } from './prismaEnums';
-import { availableWeightsFor, nextWeightUp, weightsAround, type WeightSetLike } from './weightSets';
+import {
+	availableWeightsFor,
+	levelSetOf,
+	machineSetOf,
+	nextWeightUp,
+	weightsAround,
+	type WeightSetLike
+} from './weightSets';
 import { BERGER_REPS_RATE } from './oneRepMax';
 
 type VolumeSet = { reps: number; load: number; RIR: number; miniSets?: { reps: number; load: number; RIR: number }[] };
@@ -818,20 +825,29 @@ function fitSetsToRoutine(ex: WorkoutExerciseInProgress, routineSetCount: number
  * Once every set is at the top, every set goes up one level (keeping any gaps, e.g. down sets on
  * 8, 7, 6 go to 9, 8, 7), back at the bottom of the range. Sets already at the top wait for the
  * others. When a set has no higher level, none move up and reps keep going up instead.
+ * An assisted machine (a higher level is more help) goes down a level instead: less help is harder.
  */
-function progressLevels(ex: WorkoutExerciseInProgress, levels: number[] | null): WorkoutExerciseInProgress['sets'] {
-	const nextLevel = (level: number) => (levels ? nextWeightUp(levels, level) : level + 1);
+function progressLevels(
+	ex: WorkoutExerciseInProgress,
+	levels: number[] | null,
+	assisted = false
+): WorkoutExerciseInProgress['sets'] {
+	const harderLevel = (level: number) => {
+		if (!assisted) return levels ? nextWeightUp(levels, level) : level + 1;
+		if (levels) return levels.findLast((lower) => lower < level - 1e-6) ?? null;
+		return level - 1 > 0 ? level - 1 : null;
+	};
 	const counts = (set: WorkoutExerciseInProgress['sets'][number]) =>
 		!set.skipped && set.reps !== undefined && set.load !== undefined;
 	const allAtTop = ex.sets.every((set, setIdx) => !counts(set) || set.reps! >= repRangeOfSet(ex, setIdx).end);
-	const nextLevels = ex.sets.map((set) => (counts(set) ? nextLevel(set.load!) : null));
+	const nextLevels = ex.sets.map((set) => (counts(set) ? harderLevel(set.load!) : null));
 	const moveUp = allAtTop && ex.sets.every((set, setIdx) => !counts(set) || nextLevels[setIdx] !== null);
 
 	return ex.sets.map((set, setIdx) => {
 		if (!counts(set)) return set;
 		const { start, end } = repRangeOfSet(ex, setIdx);
 		if (moveUp) return { ...set, load: nextLevels[setIdx]!, reps: start };
-		// Below the top, or all at the top with nowhere higher to go: a rep more. Otherwise wait
+		// Below the top, or all at the top with no harder level to go to: a rep more. Otherwise wait
 		if (set.reps! < end || allAtTop) return { ...set, reps: set.reps! + 1 };
 		return set;
 	});
@@ -845,6 +861,22 @@ export type ProgressionPlan = {
 	settings: Pick<Mesocycle, 'weeklyRIR' | 'startOverloadPercentage' | 'lastSetToFailure' | 'forceRIRMatching'>;
 	exercises: RoutineExerciseTemplate[];
 };
+
+/**
+ * Help without counting bodyweight (an assisted machine, or help logged as a negative load): the formula
+ * can't compare amounts of help with nothing to take them from, so the help stays and reps go up
+ */
+function assistedWithoutShare(
+	ex: WorkoutExerciseInProgress,
+	lastPerformance: PreviousPerformance,
+	weightSets: WeightSetLike[]
+) {
+	if (ex.bodyweightFraction !== null && ex.bodyweightFraction !== undefined) return false;
+	const machine = machineSetOf(ex.name, weightSets);
+	const linked = weightSets.find((set) => ex.weightSetId && set.id === ex.weightSetId);
+	if (machine?.isAssistance || (!machine && linked?.isAssistance)) return true;
+	return lastPerformance.exercise.sets.some((set) => !set.skipped && set.load < 0);
+}
 
 /**
  * Done at 0 kg without counting bodyweight (plain push-ups, a band): every set done, and every part
@@ -868,7 +900,8 @@ export function progressiveOverloadMagic(
 	repsOnly: RepsOnlySettings = new Map()
 ) {
 	const mesocycle = plan.settings;
-	// Done with no weight last time: progressed as reps only too (found per exercise below)
+	// Done with no weight last time, or helped without counting bodyweight: progressed as reps only too
+	// (found per exercise below)
 	const noWeight = new Set<string>();
 	// Levels keep their own rule, so reps only applies to exercises with weights
 	const isRepsOnly = (ex: WorkoutExerciseInProgress) =>
@@ -890,6 +923,7 @@ export function progressiveOverloadMagic(
 		const lastPerformance = allPreviousPerformances.at(-1);
 		if (!lastPerformance?.exercise) return;
 		if (doneWithNoWeight(ex, lastPerformance)) noWeight.add(ex.name);
+		if (assistedWithoutShare(ex, lastPerformance, weightSets)) noWeight.add(ex.name);
 
 		const routineSetCount = ex.sets.length;
 
@@ -900,7 +934,7 @@ export function progressiveOverloadMagic(
 		if (isLevelUnit(ex.weightUnit)) {
 			// Only the sets the routine has decide whether to go up a level
 			ex.sets = lastPerformance.exercise.sets.slice(0, routineSetCount).map((oldSet) => addExtraSetProperties(oldSet));
-			if (!easySession) ex.sets = progressLevels(ex, weights);
+			if (!easySession) ex.sets = progressLevels(ex, weights, levelSetOf(ex.name, weightSets)?.isAssistance ?? false);
 			fitSetsToRoutine(ex, routineSetCount);
 			return;
 		}

@@ -772,7 +772,8 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	await page.getByRole('link', { name: /^Dumbbell bicep curls/ }).click();
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.getByLabel('Machine with levels').click();
+	await page.getByLabel('Machine', { exact: true }).click();
+	await page.getByRole('radio', { name: 'Levels' }).click();
 	await page.getByLabel('From level').fill('1');
 	await page.getByLabel('To level').fill('10');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -2216,4 +2217,229 @@ test('editing a past workout: nothing ticked offers Discard changes, which keeps
 		orderBy: { setIndex: 'asc' }
 	});
 	expect(sets.map((set) => set.skipped)).toEqual([false, false, true]);
+});
+
+/** Opens an exercise's details form from the Exercises page */
+async function editExerciseDetails(page: Page, name: string) {
+	await page.goto('/exercises');
+	await page.getByRole('link', { name: new RegExp(`^${name}`) }).click();
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+}
+
+test('a machine with its own weights: set on the exercise, always in its unit, shown in routines and workouts', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+	await prisma.weightSet.create({
+		data: { userId: userData.userId, name: 'Building DBs', unit: 'KG', weights: [5, 10, 15] }
+	});
+
+	// Face pulls on a cable stack in lb: 10–50 by 10, then 55
+	await editExerciseDetails(page, 'Face pulls');
+	await page.getByLabel('Machine', { exact: true }).click();
+	await expect(page.getByRole('radio', { name: 'Weights' })).toHaveAttribute('data-state', 'on');
+	// Weights must be added before saving
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('alert').filter({ hasText: /Add the machine.s weights/ })).toBeVisible();
+	await page.getByLabel('Machine in pounds').click();
+	await page.getByLabel('From', { exact: true }).fill('10');
+	await page.getByLabel('To', { exact: true }).fill('50');
+	await page.getByLabel('Every').fill('10');
+	await page.getByRole('button', { name: 'Add range' }).click();
+	await page.getByLabel('Add one weight').fill('55');
+	await page.getByRole('button', { name: 'Add weight' }).click();
+	await expect(page.getByTestId('exercise-form-machine-weights')).toHaveText('Weights: 10–50 by 10, 55 lb');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-machine-weights')).toHaveText('Machine 10–50 by 10, 55 lb');
+	const facePulls = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Face pulls' } }
+	});
+	expect([facePulls.machineWeights, facePulls.machineUnit, facePulls.assisted]).toEqual([
+		[10, 20, 30, 40, 50, 55],
+		'LB',
+		false
+	]);
+
+	// In the kg routine's workout: shown in lb, with no unit switch and no weight set
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByTestId('Face pulls-machine-unit')).toHaveText('LB');
+	await expect(page.getByTestId('Face pulls-unit-toggle')).toHaveCount(0);
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toBeVisible();
+	const facePullsInProgress = (await savedWorkoutState(page)).workoutExercises.find(
+		(exercise: { name: string }) => exercise.name === 'Face pulls'
+	);
+	expect([facePullsInProgress.weightUnit, facePullsInProgress.weightSetId]).toEqual(['LB', null]);
+
+	// Its editor shows the machine's weights instead of weight sets
+	await page.getByTestId('Face pulls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByTestId('exercise-machine-weights')).toHaveText(
+		'Weights 10–50 by 10, 55 lb (set on the exercise)'
+	);
+	await expect(page.getByLabel('Weights available')).toHaveCount(0);
+});
+
+test('an assisted machine: copied from its old weight set, bodyweight turned on, a warning without it', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [{ name: 'Assisted pull-ups', targetMuscleGroup: 'Lats' }]);
+	await prisma.weightSet.create({
+		data: { userId: userData.userId, name: 'Gym assist', unit: 'KG', weights: [5, 10, 15, 20], isAssistance: true }
+	});
+
+	await editExerciseDetails(page, 'Assisted pull-ups');
+	await page.getByLabel('Machine', { exact: true }).click();
+	await page.getByLabel('Copy from a weight set').click();
+	await page.getByRole('option', { name: 'Gym assist (kg)' }).click();
+	await expect(page.getByTestId('exercise-form-machine-weights')).toHaveText('Help: 5–20 by 5 kg');
+	await expect(page.getByLabel('Assisted machine')).toBeChecked();
+	// Help only makes sense against bodyweight: turned on at 100%
+	await expect(page.getByLabel('Counts bodyweight')).toBeChecked();
+	await expect(page.getByLabel('Share of bodyweight (%)')).toHaveValue('100');
+	await expect(page.getByTestId('exercise-form-assisted-warning')).toHaveCount(0);
+	await page.getByLabel('Counts bodyweight').click();
+	await expect(page.getByTestId('exercise-form-assisted-warning')).toContainText(
+		'Suggestions will keep the help the same and add reps'
+	);
+	// With levels: a higher level is more help, going down a level is progress
+	await page.getByRole('radio', { name: 'Levels' }).click();
+	await expect(page.getByTestId('exercise-form-machine-settings')).toContainText('going down a level is progress');
+	await expect(page.getByTestId('exercise-form-assisted-warning')).toHaveCount(0);
+	await page.getByRole('radio', { name: 'Weights' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-machine-weights')).toHaveText('Help 5–20 by 5 kg');
+	const exercise = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Assisted pull-ups' } }
+	});
+	expect([exercise.machineWeights, exercise.machineUnit, exercise.assisted, exercise.bodyweightFraction]).toEqual([
+		[5, 10, 15, 20],
+		'KG',
+		true,
+		null
+	]);
+
+	// The old weight set still works, with a note to move it; new weight sets have no Assisted switch
+	await page.goto('/exercise-splits/weight-sets');
+	await expect(page.getByTestId('weight-set-Gym assist')).toContainText('Machines now live on the exercise');
+	await page.getByRole('button', { name: 'Add weight set' }).click();
+	await expect(page.getByLabel('Name')).toBeVisible();
+	await expect(page.getByLabel('Assisted machine')).toHaveCount(0);
+});
+
+test('an older app version saving an exercise keeps its machine, and can’t turn on levels for it', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [{ name: 'Cable rows', targetMuscleGroup: 'Lats' }]);
+	const cableRows = await prisma.exercise.update({
+		where: { userId_name: { userId: userData.userId, name: 'Cable rows' } },
+		data: { machineWeights: [10, 20, 30], machineUnit: 'KG', assisted: true }
+	});
+	await page.goto('/exercises');
+	// What a version from before machines sends: no machine fields
+	const oldDetails = {
+		name: 'Cable rows',
+		targetMuscleGroup: 'Lats',
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		note: 'Seat on 4',
+		repsOnly: false,
+		maxReps: null,
+		levels: null
+	};
+	const update = (details: object) =>
+		page.request.post('/trpc/exercises.update', { data: { json: { id: cableRows.id, details } } });
+	expect((await update(oldDetails)).ok()).toBe(true);
+	const saved = await prisma.exercise.findUniqueOrThrow({ where: { id: cableRows.id } });
+	expect([saved.note, saved.machineWeights, saved.machineUnit, saved.assisted]).toEqual([
+		'Seat on 4',
+		[10, 20, 30],
+		'KG',
+		true
+	]);
+
+	// Turning on levels from there would make it both: refused, asking to reopen the app, nothing saved
+	const refused = await update({ ...oldDetails, note: 'Changed', levels: { from: 1, to: 10, step: 1 } });
+	expect(refused.status()).toBe(412);
+	expect(await refused.text()).toContain('MyFit was updated');
+	const unchanged = await prisma.exercise.findUniqueOrThrow({ where: { id: cableRows.id } });
+	expect([unchanged.note, unchanged.levelsFrom, unchanged.machineWeights]).toEqual(['Seat on 4', null, [10, 20, 30]]);
+
+	// A machine's weights always come with a unit
+	const noUnit = await update({ ...oldDetails, machine: { weights: [10, 20] } });
+	expect(noUnit.status()).toBe(400);
+});
+
+test('an “ask each time” routine: no weight set to pick, and the gym picked at the start beats the exercise’s own', async ({
+	page,
+	userData
+}) => {
+	await createSplitAndMesoForTest(page);
+	const [ownDumbbells] = await Promise.all([
+		prisma.weightSet.create({ data: { userId: userData.userId, name: 'Own DBs', unit: 'KG', weights: [7, 13, 19] } }),
+		prisma.weightSet.create({ data: { userId: userData.userId, name: 'Gym DBs', unit: 'KG', weights: [5, 10, 15] } })
+	]);
+	const pullA = { name: 'Pull A', exerciseSplit: { userId: userData.userId } };
+	await prisma.exerciseSplitDay.updateMany({ where: pullA, data: { weightUnit: 'ASK' } });
+	await prisma.exerciseTemplate.updateMany({
+		where: { name: 'Barbell rows', exerciseSplitDay: pullA },
+		data: { weightSetId: ownDumbbells.id }
+	});
+
+	await editRoutine(page, 'Pull A');
+	await page.getByLabel('Barbell rows options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByTestId('exercise-weights-from-gym')).toHaveText(
+		'Weights come from the gym you pick when you start the workout.'
+	);
+	await expect(page.getByLabel('Weights available')).toHaveCount(0);
+
+	// Its own set is in the gym's unit, but the gym picked for this workout decides
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByLabel('Kilograms').click();
+	await page.getByLabel('Weights here').click();
+	await page.getByRole('option', { name: 'Gym DBs' }).click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await expect
+		.poll(
+			async () =>
+				(await savedWorkoutState(page))?.workoutExercises?.find((ex: { name: string }) => ex.name === 'Barbell rows')
+					?.weightSetId
+		)
+		.not.toBe(ownDumbbells.id);
+	const rows = (await savedWorkoutState(page)).workoutExercises.find(
+		(ex: { name: string }) => ex.name === 'Barbell rows'
+	);
+	const gymDumbbells = await prisma.weightSet.findFirstOrThrow({ where: { userId: userData.userId, name: 'Gym DBs' } });
+	expect(rows.weightSetId).toBe(gymDumbbells.id);
+});
+
+test('the exercise ⋯ menu closes when the list scrolls, instead of sticking to the top', async ({ page }) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next' }).click();
+	// A small scroll that keeps the ⋯ button in view leaves the menu open
+	await page.getByTestId('Pull-ups-menu-button').click();
+	await expect(page.getByRole('menu')).toBeVisible();
+	await page.getByTestId('Barbell rows-summary').hover();
+	await page.mouse.wheel(0, 5);
+	await page.waitForTimeout(300);
+	await expect(page.getByRole('menu')).toBeVisible();
+	// Scrolled away: it closes
+	await page.mouse.wheel(0, 3000);
+	await expect(page.getByTestId('Pull-ups-menu-button')).not.toBeInViewport();
+	await expect(page.getByRole('menu')).toHaveCount(0);
 });

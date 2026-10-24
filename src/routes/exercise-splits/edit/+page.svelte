@@ -237,6 +237,7 @@
 		</span>
 		<AddEditExerciseDrawer
 			addExercise={routineEditor.addExercise}
+			asksEachTime={routineEditor.weightUnit === 'ASK'}
 			context="exerciseSplit"
 			editExercise={routineEditor.editExercise}
 			editingExercise={routineEditor.editingExercise}

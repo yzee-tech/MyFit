@@ -60,17 +60,19 @@ export function formatWeight(kg: number, unit: WeightUnit): string {
 }
 
 /**
- * The unit an exercise is shown in: levels, if its weight set is a machine's levels; else its own
- * override; else, for routines used at many gyms, the unit chosen for this workout; else its
- * weight set's unit, else its routine's unit
+ * The unit an exercise is shown in: levels, if it's a machine with levels; the machine's own unit, if it's
+ * a machine with weights; else its own override; else, for routines used at many gyms, the unit chosen
+ * for this workout; else its weight set's unit, else its routine's unit
  */
 export function resolveExerciseUnit(
 	exerciseUnit: WeightUnit | null | undefined,
 	routineUnit: RoutineWeightUnit,
 	sessionUnit: WeightUnit,
-	weightSetUnit?: WeightUnit
+	weightSetUnit?: WeightUnit,
+	machineUnit?: WeightUnit
 ): WeightUnit {
 	if (isLevelUnit(weightSetUnit)) return 'LEVEL';
+	if (machineUnit) return machineUnit;
 	if (exerciseUnit && !isLevelUnit(exerciseUnit)) return exerciseUnit;
 	if (routineUnit === 'ASK') return sessionUnit;
 	return weightSetUnit ?? routineUnit;

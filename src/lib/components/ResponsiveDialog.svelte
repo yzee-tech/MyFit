@@ -17,6 +17,9 @@
 		/** A close button with this label on desktop too (the phone drawer always has one, "Cancel") */
 		cancelLabel?: string;
 		children?: Snippet;
+		/** Content that can be taller than the screen (e.g. the exercise form): it scrolls inside, so its buttons
+		 * stay reachable */
+		long?: boolean;
 	};
 
 	let {
@@ -30,7 +33,8 @@
 		triggerButtonContent,
 		cancelButtonVariant = 'outline',
 		cancelLabel,
-		children
+		children,
+		long = false
 	}: PropsType = $props();
 
 	let isDesktop = $state(false);
@@ -51,7 +55,7 @@
 				</Button>
 			</Dialog.Trigger>
 		{/if}
-		<Dialog.Content class="sm:max-w-[425px]">
+		<Dialog.Content class="sm:max-w-[425px] {long ? 'max-h-[90dvh] overflow-y-auto' : ''}">
 			<Dialog.Header>
 				<Dialog.Title>{title}</Dialog.Title>
 				{#if description}
@@ -82,7 +86,7 @@
 				</Button>
 			</Drawer.Trigger>
 		{/if}
-		<Drawer.Content class="h-fit">
+		<Drawer.Content class="h-fit {long ? 'max-h-[92dvh]' : ''}">
 			<Drawer.Header>
 				<Drawer.Title>{title}</Drawer.Title>
 				{#if description}
@@ -91,7 +95,7 @@
 					</Drawer.Description>
 				{/if}
 			</Drawer.Header>
-			<div class="flex flex-col gap-2 px-4">
+			<div class="flex flex-col gap-2 px-4 {long ? 'min-h-0 overflow-y-auto' : ''}">
 				{#if children}
 					{@render children()}
 				{/if}

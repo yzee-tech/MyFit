@@ -271,7 +271,7 @@
 	</Sheet.Content>
 </Sheet.Root>
 
-<ResponsiveDialog title="New exercise" bind:open={newExerciseOpen}>
+<ResponsiveDialog long title="New exercise" bind:open={newExerciseOpen}>
 	{#snippet description()}
 		{replacingIdx === null ? "It's added to your exercises, and ticked here." : "It's added to your exercises."}
 	{/snippet}
