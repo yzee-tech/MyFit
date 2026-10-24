@@ -2,6 +2,13 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-24: removed unused 'Update routine' server code (PR #53)
+
+### Removed
+
+- The server code behind the old "Update routine?" prompt after saving a workout: its preview
+  endpoint and the routine-rewrite transaction, which were no longer used. No visible change.
+
 ## 2026-10-24: machines on the exercise, assisted machines (PR #52)
 
 ### Added
