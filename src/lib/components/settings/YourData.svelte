@@ -20,4 +20,11 @@
 			<DownloadIcon /> Download CSV
 		</a>
 	</Card.Content>
+	<Card.Footer>
+		<p class="text-sm text-muted-foreground">
+			Reading the CSV: weights are always kg in <code>loadKg</code>; machine levels are separate in
+			<code>machineLevel</code>. A negative load means an assisted machine helped you. Text that a spreadsheet could
+			read as a formula is prefixed with a single quote so it opens as text; the JSON keeps the original.
+		</p>
+	</Card.Footer>
 </Card.Root>
