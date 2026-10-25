@@ -15,6 +15,7 @@
 	import MotivationalQuotes from '$lib/components/settings/MotivationalQuotes.svelte';
 	import WelcomeBack from '$lib/components/settings/WelcomeBack.svelte';
 	import HomeUnit from '$lib/components/settings/HomeUnit.svelte';
+	import YourData from '$lib/components/settings/YourData.svelte';
 
 	let hasError = $state(false);
 	let quotesEnabled = $state(false);
@@ -167,5 +168,6 @@
 			welcomeBackAfterDays={$page.data.userSettings.welcomeBackAfterDays}
 		/>
 		<MotivationalQuotes {quotesEnabled} {quotesDisplayModes} {onUpdateSettings} />
+		<YourData />
 	{/if}
 </div>
