@@ -791,3 +791,116 @@ test('an expired session shows the session toast instead of saving the login pag
 	expect(downloaded).toBe(false);
 	await context.close();
 });
+
+test('cardio exports preserve raw seconds/metres, exercise measures and display units in JSON and CSV', async ({
+	browser
+}) => {
+	const { userId, context } = await createUserContext(browser);
+	const run = await prisma.exercise.create({
+		data: { userId, name: 'Miles run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'MI' }
+	});
+	const bike = await prisma.exercise.create({
+		data: {
+			userId,
+			name: 'Timed bike',
+			targetMuscleGroup: 'Cardio',
+			measure: 'Time',
+			levelsFrom: 1,
+			levelsTo: 20,
+			levelStep: 1
+		}
+	});
+	const plank = await prisma.exercise.create({
+		data: { userId, name: 'Plank', targetMuscleGroup: 'Abs', measure: 'Time' }
+	});
+	const template = { setType: 'V2' as const, repRangeStart: 8, repRangeEnd: 15 };
+	const set = { setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false };
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: new Date(),
+			endedAt: new Date(),
+			workoutExercises: {
+				create: [
+					{
+						...template,
+						exerciseId: run.id,
+						name: run.name,
+						targetMuscleGroup: 'Cardio',
+						exerciseIndex: 0,
+						sets: {
+							create: [
+								{ ...set, timeSeconds: 600, distanceMeters: 1609.344 },
+								{ ...set, setIndex: 1, skipped: true }
+							]
+						}
+					},
+					{
+						...template,
+						exerciseId: bike.id,
+						name: bike.name,
+						targetMuscleGroup: 'Cardio',
+						exerciseIndex: 1,
+						weightUnit: 'LEVEL',
+						sets: { create: { ...set, load: 8, timeSeconds: 30 } }
+					},
+					{
+						...template,
+						exerciseId: plank.id,
+						name: plank.name,
+						targetMuscleGroup: 'Abs',
+						exerciseIndex: 2,
+						sets: { create: { ...set, timeSeconds: 45 } }
+					}
+				]
+			}
+		}
+	});
+	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	expect(jsonResponse.status()).toBe(200);
+	const json = await jsonResponse.json();
+	expect(json.exercises.find((e: { id: string }) => e.id === run.id)).toMatchObject({
+		measure: 'DistanceTime',
+		distanceUnit: 'MI'
+	});
+	expect(json.exercises.find((e: { id: string }) => e.id === bike.id)).toMatchObject({
+		measure: 'Time',
+		distanceUnit: null
+	});
+	expect(json.exercises.find((e: { id: string }) => e.id === plank.id)).toMatchObject({
+		measure: 'Time',
+		distanceUnit: null
+	});
+	const [runRow, bikeRow, plankRow] = json.workouts[0].workoutExercises;
+	expect(runRow.sets[0]).toMatchObject({ timeSeconds: 600, distanceMeters: 1609.344, reps: 0, load: 0, RIR: 0 });
+	expect(runRow.sets[1]).toMatchObject({ skipped: true, timeSeconds: null, distanceMeters: null });
+	expect(bikeRow.sets[0]).toMatchObject({ timeSeconds: 30, distanceMeters: null, load: 8 });
+	expect(plankRow.sets[0]).toMatchObject({ timeSeconds: 45, distanceMeters: null, load: 0 });
+	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
+	expect(csvResponse.status()).toBe(200);
+	const [header, ...rows] = parseCsv((await csvResponse.text()).slice(1));
+	expect(header).toEqual(EXPECTED_HEADER);
+	expect(rows).toHaveLength(4);
+	const cells = (row: string[]) => Object.fromEntries(header.map((key, i) => [key, row[i]]));
+	const [runCsv, skippedCsv, bikeCsv, plankCsv] = rows.map(cells);
+	expect(runCsv).toMatchObject({
+		exerciseName: 'Miles run',
+		timeSeconds: '600',
+		distanceMeters: '1609.344',
+		reps: '0',
+		loadKg: '0',
+		RIR: '0',
+		miniSets: ''
+	});
+	expect(skippedCsv).toMatchObject({ skipped: 'true', timeSeconds: '', distanceMeters: '' });
+	expect(bikeCsv).toMatchObject({
+		timeSeconds: '30',
+		distanceMeters: '',
+		loadKg: '',
+		machineLevel: '8',
+		displayUnit: 'LEVEL'
+	});
+	expect(plankCsv).toMatchObject({ timeSeconds: '45', distanceMeters: '', loadKg: '0', machineLevel: '' });
+	await context.close();
+});

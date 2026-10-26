@@ -9,7 +9,8 @@ async function startBlankWorkout(page: Page) {
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('80');
-	await pickRoutine(page, 'Blank workout');
+	// With no routines, the start page is already a blank workout and has no picker.
+	if (await page.getByRole('radio', { name: /^Blank workout/ }).count()) await pickRoutine(page, 'Blank workout');
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
 }
@@ -73,7 +74,7 @@ test('New exercise: how it’s measured, with a distance unit for distances and 
 	userData
 }) => {
 	await page.goto('/exercises');
-	await page.getByLabel('New exercise').click();
+	await page.getByRole('button', { name: 'New exercise', exact: true }).click();
 	await page.getByLabel('Name', { exact: true }).fill('Run');
 	// The built-in Running suggestion fills in distance and time in km
 	await page.getByTestId('built-in-suggestions').getByRole('button', { name: 'Running' }).click();
@@ -88,7 +89,8 @@ test('New exercise: how it’s measured, with a distance unit for distances and 
 	await page.getByRole('button', { name: 'Create exercise' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise created' })).toBeVisible();
 
-	await page.getByLabel('New exercise').click();
+	await page.goto('/exercises');
+	await page.getByRole('button', { name: 'New exercise', exact: true }).click();
 	await page.getByLabel('Name', { exact: true }).fill('Bike');
 	await page.getByRole('combobox', { name: 'Muscle group' }).click();
 	await page.getByRole('option', { name: 'Cardio' }).click();
@@ -287,8 +289,10 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 	await box(page, 'Trail run', 2, 'distance').fill('700');
 	await box(page, 'Trail run', 2, 'time').fill('25:00:00');
 	await box(page, 'Trail run', 2, 'time').blur();
+	// Invalid text restores the previous valid duration rather than erasing it.
+	await expectBox(box(page, 'Trail run', 2, 'time'), '26:00');
 	await page.getByTestId('Trail run-set-2-action').click();
-	await expect(page.getByTestId('Trail run-missing')).toContainText('Set 2: enter a distance under 1,000 km and time');
+	await expect(page.getByTestId('Trail run-missing')).toContainText('Set 2: enter a distance under 1,000 km');
 });
 
 test('once a cardio exercise has workouts its measure is fixed; the stats chart has cardio charts; merge and replace respect measures', async ({
@@ -337,3 +341,101 @@ test('once a cardio exercise has workouts its measure is fixed; the stats chart 
 	await sheet.getByRole('button', { name: 'Barbell rows', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Barbell rows is measured differently' })).toBeVisible();
 });
+
+test('an all-skipped cardio row can be corrected into completed intervals', async ({ page, userData }) => {
+	const exercise = await prisma.exercise.create({
+		data: {
+			userId: userData.userId,
+			name: 'Skipped run',
+			targetMuscleGroup: 'Cardio',
+			measure: 'DistanceTime',
+			distanceUnit: 'MI'
+		}
+	});
+	const workout = await prisma.workout.create({
+		data: {
+			userId: userData.userId,
+			userBodyweight: 80,
+			startedAt: new Date(),
+			endedAt: new Date(),
+			workoutExercises: {
+				create: {
+					name: exercise.name,
+					targetMuscleGroup: 'Cardio',
+					exerciseId: exercise.id,
+					exerciseIndex: 0,
+					setType: 'V2',
+					repRangeStart: 8,
+					repRangeEnd: 15,
+					sets: { create: { setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: true } }
+				}
+			}
+		}
+	});
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+	await page.waitForURL(/editing/);
+	await expect(page.getByTestId('Skipped run-sets')).toHaveAttribute('data-measure', 'DistanceTime');
+	await page.getByTestId('Skipped run-set-1-action').click();
+	await page.getByTestId('Skipped run-set-1-action').click();
+	await box(page, 'Skipped run', 1, 'distance').fill('1');
+	await box(page, 'Skipped run', 1, 'time').fill('10:00');
+	await box(page, 'Skipped run', 1, 'time').blur();
+	await page.getByTestId('Skipped run-set-1-action').click();
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await saveWorkout(page);
+	const saved = await prisma.workoutExerciseSet.findFirstOrThrow({
+		where: { workoutExercise: { workoutId: workout.id } }
+	});
+	expect(saved).toMatchObject({ skipped: false, timeSeconds: 600, distanceMeters: 1609.344, reps: 0, load: 0, RIR: 0 });
+});
+
+for (const setType of ['Drop', 'Myorep', 'MyorepMatch', 'MyorepMatchDown']) {
+	test(`legacy ${setType} cardio templates log plain intervals and strip mini-sets on save`, async ({
+		page,
+		userData
+	}) => {
+		await createExercises(userData.userId, [
+			{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+		]);
+		await startBlankWorkout(page);
+		await quickAdd(page, ['Run']);
+		// Emulate a routine/localStorage entry saved before its exercise changed to cardio.
+
+		await page.evaluate((setType) => {
+			const state = JSON.parse(localStorage.getItem('workoutRunes')!);
+			state.workoutExercises[0].setType = setType;
+			state.workoutExercises[0].changeType = 'Percentage';
+			state.workoutExercises[0].changeAmount = 20;
+			state.workoutExercises[0].sets = [0, 1].map(() => ({
+				reps: undefined,
+				load: undefined,
+				RIR: undefined,
+				timeSeconds: 60,
+				distance: 0.2,
+				completed: false,
+				skipped: false,
+				miniSets: [{ reps: 5, load: 20, RIR: 1, completed: true }]
+			}));
+			localStorage.setItem('workoutRunes', JSON.stringify(state));
+		}, setType);
+		await page.reload();
+		await expect(page.getByTestId('Run-sets')).toHaveAttribute('data-measure', 'DistanceTime');
+		await expect(page.locator('[id*="mini-set"]')).toHaveCount(0);
+		await expect(page.getByLabel('add-mini-set-to-set-1-of-Run')).toHaveCount(0);
+		for (const set of [1, 2]) await page.getByTestId(`Run-set-${set}-action`).click();
+		await page.getByRole('button', { name: 'Next', exact: true }).click();
+		const request = page.waitForRequest((r) => r.url().includes('workouts.create') && r.method() === 'POST');
+		await saveWorkout(page);
+		const posted = await request;
+		expect(posted.postData()).not.toContain('"miniSetIndex"');
+		const saved = await prisma.workoutExercise.findFirstOrThrow({
+			where: { workout: { userId: userData.userId } },
+			include: { sets: { include: { miniSets: true } } }
+		});
+		expect(saved.sets).toHaveLength(2);
+		for (const set of saved.sets)
+			expect(set).toMatchObject({ timeSeconds: 60, distanceMeters: 200, reps: 0, load: 0, RIR: 0, miniSets: [] });
+	});
+}

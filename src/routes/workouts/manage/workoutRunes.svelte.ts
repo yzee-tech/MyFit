@@ -468,9 +468,11 @@ function createWorkoutRunes() {
 		measures = {};
 		lastActivityAt = null;
 		loadRepsOnly(workout.workoutExercises.map((ex) => ex.name));
-		// A row's measure is what it logged; the exercise only says which unit to show its distances in
+		// Keep the logged measure, except an all-skipped row has no values to infer it from.
 		for (const ex of workout.workoutExercises) {
-			const measure = measureOfSets(ex.sets);
+			const measure = ex.sets.every((set) => set.skipped)
+				? (ex.exercise?.measure ?? measureOfSets(ex.sets))
+				: measureOfSets(ex.sets);
 			if (isCardioMeasure(measure)) {
 				measures[ex.name] = {
 					measure,

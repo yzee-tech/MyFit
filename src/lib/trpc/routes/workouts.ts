@@ -201,7 +201,12 @@ async function getExerciseHistory(userId: string, exerciseIds: string[]): Promis
 	const perExercise = await Promise.all(
 		[...new Set(exerciseIds)].map((exerciseId) =>
 			prisma.workoutExercise.findMany({
-				where: { exerciseId, workout: { userId, isDeload: false } },
+				where: {
+					exerciseId,
+					workout: { userId },
+					// Strength progression excludes deload baselines; cardio repeats the latest intervals.
+					OR: [{ workout: { isDeload: false } }, { exercise: { measure: { in: ['Time', 'DistanceTime'] } } }]
+				},
 				include: {
 					sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
 					workout: { select: { userBodyweight: true, startedAt: true } }
@@ -457,8 +462,8 @@ export const workouts = t.router({
 					orderBy: { exerciseIndex: 'asc' },
 					include: {
 						sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
-						// A cardio row's measure is read from its sets; the exercise only says which unit its distances show in
-						exercise: { select: { distanceUnit: true } }
+						// Completed sets preserve the historical measure; all-skipped rows need the linked measure to edit.
+						exercise: { select: { measure: true, distanceUnit: true } }
 					}
 				}
 			}

@@ -2,6 +2,7 @@ import { createContext } from '$lib/trpc/context';
 import { createCaller } from '$lib/trpc/router';
 import type {
 	DistanceUnit,
+	ExerciseMeasure,
 	Mesocycle,
 	Workout,
 	WorkoutExercise,
@@ -20,7 +21,7 @@ export type FullWorkoutWithMesoData = Workout & {
 	workoutOfMesocycle: (WorkoutOfMesocycle & { mesocycle: Mesocycle }) | null;
 	workoutExercises: (WorkoutExercise & {
 		sets: (WorkoutExerciseSet & { miniSets: WorkoutExerciseMiniSet[] })[];
-		/** The exercise it's linked to, for the unit its distances show in; none for an unlinked row */
-		exercise?: { distanceUnit: DistanceUnit | null } | null;
+		/** Linked measure for all-skipped editing, plus distance display unit; none for an unlinked row */
+		exercise?: { measure: ExerciseMeasure; distanceUnit: DistanceUnit | null } | null;
 	})[];
 };

@@ -64,7 +64,8 @@ async function seedPerson() {
 	await prisma.user.create({ data: { id: userId, email: `cardio-${userId}@myfit.com` } });
 	const caller = createCaller({ event: {} as never, userId });
 	const runExercise = await caller.exercises.create({
-		...run,
+		name: run.name,
+		targetMuscleGroup: run.targetMuscleGroup,
 		customMuscleGroup: null,
 		bodyweightFraction: null,
 		note: null,
@@ -76,7 +77,8 @@ async function seedPerson() {
 		distanceUnit: 'KM'
 	});
 	const bikeExercise = await caller.exercises.create({
-		...bike,
+		name: bike.name,
+		targetMuscleGroup: bike.targetMuscleGroup,
 		customMuscleGroup: null,
 		bodyweightFraction: null,
 		note: null,
@@ -408,9 +410,104 @@ test('the workout page knows the unit to show a run’s distances in; history ke
 		select: { id: true }
 	});
 	const full = await caller.workouts.findById(workout.id);
-	expect(full?.workoutExercises[0].exercise).toEqual({ distanceUnit: 'KM' });
-	expect(full?.workoutExercises[2].exercise).toEqual({ distanceUnit: null });
+	expect(full?.workoutExercises[0].exercise).toEqual({ measure: 'DistanceTime', distanceUnit: 'KM' });
+	expect(full?.workoutExercises[2].exercise).toEqual({ measure: 'Reps', distanceUnit: null });
 	const history = await caller.workouts.getExerciseHistory({ exerciseName: 'Run' });
 	expect(history[0].exercise).toEqual({ repsOnly: false, measure: 'DistanceTime', distanceUnit: 'KM' });
 	expect(history[0].sets[0]).toMatchObject({ timeSeconds: 1560, distanceMeters: 5000 });
+});
+
+test('cardio repeats the latest deload session while strength ignores it', async () => {
+	const { caller, runExercise } = await seedPerson();
+	await prisma.workout.create({
+		data: {
+			userId: runExercise.userId,
+			userBodyweight: 80,
+			startedAt: new Date(),
+			endedAt: new Date(),
+			isDeload: true,
+			workoutExercises: {
+				create: {
+					...run,
+					exerciseIndex: 0,
+					exerciseId: runExercise.id,
+					sets: { create: [cardioSet(0, { timeSeconds: 1800, distanceMeters: 6000 })] }
+				}
+			}
+		}
+	});
+	const s = await caller.workouts.suggestSets({
+		exerciseName: 'Run',
+		sets: 1,
+		setType: 'V2',
+		repRangeStart: 8,
+		repRangeEnd: 15,
+		weightUnit: 'KG',
+		userBodyweight: 80
+	});
+
+	expect(s?.sets?.[0]).toMatchObject({ timeSeconds: 1800, distance: 6 });
+	const today = await caller.workouts.getWorkoutExercisesWithPreviousData({
+		userBodyweight: 80,
+		routineName: 'Cardio day'
+	});
+	expect(today.todaysWorkoutExercises[0].sets[0]).toMatchObject({ timeSeconds: 1800, distance: 6 });
+	expect(today.previousWorkoutData?.exercises[0].sets[0]).toMatchObject({ timeSeconds: 1800, distanceMeters: 6000 });
+	const latest = await prisma.workout.findFirstOrThrow({ where: { userId: runExercise.userId, isDeload: true } });
+	const strength = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: runExercise.userId, name: rows.name } }
+	});
+	await prisma.workoutExercise.create({
+		data: {
+			...rows,
+			exerciseIndex: 1,
+			exerciseId: strength.id,
+			workoutId: latest.id,
+			sets: { create: [{ ...repsSet(0), load: 999 }] }
+		}
+	});
+	const after = await caller.workouts.getWorkoutExercisesWithPreviousData({
+		userBodyweight: 80,
+		routineName: 'Cardio day'
+	});
+	expect(after.previousWorkoutData?.exercises.find((ex) => ex.name === rows.name)?.sets[0].load).toBe(40);
+	// No normal cardio history left: deload-only history must still suggest intervals.
+	await prisma.workoutExercise.deleteMany({ where: { exerciseId: runExercise.id, workout: { isDeload: false } } });
+	expect(
+		(
+			await caller.workouts.suggestSets({
+				exerciseName: 'Run',
+				sets: 1,
+				setType: 'V2',
+				repRangeStart: 8,
+				repRangeEnd: 15,
+				weightUnit: 'KG',
+				userBodyweight: 80
+			})
+		)?.sets?.[0]
+	).toMatchObject({ timeSeconds: 1800, distance: 6 });
+});
+
+test('create and edit both reject cardio mini-sets while accepting plain intervals', async () => {
+	const { caller, runExercise } = await seedPerson();
+	const data = {
+		workoutData: { userBodyweight: 80, startedAt: new Date() },
+		workoutExercises: [{ ...run, exerciseIndex: 0 }],
+		workoutExercisesSets: [[cardioSet(0, { timeSeconds: 60, distanceMeters: 200 })]],
+		workoutExercisesMiniSets: [[[]]]
+	};
+	const { workoutId } = await caller.workouts.create(data);
+	const withMiniSets = { ...data, workoutExercisesMiniSets: [[[{ miniSetIndex: 0, reps: 5, load: 20, RIR: 1 }]]] };
+	await expect(caller.workouts.create(withMiniSets)).rejects.toThrow(/no mini-sets/);
+	await expect(caller.workouts.editById({ id: workoutId, endedAt: new Date(), data: withMiniSets })).rejects.toThrow(
+		/no mini-sets/
+	);
+	await expect(caller.workouts.editById({ id: workoutId, endedAt: new Date(), data })).resolves.toMatchObject({
+		message: 'Workout edited successfully'
+	});
+	const saved = await prisma.workoutExercise.findFirstOrThrow({
+		where: { workoutId, exerciseId: runExercise.id },
+		include: { sets: { include: { miniSets: true } } }
+	});
+	expect(saved.sets[0]).toMatchObject({ timeSeconds: 60, distanceMeters: 200, miniSets: [] });
 });
