@@ -9,6 +9,8 @@
 	import EditIcon from 'virtual:icons/lucide/pencil';
 	import DeleteIcon from 'virtual:icons/lucide/trash';
 	import { routineSetCount } from '$lib/utils/routineSets';
+	import { page } from '$app/stores';
+	import { intervalsLabel, isCardioMeasure, measureInfoOf } from '$lib/utils/measure';
 	import type { RoutineExerciseTemplate, SplitExerciseTemplateWithoutIdsOrIndex } from './commonTypes';
 
 	type ExerciseTemplateCardProps = ReadOnlyProps | EditableProps;
@@ -38,6 +40,10 @@
 
 	let { ...props }: ExerciseTemplateCardProps = $props();
 	let isContextMenuOpen = $state(false);
+	// Cardio is counted in intervals; its rep range means nothing
+	let isCardio = $derived(
+		isCardioMeasure(measureInfoOf(props.exerciseTemplate.name, $page.data.cardioExercises).measure)
+	);
 </script>
 
 <div class="flex flex-col gap-0.5 rounded-md border bg-card/50 p-2 backdrop-blur-sm">
@@ -89,9 +95,13 @@
 	</div>
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto text-sm lowercase text-muted-foreground">
-			{routineSetCount(props.exerciseTemplate.sets)}
-			{setTypeLabel(props.exerciseTemplate.setType)} sets of
-			{props.exerciseTemplate.repRangeStart} to {props.exerciseTemplate.repRangeEnd} reps
+			{#if isCardio}
+				{intervalsLabel(routineSetCount(props.exerciseTemplate.sets))}
+			{:else}
+				{routineSetCount(props.exerciseTemplate.sets)}
+				{setTypeLabel(props.exerciseTemplate.setType)} sets of
+				{props.exerciseTemplate.repRangeStart} to {props.exerciseTemplate.repRangeEnd} reps
+			{/if}
 		</span>
 		{#if props.exerciseTemplate.bodyweightFraction}
 			<Badge variant="outline">BW</Badge>

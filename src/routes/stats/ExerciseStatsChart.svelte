@@ -12,6 +12,14 @@
 	import { generateShadesAndTints } from '$lib/utils';
 	import { bestSetEstimate } from '$lib/utils/oneRepMax';
 	import { getExerciseVolume, getSetVolume, solveBergerFormula } from '$lib/utils/workoutUtils';
+	import { measureOfSets } from '$lib/utils/measure';
+	import {
+		distanceUnitLabel,
+		formatDuration,
+		fromMeters,
+		paceDenominator,
+		roundDistance
+	} from '$lib/utils/distanceUnits';
 	import {
 		CategoryScale,
 		Chart,
@@ -47,16 +55,23 @@
 	let { exercises: reverseExercises, selectedExercise }: PropsType = $props();
 	let allExercises = $derived(reverseExercises?.toReversed() ?? []);
 
-	// A machine's levels aren't weights: level sessions are charted on their own
-	type LoadKind = 'weights' | 'levels';
-	const kindOf = (ex: WorkoutExercise): LoadKind => (isLevelUnit(ex.weightUnit) ? 'levels' : 'weights');
-	let hasBothKinds = $derived(new Set(allExercises.map(kindOf)).size > 1);
+	// A machine's levels aren't weights, and a run is neither: each kind of session is charted on its own.
+	// A row is cardio by what it logged (its sets), never by the exercise's settings now
+	type LoadKind = 'weights' | 'levels' | 'cardio';
+	const kindOf = (ex: WorkoutExercise): LoadKind =>
+		measureOfSets(ex.sets) !== 'Reps' ? 'cardio' : isLevelUnit(ex.weightUnit) ? 'levels' : 'weights';
+	const kindLabels: Record<LoadKind, string> = { weights: 'Weights', levels: 'Levels', cardio: 'Cardio' };
+	let kinds = $derived([...new Set(allExercises.map(kindOf))]);
+	let hasBothKinds = $derived(kinds.length > 1);
 	let loadKind = $state<LoadKind>('weights');
 	$effect(() => {
 		const latest = allExercises.at(-1);
 		loadKind = latest ? kindOf(latest) : 'weights';
 	});
 	let exercises = $derived(allExercises.filter((ex) => kindOf(ex) === loadKind));
+	// Cardio: total time, and with distances, total distance and pace, in the exercise's unit now
+	let hasDistance = $derived(exercises.some((ex) => measureOfSets(ex.sets) === 'DistanceTime'));
+	let distanceUnit = $derived(allExercises.at(-1)?.exercise?.distanceUnit ?? 'KM');
 
 	let chart: Chart;
 	let chartCanvas: HTMLCanvasElement | undefined = $state();
@@ -72,10 +87,20 @@
 		| 'reps'
 		| 'set-volume'
 		| 'session-volume'
-		| 'load-and-bodyweight';
+		| 'load-and-bodyweight'
+		| 'total-time'
+		| 'total-distance'
+		| 'pace';
+	const cardioTypes: ChartType[] = ['total-time', 'total-distance', 'pace'];
 	let chartType = $state<ChartType>('estimated-1rm');
 	let isBodyweight = $derived(typeof exercises.at(0)?.bodyweightFraction === 'number');
 	let shownChartType: ChartType = $derived.by(() => {
+		// Cardio has its own charts; the weight charts (1RM, volume, overload) don't apply
+		if (loadKind === 'cardio') {
+			if (!cardioTypes.includes(chartType)) return 'total-time';
+			return chartType !== 'total-time' && !hasDistance ? 'total-time' : chartType;
+		}
+		if (cardioTypes.includes(chartType)) return 'estimated-1rm';
 		if (repsOnly) return chartType === 'absolute-load' && hasLoad ? 'absolute-load' : 'reps';
 		// For levels, the level itself (the overload formula, 1RM, volume and bodyweight are for weights)
 		if (loadKind === 'levels' && chartType !== 'reps') return 'absolute-load';
@@ -89,7 +114,10 @@
 	// One line for the whole workout: "Show sets" doesn't apply
 	const oneLineTypes: Partial<Record<ChartType, string>> = {
 		'estimated-1rm': 'Estimated 1RM',
-		'session-volume': 'Session volume'
+		'session-volume': 'Session volume',
+		'total-time': 'Total time',
+		'total-distance': 'Total distance',
+		pace: 'Pace'
 	};
 	let oneLineType = $derived(oneLineTypes[shownChartType]);
 	let homeUnit = $derived($page.data.homeWeightUnit ?? 'KG');
@@ -99,14 +127,32 @@
 
 	// "latest" is the most recent workout with an estimate; the change runs from the first one shown
 	let estimateSummary = $derived.by(() => {
-		if (shownChartType !== 'estimated-1rm') return null;
+		if (shownChartType !== 'estimated-1rm' && !cardioTypes.includes(shownChartType)) return null;
 		const points = (shownValues[0] ?? []).filter((value): value is number => value !== null);
 		const latest = points.at(-1);
 		if (latest === undefined) return null;
 		const change = points.length > 1 ? latest - points[0] : null;
+		const sign = change === null ? '' : change < 0 ? '−' : '+';
+		// Times and paces are charted in minutes; said as m:ss
+		if (shownChartType === 'total-time' || shownChartType === 'pace') {
+			const per = shownChartType === 'pace' ? ` ${paceDenominator(distanceUnit).label}` : '';
+			return {
+				title: oneLineTypes[shownChartType]!,
+				latest: `${formatDuration(latest * 60)}${per}`,
+				change: change === null ? null : `${sign}${formatDuration(Math.abs(change) * 60)}`
+			};
+		}
+		if (shownChartType === 'total-distance') {
+			return {
+				title: 'Total distance',
+				latest: `${latest} ${distanceUnitLabel(distanceUnit)}`,
+				change: change === null ? null : `${sign}${roundDistance(Math.abs(change))}`
+			};
+		}
 		return {
+			title: 'Estimated 1RM',
 			latest: `${latest.toFixed(2)} ${unitText}${isBodyweight ? ' incl. BW' : ''}`,
-			change: change === null ? null : `${change < 0 ? '−' : '+'}${Math.abs(change).toFixed(2)}`
+			change: change === null ? null : `${sign}${Math.abs(change).toFixed(2)}`
 		};
 	});
 
@@ -129,7 +175,31 @@
 			.map((ex) => ({ ...ex, sets: ex.sets.filter((set) => !set.skipped) }))
 			.filter((ex) => ex.sets.length > 0);
 
-		if (shownChartType === 'estimated-1rm') {
+		// Cardio: one point per workout, from the intervals done. Minutes, so the axis reads evenly
+		const totalSeconds = (ex: (typeof nonSkippedExercises)[number]) =>
+			ex.sets.reduce((total, set) => total + (set.timeSeconds ?? 0), 0);
+		const totalMeters = (ex: (typeof nonSkippedExercises)[number]) =>
+			ex.sets.reduce((total, set) => total + (set.distanceMeters ?? 0), 0);
+		const minutes = (seconds: number) => Math.round((seconds / 60) * 100) / 100;
+
+		if (shownChartType === 'total-time') {
+			dataValues = [nonSkippedExercises.map((ex) => minutes(totalSeconds(ex)))];
+		} else if (shownChartType === 'total-distance') {
+			dataValues = [
+				nonSkippedExercises.map((ex) => {
+					const meters = totalMeters(ex);
+					return meters > 0 ? roundDistance(fromMeters(meters, distanceUnit)) : null;
+				})
+			];
+		} else if (shownChartType === 'pace') {
+			dataValues = [
+				nonSkippedExercises.map((ex) => {
+					const [seconds, meters] = [totalSeconds(ex), totalMeters(ex)];
+					if (seconds <= 0 || meters <= 0) return null;
+					return minutes((seconds / meters) * paceDenominator(distanceUnit).meters);
+				})
+			];
+		} else if (shownChartType === 'estimated-1rm') {
 			const estimates = nonSkippedExercises.map((ex) => bestSetEstimate(ex, ex.workout.userBodyweight, false));
 			estimateSets = estimates.map((estimate) => estimate?.set ?? null);
 			dataValues = [estimates.map((estimate) => (estimate ? inHomeUnit(estimate.estimateKg) : null))];
@@ -201,9 +271,15 @@
 			tension: 0.2,
 			borderWidth: 2
 		});
-		const oneLineLabel =
-			oneLineType &&
-			`${oneLineType} (${unitText}${shownChartType === 'estimated-1rm' && isBodyweight ? ', incl. BW' : ''})`;
+		const oneLineUnit =
+			shownChartType === 'total-time'
+				? 'min'
+				: shownChartType === 'total-distance'
+					? distanceUnitLabel(distanceUnit)
+					: shownChartType === 'pace'
+						? `min ${paceDenominator(distanceUnit).label}`
+						: `${unitText}${shownChartType === 'estimated-1rm' && isBodyweight ? ', incl. BW' : ''}`;
+		const oneLineLabel = oneLineType && `${oneLineType} (${oneLineUnit})`;
 		const datasets = oneLineLabel
 			? [{ label: oneLineLabel, data: dataValues[0], spanGaps: true, ...lineStyle(0) }]
 			: // Only the sets picked under "Show sets", each named in the legend
@@ -230,8 +306,12 @@
 				plugins: {
 					tooltip: {
 						callbacks: {
-							// Which set the estimate is from, e.g. "80 kg × 8, RIR 2"
+							// Which set the estimate is from, e.g. "80 kg × 8, RIR 2"; a time or pace as m:ss
 							afterLabel: (item) => {
+								if (shownChartType === 'total-time' || shownChartType === 'pace') {
+									const value = item.parsed.y;
+									return typeof value === 'number' ? formatDuration(value * 60) : '';
+								}
 								const set = estimateSets[item.dataIndex];
 								if (!set) return '';
 								return `${inHomeUnit(set.load)} ${unitText}${isBodyweight ? ' + BW' : ''} × ${set.reps}, RIR ${set.RIR}`;
@@ -263,6 +343,9 @@
 				{selectedExercise}{#if loadKind === 'levels'}<span
 						class="ml-2 text-sm font-normal text-muted-foreground"
 						data-testid="stats-levels">levels</span
+					>{:else if loadKind === 'cardio'}<span
+						class="ml-2 text-sm font-normal text-muted-foreground"
+						data-testid="stats-cardio">cardio</span
 					>{/if}
 			</Card.Title>
 			<Popover.Root>
@@ -273,13 +356,14 @@
 						<ToggleGroup.Root
 							class="justify-start py-1"
 							onValueChange={(value) => {
-								if (value === 'weights' || value === 'levels') loadKind = value;
+								if (value === 'weights' || value === 'levels' || value === 'cardio') loadKind = value;
 							}}
 							type="single"
 							value={loadKind}
 						>
-							<ToggleGroup.Item size="sm" value="weights">Weights</ToggleGroup.Item>
-							<ToggleGroup.Item size="sm" value="levels">Levels</ToggleGroup.Item>
+							{#each kinds as kind}
+								<ToggleGroup.Item size="sm" value={kind}>{kindLabels[kind]}</ToggleGroup.Item>
+							{/each}
 						</ToggleGroup.Root>
 						<Separator class="my-2" />
 					{/if}
@@ -292,7 +376,13 @@
 							if (value) chartType = value as ChartType;
 						}}
 					>
-						{#if repsOnly}
+						{#if loadKind === 'cardio'}
+							{@render option('total-time', 'Total time')}
+							{#if hasDistance}
+								{@render option('total-distance', 'Total distance')}
+								{@render option('pace', 'Pace')}
+							{/if}
+						{:else if repsOnly}
 							{#if hasLoad}
 								{@render option('absolute-load', 'Load')}
 							{/if}
@@ -336,7 +426,9 @@
 		</div>
 		{#if estimateSummary}
 			<Card.Description data-testid="chart-summary">
-				{['Estimated 1RM', `latest ${estimateSummary.latest}`, estimateSummary.change].filter(Boolean).join(' · ')}
+				{[estimateSummary.title, `latest ${estimateSummary.latest}`, estimateSummary.change]
+					.filter(Boolean)
+					.join(' · ')}
 			</Card.Description>
 		{/if}
 	</Card.Header>

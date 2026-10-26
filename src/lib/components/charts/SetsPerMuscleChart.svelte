@@ -13,10 +13,11 @@
 	};
 	let { exercises, label }: PropsType = $props();
 
-	/** Muscles, most sets first */
+	/** Muscles, most sets first (cardio isn't a muscle: its intervals are left out) */
 	let muscles = $derived.by(() => {
 		const sets = new Map<string, number>();
 		for (const exercise of exercises) {
+			if (exercise.targetMuscleGroup === 'Cardio') continue;
 			const name =
 				exercise.targetMuscleGroup === 'Custom'
 					? (exercise.customMuscleGroup ?? 'Custom')
