@@ -28,6 +28,12 @@
 				toast.error(await failureMessage(response));
 				return;
 			}
+			// An expired session makes the server redirect to /login; fetch follows it and gets a 200 HTML page
+			const type = response.headers.get('Content-Type') ?? '';
+			if (response.redirected || !/^(application\/json|text\/csv)/i.test(type)) {
+				toast.error('Your session has expired. Sign in again to export.');
+				return;
+			}
 			const blob = await response.blob();
 			const fileName =
 				/filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? `myfit-export.${format}`;

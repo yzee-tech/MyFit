@@ -13,6 +13,8 @@ What changed in MyFit, newest first.
 
 - A refused or failed export doesn't use up the one-per-minute limit.
 
+- If your sign-in has expired while Settings is open, Download now shows "Your session has expired" instead of saving the login page as the export file.
+
 ## 2026-10-24: removed unused 'Update routine' server code (PR #53)
 
 ### Removed

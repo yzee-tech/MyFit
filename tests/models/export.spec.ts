@@ -640,3 +640,21 @@ test('the Download button shows a spinner while it waits and a toast when the ex
 	await expect(page.getByText('Export exceeds the maximum download size of 4 MB.')).toBeVisible();
 	await context.close();
 });
+
+test('an expired session shows the session toast instead of saving the login page', async ({ browser }) => {
+	const { context } = await createUserContext(browser);
+	const page = await context.newPage();
+	await page.goto('/settings');
+
+	await page.route('**/settings/export?format=json', (route) =>
+		route.fulfill({ status: 303, headers: { location: '/login?redirectTo=/settings' } })
+	);
+
+	let downloaded = false;
+	page.on('download', () => (downloaded = true));
+	await page.getByRole('button', { name: 'Download JSON' }).click();
+	await expect(page.getByText('Your session has expired. Sign in again to export.')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Download JSON' })).toBeEnabled();
+	expect(downloaded).toBe(false);
+	await context.close();
+});
