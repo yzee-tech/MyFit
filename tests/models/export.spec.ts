@@ -60,7 +60,9 @@ const EXPECTED_HEADER = [
 	'weightSetId',
 	'bodyweightKg',
 	'bodyweightFraction',
-	'miniSets'
+	'miniSets',
+	'timeSeconds',
+	'distanceMeters'
 ];
 
 function parseCsv(text: string): string[][] {
@@ -433,6 +435,9 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(row2[bySetId.skipped]).toBe('true');
 	expect(row2[bySetId.loadKg]).toBe('60.5');
 	expect(row2[bySetId.miniSets]).toBe('');
+	// Lifts have no time or distance
+	expect(row1[bySetId.timeSeconds]).toBe('');
+	expect(row1[bySetId.distanceMeters]).toBe('');
 
 	const row3 = rows[2];
 	expect(row3[bySetId.setId]).toBe('sC0000000000000000000001');

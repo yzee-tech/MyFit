@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '../fixtures';
-import { PrismaClient, type MuscleGroup } from '@prisma/client';
+import { PrismaClient, type DistanceUnit, type ExerciseMeasure, type MuscleGroup } from '@prisma/client';
 import { commonExercisePerMuscleGroup } from '../../src/lib/common/commonExercises';
 
 const prisma = new PrismaClient();
@@ -10,6 +10,11 @@ type ExerciseDetails = {
 	customMuscleGroup?: string | null;
 	bodyweightFraction?: number | null;
 	note?: string | null;
+	measure?: ExerciseMeasure;
+	distanceUnit?: DistanceUnit | null;
+	levelsFrom?: number | null;
+	levelsTo?: number | null;
+	levelStep?: number | null;
 };
 
 /**

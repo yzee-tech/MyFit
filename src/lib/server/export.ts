@@ -138,7 +138,10 @@ export function buildJsonExport(data: ExportData, appVersion: string): string {
 	});
 }
 
-/** setIndex counts from 0 as stored; setNumber is the same position counted from 1 */
+/**
+ * setIndex counts from 0 as stored; setNumber is the same position counted from 1. A cardio set has its
+ * timeSeconds and (for a run) distanceMeters, with reps, loadKg and RIR at 0; a lift's are empty
+ */
 const CSV_HEADERS = [
 	'workoutId',
 	'workoutExerciseId',
@@ -165,7 +168,9 @@ const CSV_HEADERS = [
 	'weightSetId',
 	'bodyweightKg',
 	'bodyweightFraction',
-	'miniSets'
+	'miniSets',
+	'timeSeconds',
+	'distanceMeters'
 ] as const;
 
 function escapeCell(value: string): string {
@@ -238,7 +243,9 @@ export function buildCsvExport(data: ExportData): string {
 						textCell(exercise.weightSetId),
 						numCell(workout.userBodyweight),
 						numCell(exercise.bodyweightFraction),
-						escapeCell(miniSets)
+						escapeCell(miniSets),
+						numCell(set.timeSeconds),
+						numCell(set.distanceMeters)
 					].join(',')
 				);
 			}
