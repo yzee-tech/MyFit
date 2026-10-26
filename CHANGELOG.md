@@ -2,6 +2,19 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-26: export follow-ups (PR #55)
+
+### Changed
+
+- **Export downloads are now gzip-compressed**, so the 4 MB download limit applies to the compressed file.
+  Only genuinely huge accounts can still hit the limit; the download itself is unchanged.
+
+- If an export is still too large, the message now says what to do: try the CSV format (smaller), or contact
+  support.
+
+- The JSON export's `appVersion` is now the deployed commit instead of a build timestamp, so it identifies
+  the exact app version that produced the file.
+
 ## 2026-10-26: export all your data (PR #54)
 
 ### Added
