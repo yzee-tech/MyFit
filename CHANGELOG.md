@@ -2,6 +2,19 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-26: export all your data (PR #54)
+
+### Added
+
+- **Settings > Your data**: Download JSON (everything MyFit stores about you) or Download CSV (one row per set,
+  with `setIndex` from 0 and `setNumber` from 1). Exports are read-only and can't be imported back. The buttons show
+  a spinner while the file is prepared, and a message if the export is refused (too large, or a second download
+  within a minute).
+
+- A refused or failed export doesn't use up the one-per-minute limit.
+
+- If your sign-in has expired while Settings is open, Download now shows "Your session has expired" instead of saving the login page as the export file.
+
 ## 2026-10-24: removed unused 'Update routine' server code (PR #53)
 
 ### Removed
