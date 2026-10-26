@@ -3,6 +3,8 @@ import { t } from '$lib/trpc/t';
 import { resolveExerciseUnit } from '$lib/utils/weightUnits';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
 import { routineSetCount } from '$lib/utils/routineSets';
+import { isValidDistanceMeters, isValidTimeSeconds } from '$lib/utils/distanceUnits';
+import { isCardioMeasure } from '$lib/utils/measure';
 import {
 	comparablePerformances,
 	convertExerciseLoads,
@@ -12,6 +14,8 @@ import {
 	NO_BLOCK_PROGRESSION,
 	progressiveOverloadMagic,
 	type RepsOnlySettings,
+	type MeasureSettings,
+	convertExerciseDistances,
 	type ProgressionMode,
 	type ProgressionPlan,
 	type ExerciseHistory,
@@ -27,6 +31,8 @@ import {
 } from '$lib/zodSchemas';
 import {
 	Prisma,
+	type DistanceUnit,
+	type ExerciseMeasure,
 	type RoutineWeightUnit,
 	type WeightUnit as WeightUnitType,
 	type Mesocycle,
@@ -92,10 +98,67 @@ function repsOnlySettings(exercises: { name: string; repsOnly: boolean; maxReps:
 	);
 }
 
+/** How an exercise is measured and, for distances, the unit they're shown in */
+export type ExerciseMeasureInfo = { measure: ExerciseMeasure; distanceUnit: DistanceUnit | null };
+
+/** Today's cardio exercises by name (reps exercises are left out: missing means reps) */
+function measureSettings(exercises: { name: string; measure: ExerciseMeasure; distanceUnit: DistanceUnit | null }[]) {
+	const measures: MeasureSettings = new Map();
+	const info: Record<string, ExerciseMeasureInfo> = {};
+	for (const exercise of exercises) {
+		if (!isCardioMeasure(exercise.measure)) continue;
+		measures.set(exercise.name, exercise.measure);
+		info[exercise.name] = { measure: exercise.measure, distanceUnit: exercise.distanceUnit };
+	}
+	return { measures, info };
+}
+
+/**
+ * Every set of a cardio exercise done (not skipped) has to carry its time, and its distance for a
+ * DistanceTime exercise, within bounds; a reps exercise's sets carry neither. A saved row's measure is
+ * read from its sets, so this is what keeps history meaning what it says. An exercise that is cardio
+ * now was cardio for every row ever saved against it (its measure is fixed once it has workouts), so
+ * the check holds for edits of past workouts too. An older app version can't fill in a cardio set:
+ * its save is refused and it's asked to reopen the app
+ */
+async function assertSetsMatchMeasures(userId: string, input: z.infer<typeof createWorkoutSchema>) {
+	const names = [...new Set(input.workoutExercises.map((exercise) => exercise.name))];
+	const exercises = await prisma.exercise.findMany({
+		where: { userId, name: { in: names } },
+		select: { name: true, measure: true }
+	});
+	const measureByName = new Map(exercises.map((exercise) => [exercise.name, exercise.measure]));
+	input.workoutExercises.forEach((exercise, exerciseIdx) => {
+		const measure = measureByName.get(exercise.name) ?? 'Reps';
+		for (const set of input.workoutExercisesSets[exerciseIdx] ?? []) {
+			if (set.timeSeconds != null && !isValidTimeSeconds(set.timeSeconds)) {
+				throw new TRPCError({ code: 'BAD_REQUEST', message: `${exercise.name}: a set's time is out of range` });
+			}
+			if (set.distanceMeters != null && !isValidDistanceMeters(set.distanceMeters)) {
+				throw new TRPCError({ code: 'BAD_REQUEST', message: `${exercise.name}: a set's distance is out of range` });
+			}
+			if (set.skipped) continue;
+			if (measure === 'Reps') {
+				if (set.timeSeconds != null || set.distanceMeters != null) {
+					throw new TRPCError({ code: 'BAD_REQUEST', message: `${exercise.name} is measured in reps` });
+				}
+				continue;
+			}
+			const missingTime = set.timeSeconds == null;
+			const missingDistance = measure === 'DistanceTime' ? set.distanceMeters == null : set.distanceMeters != null;
+			if (missingTime || missingDistance) {
+				throw new TRPCError({ code: 'PRECONDITION_FAILED', message: APP_UPDATED_MESSAGE });
+			}
+		}
+	});
+}
+
 type WorkoutExercisesWithPreviousData = {
 	todaysWorkoutExercises: WorkoutExerciseInProgress[];
 	/** Today's reps-only exercises by name, with their rep cap (null for none) */
 	repsOnly: Record<string, number | null>;
+	/** Today's cardio exercises by name: how they're measured, and the unit their distances show in */
+	measures: Record<string, ExerciseMeasureInfo>;
 	previousWorkoutData: null | {
 		exercises: WorkoutExerciseWithSets[];
 		userBodyweight: number;
@@ -376,7 +439,9 @@ export const workouts = t.router({
 				workoutExercises: {
 					orderBy: { exerciseIndex: 'asc' },
 					include: {
-						sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } }
+						sets: { include: { miniSets: { orderBy: { miniSetIndex: 'asc' } } }, orderBy: { setIndex: 'asc' } },
+						// A cardio row's measure is read from its sets; the exercise only says which unit its distances show in
+						exercise: { select: { distanceUnit: true } }
 					}
 				}
 			}
@@ -497,6 +562,7 @@ export const workouts = t.router({
 			const workoutExercisesWithPreviousData: WorkoutExercisesWithPreviousData = {
 				todaysWorkoutExercises: [],
 				repsOnly: {},
+				measures: {},
 				previousWorkoutData: null
 			};
 			const today = await findMyRoutineForWorkout(ctx.userId, input.routineName, input.useActiveMesocycle === true);
@@ -545,13 +611,15 @@ export const workouts = t.router({
 
 			const exercises = await prisma.exercise.findMany({
 				where: { userId: ctx.userId, name: { in: exerciseNames } },
-				select: { name: true, note: true, repsOnly: true, maxReps: true }
+				select: { name: true, note: true, repsOnly: true, maxReps: true, measure: true, distanceUnit: true }
 			});
 			const exerciseNotes = new Map(exercises.map((exercise) => [exercise.name, exercise.note]));
 			const repsOnly = repsOnlySettings(exercises);
 			workoutExercisesWithPreviousData.repsOnly = Object.fromEntries(repsOnly);
+			const { measures, info: measureInfo } = measureSettings(exercises);
+			workoutExercisesWithPreviousData.measures = measureInfo;
 
-			// Suggestions are worked out in kg, then shown in each exercise's unit
+			// Suggestions are worked out in kg and metres, then shown in each exercise's units
 			workoutExercisesWithPreviousData.todaysWorkoutExercises = progressiveOverloadMagic(
 				plan,
 				weekNumber,
@@ -559,17 +627,28 @@ export const workouts = t.router({
 				exerciseHistory,
 				mode,
 				weightSets,
-				repsOnly
+				repsOnly,
+				measures
 			).map((exercise) => ({
-				...convertExerciseLoads(exercise, 'toDisplay'),
+				...convertExerciseDistances(
+					convertExerciseLoads(exercise, 'toDisplay'),
+					'toDisplay',
+					measureInfo[exercise.name]?.distanceUnit
+				),
 				// The exercise's own note, shown with the routine's note
 				exerciseNote: exerciseNotes.get(exercise.name) ?? null
 			}));
 
 			// "Previous" for comparisons: the last time each of today's exercises was done, with the same
-			// kind of load (levels or weights)
+			// kind of load (levels or weights) and measured the same way
 			const lastPerformances = exerciseNames
-				.map((name) => comparablePerformances(exerciseHistory[name] ?? [], unitByExerciseName.get(name)).at(-1))
+				.map((name) =>
+					comparablePerformances(
+						exerciseHistory[name] ?? [],
+						unitByExerciseName.get(name),
+						measures.get(name) ?? 'Reps'
+					).at(-1)
+				)
 				.filter((performance) => performance !== undefined);
 			if (lastPerformances.length > 0) {
 				workoutExercisesWithPreviousData.previousWorkoutData = {
@@ -616,8 +695,18 @@ export const workouts = t.router({
 				prisma.mesocycle.findFirst({ where: { userId: ctx.userId, startDate: { not: null }, endDate: null } }),
 				userWeightSets(ctx.userId)
 			]);
-			const settings = { repsOnly: exercise.repsOnly, maxReps: exercise.maxReps };
-			const lastPerformance = comparablePerformances(history[exercise.name] ?? [], input.weightUnit).at(-1);
+			const settings = {
+				repsOnly: exercise.repsOnly,
+				maxReps: exercise.maxReps,
+				measure: exercise.measure,
+				distanceUnit: exercise.distanceUnit
+			};
+			const { measures } = measureSettings([exercise]);
+			const lastPerformance = comparablePerformances(
+				history[exercise.name] ?? [],
+				input.weightUnit,
+				exercise.measure
+			).at(-1);
 			if (!lastPerformance) return { ...settings, sets: null, previous: null };
 			// The last time it was done, in today's unit, for the workout's "Previous" column
 			const previous: { exercise: WorkoutExerciseWithSets; userBodyweight: number } = {
@@ -667,12 +756,19 @@ export const workouts = t.router({
 				history,
 				mode,
 				weightSets,
-				repsOnlySettings([exercise])
+				repsOnlySettings([exercise]),
+				measures
 			);
-			return { ...settings, sets: convertExerciseLoads(suggestion, 'toDisplay').sets, previous };
+			const shown = convertExerciseDistances(
+				convertExerciseLoads(suggestion, 'toDisplay'),
+				'toDisplay',
+				exercise.distanceUnit
+			);
+			return { ...settings, sets: shown.sets, previous };
 		}),
 
 	create: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
+		await assertSetsMatchMeasures(ctx.userId, input);
 		const startedAt = new Date(input.workoutData.startedAt ?? new Date());
 		const routineName = routineNameOf(input.workoutData);
 		const workout: Prisma.WorkoutUncheckedCreateInput = {
@@ -758,6 +854,7 @@ export const workouts = t.router({
 				select: { routineName: true }
 			});
 			if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workout not found' });
+			await assertSetsMatchMeasures(ctx.userId, input.data);
 			const workout: Prisma.WorkoutUncheckedCreateInput = {
 				id: input.id,
 				userId: ctx.userId,
@@ -842,8 +939,8 @@ export const workouts = t.router({
 						}
 					},
 					sets: { include: { miniSets: true }, orderBy: { setIndex: 'asc' } },
-					// Reps-only exercises are charted by their reps
-					exercise: { select: { repsOnly: true } }
+					// Reps-only exercises are charted by their reps; cardio by its time, distance and pace
+					exercise: { select: { repsOnly: true, measure: true, distanceUnit: true } }
 				},
 				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 				skip: input.cursorId !== undefined ? 1 : 0,

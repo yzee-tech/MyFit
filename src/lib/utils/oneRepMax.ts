@@ -3,7 +3,7 @@
  * reserve is worth e^0.0262 of the load. Normalised so 1 rep with nothing in reserve is the load itself
  */
 import { isLevelUnit } from './weightUnits';
-import type { WeightUnit } from './prismaEnums';
+import type { ExerciseMeasure, WeightUnit } from './prismaEnums';
 
 /** How much a rep (done or in reserve) is worth on the curve: 131/5000, shared with the progression */
 export const BERGER_REPS_RATE = 131 / 5000;
@@ -65,12 +65,21 @@ export function bestRecentEstimate<S extends EstimateSet, E extends PastExercise
 	return best;
 }
 
-/** Warm up only works from a weight: not for levels, reps-only or bodyweight exercises */
+/**
+ * Warm up only works from a weight: not for levels, reps-only, bodyweight or cardio exercises (a run
+ * has no weight to warm up to, whatever its zero-filled load says)
+ */
 export function canWarmUp(
 	exercise: { weightUnit?: WeightUnit | null; bodyweightFraction?: number | null },
-	repsOnly: boolean
+	repsOnly: boolean,
+	measure: ExerciseMeasure = 'Reps'
 ) {
-	return !repsOnly && !isLevelUnit(exercise.weightUnit) && typeof exercise.bodyweightFraction !== 'number';
+	return (
+		measure === 'Reps' &&
+		!repsOnly &&
+		!isLevelUnit(exercise.weightUnit) &&
+		typeof exercise.bodyweightFraction !== 'number'
+	);
 }
 
 /**

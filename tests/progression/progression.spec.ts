@@ -102,6 +102,8 @@ function performance(
 				id: `set-${setIndex}`,
 				setIndex,
 				skipped: false,
+				timeSeconds: null,
+				distanceMeters: null,
 				workoutExerciseId: `past-${exerciseName}`,
 				miniSets: []
 			}))

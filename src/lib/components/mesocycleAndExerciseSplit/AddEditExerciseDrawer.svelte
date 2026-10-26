@@ -40,12 +40,18 @@
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import XIcon from 'virtual:icons/lucide/x';
 	import type { RoutineExerciseTemplate, SplitExerciseTemplateWithoutIdsOrIndex } from './commonTypes';
+	import type { DistanceUnit, ExerciseMeasure } from '$lib/utils/prismaEnums';
+	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
+	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
+
+	/** How the picked exercise is measured, for a workout to show the right boxes straight away */
+	type MeasureInfo = { measure: ExerciseMeasure; distanceUnit: DistanceUnit | null };
 
 	type CommonProps<T> = {
 		editingExercise: T | undefined;
-		addExercise: (exercise: T) => boolean;
+		addExercise: (exercise: T, measure?: MeasureInfo) => boolean;
 		setEditingExercise: (exercise: undefined) => void;
-		editExercise: (exercise: T) => boolean;
+		editExercise: (exercise: T, measure?: MeasureInfo) => boolean;
 	};
 
 	type PropsType =
@@ -107,6 +113,11 @@
 	let pickedExercise = $derived(pickerExercises.find((exercise) => exercise.name === currentExercise.name));
 	// Reps only (e.g. pull-ups): no weights to pick
 	let repsOnly = $derived(pickedExercise?.repsOnly ?? false);
+	// Cardio (a run, a plank): counted in intervals, no rep range, set type, weights or progression
+	let pickedMeasure: MeasureInfo | undefined = $derived(
+		pickedExercise ? { measure: pickedExercise.measure, distanceUnit: pickedExercise.distanceUnit } : undefined
+	);
+	let isCardio = $derived(isCardioMeasure(pickedMeasure?.measure));
 	let pickerGroups = $derived(
 		Object.entries(
 			Object.groupBy(
@@ -207,14 +218,22 @@
 			return;
 		}
 		// A machine uses its own levels or weights: a link to a weight set would only mislead
-		if (repsOnly || machineLevels || machineWeights) currentExercise.weightSetId = null;
+		if (repsOnly || machineLevels || machineWeights || isCardio) currentExercise.weightSetId = null;
+		// Cardio has intervals, not a set type or a load change; its rep range is kept but means nothing
+		if (isCardio) {
+			currentExercise.setType = 'V2';
+			currentExercise.changeType = null;
+			currentExercise.changeAmount = null;
+			currentExercise.topRepRangeStart = null;
+			currentExercise.topRepRangeEnd = null;
+		}
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
 		if (isBlockExercise(finishedExercise)) {
-			if (mode === 'Add') result = props.addExercise(finishedExercise);
-			else result = props.editExercise(finishedExercise);
+			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure);
+			else result = props.editExercise(finishedExercise, pickedMeasure);
 		} else if (props.context === 'exerciseSplit') {
-			if (mode === 'Add') result = props.addExercise(finishedExercise);
-			else result = props.editExercise(finishedExercise);
+			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure);
+			else result = props.editExercise(finishedExercise, pickedMeasure);
 		}
 
 		if (!result) {
@@ -350,6 +369,13 @@
 							{#if typeof currentExercise.bodyweightFraction === 'number'}
 								<Badge variant="outline">{Math.round(currentExercise.bodyweightFraction * 100)}% of bodyweight</Badge>
 							{/if}
+							{#if pickedMeasure && isCardioMeasure(pickedMeasure.measure)}
+								<Badge variant="outline" data-testid="picked-exercise-measure">
+									{measureLabel(pickedMeasure.measure)}{pickedMeasure.distanceUnit
+										? ` in ${distanceUnitLabel(pickedMeasure.distanceUnit)}`
+										: ''}
+								</Badge>
+							{/if}
 						</div>
 						{#if pickedExercise?.note}
 							<span class="text-sm">{pickedExercise.note}</span>
@@ -366,21 +392,31 @@
 				{/if}
 			</div>
 			{#if props.context === 'exerciseSplit'}
-				<div class="flex w-full flex-col gap-1.5">
-					<Label for="exercise-sets">Sets</Label>
+				<div class="flex w-full flex-col gap-1.5" class:col-span-2={isCardio}>
+					<Label for="exercise-sets">{isCardio ? 'Intervals' : 'Sets'}</Label>
 					<Input id="exercise-sets" max={20} min={1} required type="number" bind:value={currentExercise.sets} />
+					{#if isCardio}
+						<span class="text-xs text-muted-foreground">
+							A steady run is 1 interval; 8 × 30 s sprints are 8. Each logs its own time{pickedMeasure?.measure ===
+							'DistanceTime'
+								? ' and distance'
+								: ''}.
+						</span>
+					{/if}
 				</div>
-				<div class="flex flex-col gap-1.5">
-					<span class="text-sm font-medium leading-none">Progression</span>
-					<Button class="gap-2" onclick={() => (overridesSheetOpen = true)} variant="secondary">
-						<span class="pointer-events-none">Overrides</span>
-						<ChevronRight class="pointer-events-none" />
-					</Button>
-				</div>
+				{#if !isCardio}
+					<div class="flex flex-col gap-1.5">
+						<span class="text-sm font-medium leading-none">Progression</span>
+						<Button class="gap-2" onclick={() => (overridesSheetOpen = true)} variant="secondary">
+							<span class="pointer-events-none">Overrides</span>
+							<ChevronRight class="pointer-events-none" />
+						</Button>
+					</div>
+				{/if}
 			{/if}
 			{#if props.context !== 'exerciseSplit' && isBlockExercise(currentExercise)}
-				<div class="flex w-full flex-col gap-1.5">
-					<Label for="exercise-sets">Sets</Label>
+				<div class="flex w-full flex-col gap-1.5" class:col-span-2={isCardio}>
+					<Label for="exercise-sets">{isCardio ? 'Intervals' : 'Sets'}</Label>
 					<Input
 						id="exercise-sets"
 						min={0}
@@ -390,15 +426,18 @@
 						bind:value={currentExercise.sets}
 					/>
 				</div>
-				<div class="flex flex-col gap-1.5">
-					<span class="text-sm font-medium leading-none">Progression</span>
-					<Button class="gap-2" onclick={() => (overridesSheetOpen = true)} variant="secondary">
-						<span class="pointer-events-none">Overrides</span>
-						<ChevronRight class="pointer-events-none" />
-					</Button>
-				</div>
+				{#if !isCardio}
+					<div class="flex flex-col gap-1.5">
+						<span class="text-sm font-medium leading-none">Progression</span>
+						<Button class="gap-2" onclick={() => (overridesSheetOpen = true)} variant="secondary">
+							<span class="pointer-events-none">Overrides</span>
+							<ChevronRight class="pointer-events-none" />
+						</Button>
+					</div>
+				{/if}
 			{/if}
-			<div class="flex w-full flex-col gap-1.5">
+			<!-- Cardio is measured in time and distance: no set type, rep range or load change -->
+			<div class="flex w-full flex-col gap-1.5" class:hidden={isCardio}>
 				{#key currentExercise}
 					<Select.Root
 						name="exercise-set-type"
@@ -421,7 +460,7 @@
 					</Select.Root>
 				{/key}
 			</div>
-			{#if currentExercise.setType === 'Drop' || currentExercise.setType === 'Down' || currentExercise.setType === 'MyorepMatchDown'}
+			{#if !isCardio && (currentExercise.setType === 'Drop' || currentExercise.setType === 'Down' || currentExercise.setType === 'MyorepMatchDown')}
 				<div class="flex w-full flex-col gap-1.5">
 					<Select.Root
 						name="exercise-set-change-type"
@@ -462,7 +501,7 @@
 					/>
 				</div>
 			{/if}
-			{#if currentExercise.setType === 'TopBackoff'}
+			{#if !isCardio && currentExercise.setType === 'TopBackoff'}
 				<div class="flex w-full flex-col gap-1.5">
 					<Label for="exercise-top-rep-range-start">Top set rep range start</Label>
 					<Input
@@ -486,7 +525,7 @@
 					/>
 				</div>
 			{/if}
-			<div class="flex w-full flex-col gap-1.5">
+			<div class="flex w-full flex-col gap-1.5" class:hidden={isCardio}>
 				<Label for="exercise-rep-range-start">
 					{#if currentExercise.setType === 'TopBackoff'}
 						Backoff sets rep range start
@@ -498,12 +537,12 @@
 					id="exercise-rep-range-start"
 					min={1}
 					placeholder="Type here"
-					required
+					required={!isCardio}
 					type="number"
 					bind:value={currentExercise.repRangeStart}
 				/>
 			</div>
-			<div class="flex w-full flex-col gap-1.5">
+			<div class="flex w-full flex-col gap-1.5" class:hidden={isCardio}>
 				<Label for="exercise-rep-range-end">
 					{#if currentExercise.setType === 'TopBackoff'}
 						Backoff sets rep range end
@@ -515,12 +554,12 @@
 					id="exercise-rep-range-end"
 					min={(currentExercise.repRangeStart ?? 0) + 1}
 					placeholder="Type here"
-					required
+					required={!isCardio}
 					type="number"
 					bind:value={currentExercise.repRangeEnd}
 				/>
 			</div>
-			{#if !repsOnly}
+			{#if !repsOnly && (!isCardio || machineLevels)}
 				<div class="col-span-2 flex w-full flex-col gap-1.5">
 					{#if machineLevels}
 						<span class="text-sm font-medium leading-none">Weights available</span>

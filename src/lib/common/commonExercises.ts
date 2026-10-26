@@ -1,10 +1,16 @@
 import type { SplitExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
-import type { MuscleGroup } from '@prisma/client';
+import type { DistanceUnit, ExerciseMeasure, MuscleGroup } from '@prisma/client';
+
+/** A built-in exercise to start from; measured in reps and weight unless it says otherwise */
+export type BuiltInExercise = SplitExerciseTemplateWithoutIdsOrIndex & {
+	measure?: ExerciseMeasure;
+	distanceUnit?: DistanceUnit;
+};
 
 // TODO: #82
 export const commonExercisePerMuscleGroup: {
 	muscleGroup: MuscleGroup;
-	exercises: SplitExerciseTemplateWithoutIdsOrIndex[];
+	exercises: BuiltInExercise[];
 }[] = [
 	{
 		muscleGroup: 'Chest',
@@ -1444,6 +1450,92 @@ export const commonExercisePerMuscleGroup: {
 				changeType: null,
 				changeAmount: null,
 				note: 'Band around thighs, step sideways, maintain tension.'
+			}
+		]
+	},
+	{
+		muscleGroup: 'Cardio',
+		exercises: [
+			{
+				name: 'Running',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'DistanceTime',
+				distanceUnit: 'KM',
+				note: 'Easy pace you could talk at; one interval is one run.'
+			},
+			{
+				name: 'Treadmill',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'DistanceTime',
+				distanceUnit: 'KM',
+				note: 'Set the incline as the level if it has one.'
+			},
+			{
+				name: 'Rowing machine',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'DistanceTime',
+				distanceUnit: 'M',
+				note: 'Legs, then back, then arms. Pace reads per 500 m.'
+			},
+			{
+				name: 'Stationary bike',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'Time',
+				note: 'Log the resistance as the level. Intervals: one set per effort.'
+			},
+			{
+				name: 'Stair climber',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'Time',
+				note: 'Stand tall, light grip on the rails. Log the speed as the level.'
+			},
+			{
+				name: 'Elliptical',
+				targetMuscleGroup: 'Cardio',
+				customMuscleGroup: null,
+				bodyweightFraction: null,
+				setType: 'V2',
+				repRangeStart: 1,
+				repRangeEnd: 1,
+				changeType: null,
+				changeAmount: null,
+				measure: 'Time',
+				note: 'Steady effort; log the resistance as the level.'
 			}
 		]
 	}

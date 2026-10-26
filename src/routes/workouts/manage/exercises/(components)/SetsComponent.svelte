@@ -3,6 +3,18 @@
 	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
 	import { convertWeight, formatWeight, fromKg, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { formatHintLoad, formatPreviousSet, type LoadKind } from '$lib/utils/previousSet';
+	import {
+		distanceStep,
+		distanceUnitLabel,
+		formatDuration,
+		formatPace,
+		fromMeters,
+		MAX_DISTANCE_METERS,
+		parseDuration,
+		roundDistance,
+		toMeters
+	} from '$lib/utils/distanceUnits';
+	import { isCardioMeasure } from '$lib/utils/measure';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
@@ -35,8 +47,15 @@
 
 	// Sets someone tried to tick with a box still empty. The notes and outlines are worked out from these
 	// sets as they are now, so they follow a set when others are added or removed, and go once it's filled
-	type Missing = 'reps' | 'load' | 'RIR';
+	type Missing = 'reps' | 'load' | 'level' | 'RIR' | 'time' | 'distance';
 	const triedToTick = new SvelteSet<WorkoutExerciseSet>();
+
+	// Cardio: each set is an interval with a time (and a distance), and a level on a machine with levels.
+	// No reps, weight or RIR boxes: those are zero-filled when the set is ticked
+	let measure = $derived(workoutRunes.measureOf(exercise.name));
+	let isCardio = $derived(isCardioMeasure(measure.measure));
+	let isDistance = $derived(measure.measure === 'DistanceTime');
+	let distanceUnit = $derived(measure.distanceUnit ?? 'KM');
 
 	// Loads here are in the exercise's unit; bodyweight is stored in kg
 	function inExerciseUnit(kg: number | null | undefined) {
@@ -61,6 +80,12 @@
 	/** The boxes a set still needs before it can be ticked */
 	function missingFields(set: WorkoutExerciseSet, idx: number): Missing[] {
 		const fields: Missing[] = [];
+		if (isCardio) {
+			if (isLevels && typeof set.load !== 'number') fields.push('level');
+			if (isDistance && !(typeof set.distance === 'number' && set.distance > 0)) fields.push('distance');
+			if (!(typeof set.timeSeconds === 'number' && set.timeSeconds > 0)) fields.push('time');
+			return fields;
+		}
 		if (typeof set.reps !== 'number') fields.push('reps');
 		const loadSet = isSameLoadExercise ? exercise.sets[0] : set;
 		if (!repsOnly && typeof loadSet?.load !== 'number' && (idx === 0 || !isSameLoadExercise)) fields.push('load');
@@ -83,6 +108,13 @@
 				return;
 			}
 			triedToTick.delete(set);
+			// A cardio set has no reps, weight or RIR: zeros, so everything that reads them keeps working (a
+			// machine's level stays in the load)
+			if (isCardio) {
+				set.reps = 0;
+				set.RIR = 0;
+				if (!isLevels) set.load = 0;
+			}
 			// Set 1's weight is a starting point for sets without one yet
 			if (idx === 0) fillEmptyLoads();
 		}
@@ -109,6 +141,8 @@
 			reps: last?.reps,
 			load: last?.load,
 			RIR: last?.RIR,
+			timeSeconds: last?.timeSeconds,
+			distance: last?.distance,
 			completed: false,
 			skipped: false,
 			miniSets: []
@@ -218,7 +252,13 @@
 	/** For bodyweight exercises: what a set counts as, e.g. -20 at 100 kg = 80 kg, 80% of bodyweight */
 	function countedLoad(load: number | undefined) {
 		const bodyweightKg = workoutRunes.workoutData?.userBodyweight;
-		if (isLevels || typeof exercise.bodyweightFraction !== 'number' || typeof load !== 'number' || !bodyweightKg)
+		if (
+			isLevels ||
+			isCardio ||
+			typeof exercise.bodyweightFraction !== 'number' ||
+			typeof load !== 'number' ||
+			!bodyweightKg
+		)
 			return null;
 		const bodyweight = fromKg(bodyweightKg, exercise.weightUnit ?? 'KG');
 		const total = roundWeight(exercise.bodyweightFraction * bodyweight + load);
@@ -332,6 +372,58 @@
 	// Boxes typed over while they held a copy of set 1: emptied, they follow set 1 again
 	const typedOverCopy = new WeakMap<WorkoutExerciseSet, Set<SetField>>();
 
+	/** The time box's text: m:ss of the set's seconds; empty while it only holds a suggestion */
+	const timeShown = (set: WorkoutExerciseSet) =>
+		isSuggested(set, 'timeSeconds') || set.timeSeconds === undefined ? '' : formatDuration(set.timeSeconds);
+	const timeHint = (set: WorkoutExerciseSet) =>
+		isSuggested(set, 'timeSeconds') && set.timeSeconds !== undefined ? formatDuration(set.timeSeconds) : 'm:ss';
+
+	/**
+	 * A time typed as m:ss (or minutes), taken when the box is left, so the text isn't reformatted under
+	 * the typing. Something that isn't a time goes back to what the box held
+	 */
+	function timeChanged(e: Event, set: WorkoutExerciseSet, idx: number) {
+		const input = e.currentTarget as HTMLInputElement;
+		if (input.value.trim() === '') {
+			if (!isSuggested(set, 'timeSeconds')) emptied(set, idx, 'timeSeconds');
+			return;
+		}
+		const seconds = parseDuration(input.value);
+		if (seconds === null) {
+			input.value = timeShown(set);
+			return;
+		}
+		if (isSuggested(set, 'timeSeconds')) {
+			set.suggested = { ...set.suggested, timeSeconds: set.timeSeconds };
+			if (copies.get(set)?.has('timeSeconds'))
+				typedOverCopy.set(set, (typedOverCopy.get(set) ?? new Set()).add('timeSeconds'));
+		}
+		set.timeSeconds = seconds;
+		input.value = formatDuration(seconds);
+		typed(set, idx, 'timeSeconds');
+	}
+
+	/** The pace of a distance set from its boxes; nothing until both are filled */
+	function pace(set: WorkoutExerciseSet) {
+		if (!isDistance || typeof set.distance !== 'number' || typeof set.timeSeconds !== 'number') return null;
+		return formatPace(set.timeSeconds, toMeters(set.distance, distanceUnit), distanceUnit);
+	}
+
+	/** How many boxes a row has, for the "uncompleted" line to span: cardio has its time (and distance, and level) */
+	let boxCount = $derived(isCardio ? (isLevels ? 1 : 0) + (isDistance ? 2 : 1) : 3);
+	// Cardio rows lay out their own columns (Set | Previous | [Lvl] | [Distance] | Time | tick | remove)
+	let cardioColumns = $derived(
+		[
+			'1.5rem',
+			...(editing ? [] : ['minmax(4rem,1fr)']),
+			...(isLevels ? ['minmax(2.75rem,0.7fr)'] : []),
+			...(isDistance ? ['minmax(3.5rem,1fr)'] : []),
+			'minmax(3.5rem,1fr)',
+			'2.25rem',
+			'2rem'
+		].join(' ')
+	);
+
 	function changed(e: Event, set: WorkoutExerciseSet, idx: number, field: SetField) {
 		const input = e.currentTarget as HTMLInputElement;
 		if (input.value === '') {
@@ -404,6 +496,25 @@
 		const previous = previousSets[idx];
 		const set = exercise.sets[idx];
 		if (!previous || previous.skipped || !set || set.completed || set.skipped) return;
+		if (isCardio) {
+			// Its intervals: the time, the distance in today's unit, and the level on a machine with levels
+			const fields: SetField[] = [];
+			if (typeof previous.timeSeconds === 'number') {
+				set.timeSeconds = previous.timeSeconds;
+				fields.push('timeSeconds');
+			}
+			if (isDistance && typeof previous.distanceMeters === 'number') {
+				set.distance = roundDistance(fromMeters(previous.distanceMeters, distanceUnit));
+				fields.push('distance');
+			}
+			if (isLevels) {
+				set.load = previous.load;
+				fields.push('load');
+			}
+			markChosen(set, ...fields);
+			workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+			return;
+		}
 		set.reps = previous.reps;
 		if (hasLoadBox(idx)) {
 			set.load = previous.load;
@@ -422,7 +533,7 @@
 	 * weight, so set 1's hint covers every set not done yet
 	 */
 	function repsHint(idx: number): RepsHint | null {
-		if (editing || repsOnly || isLevels || !hasLoadBox(idx)) return null;
+		if (editing || repsOnly || isLevels || isCardio || !hasLoadBox(idx)) return null;
 		const set = exercise.sets[idx];
 		const startLoad = originalSetLoads[idx];
 		const newLoad = set?.load;
@@ -490,51 +601,71 @@
 <!-- Set | Previous | load | Reps | RIR | tick | remove. The spare width is shared: Previous gets a part, the boxes the rest.
      The remove column is wider than its bin, which sits at its far side: a gap from the tick -->
 <div
-	class="grid items-center gap-1 {editing
-		? 'grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem]'
-		: 'grid-cols-[1.5rem_minmax(3rem,0.9fr)_minmax(3.25rem,1fr)_minmax(2.75rem,0.85fr)_minmax(2.25rem,0.7fr)_2.25rem_2rem] md:grid-cols-[2rem_minmax(5rem,1fr)_6rem_5rem_4rem_2.25rem_2.25rem]'}"
+	class="grid items-center gap-1 {isCardio
+		? ''
+		: editing
+			? 'grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.25rem_2rem]'
+			: 'grid-cols-[1.5rem_minmax(3rem,0.9fr)_minmax(3.25rem,1fr)_minmax(2.75rem,0.85fr)_minmax(2.25rem,0.7fr)_2.25rem_2rem] md:grid-cols-[2rem_minmax(5rem,1fr)_6rem_5rem_4rem_2.25rem_2.25rem]'}"
+	style:grid-template-columns={isCardio ? cardioColumns : undefined}
 	data-testid="{exercise.name}-sets"
+	data-measure={measure.measure}
 >
 	<!-- Headings sit on the bottom line, so a stacked "KG / (BW)" lines up with the others -->
 	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Set</span>
 	{#if !editing}
 		<span class="self-end text-xs font-medium uppercase text-muted-foreground">Previous</span>
 	{/if}
-	<span
-		class="self-end text-center text-xs font-medium leading-tight text-muted-foreground min-[375px]:whitespace-nowrap"
-		data-testid="{exercise.name}-load-header"
-	>
-		{#if repsOnly}
-			<span class="sr-only">No load</span>
-		{:else if isLevels}
-			LVL
-		{:else if typeof exercise.bodyweightFraction === 'number'}
-			<!-- Unit and (BW) side by side, or stacked on a very small phone -->
-			<span class="flex flex-col items-center min-[375px]:flex-row min-[375px]:justify-center min-[375px]:gap-1">
-				{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
-				<Popover.Root>
-					<Popover.Trigger>
-						<span class="text-xs font-semibold text-muted-foreground underline">(BW)</span>
-					</Popover.Trigger>
-					<Popover.Content>
-						<p class="text-sm text-muted-foreground">
-							Enter added weight as a positive number (e.g. 10 for a plate on a belt), and help as a negative number
-							(e.g. -20 on an assisted machine). Plain bodyweight is 0.
-							<br /><br />
-							{Math.round(exercise.bodyweightFraction * 100)}% of your bodyweight ({formatWeight(
-								exercise.bodyweightFraction * workoutRunes.workoutData!.userBodyweight!,
-								exercise.weightUnit ?? 'KG'
-							)}) is counted automatically.
-						</p>
-					</Popover.Content>
-				</Popover.Root>
-			</span>
-		{:else}
-			{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
+	{#if isCardio}
+		{#if isLevels}
+			<span
+				class="self-end text-center text-xs font-medium uppercase text-muted-foreground"
+				data-testid="{exercise.name}-load-header">LVL</span
+			>
 		{/if}
-	</span>
-	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Reps</span>
-	<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">RIR</span>
+		{#if isDistance}
+			<span
+				class="self-end text-center text-xs font-medium uppercase text-muted-foreground"
+				data-testid="{exercise.name}-distance-header">{distanceUnitLabel(distanceUnit)}</span
+			>
+		{/if}
+		<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Time</span>
+	{:else}
+		<span
+			class="self-end text-center text-xs font-medium leading-tight text-muted-foreground min-[375px]:whitespace-nowrap"
+			data-testid="{exercise.name}-load-header"
+		>
+			{#if repsOnly}
+				<span class="sr-only">No load</span>
+			{:else if isLevels}
+				LVL
+			{:else if typeof exercise.bodyweightFraction === 'number'}
+				<!-- Unit and (BW) side by side, or stacked on a very small phone -->
+				<span class="flex flex-col items-center min-[375px]:flex-row min-[375px]:justify-center min-[375px]:gap-1">
+					{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
+					<Popover.Root>
+						<Popover.Trigger>
+							<span class="text-xs font-semibold text-muted-foreground underline">(BW)</span>
+						</Popover.Trigger>
+						<Popover.Content>
+							<p class="text-sm text-muted-foreground">
+								Enter added weight as a positive number (e.g. 10 for a plate on a belt), and help as a negative number
+								(e.g. -20 on an assisted machine). Plain bodyweight is 0.
+								<br /><br />
+								{Math.round(exercise.bodyweightFraction * 100)}% of your bodyweight ({formatWeight(
+									exercise.bodyweightFraction * workoutRunes.workoutData!.userBodyweight!,
+									exercise.weightUnit ?? 'KG'
+								)}) is counted automatically.
+							</p>
+						</Popover.Content>
+					</Popover.Root>
+				</span>
+			{:else}
+				{unitLabel(exercise.weightUnit ?? 'KG').toUpperCase()}
+			{/if}
+		</span>
+		<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">Reps</span>
+		<span class="self-end text-center text-xs font-medium uppercase text-muted-foreground">RIR</span>
+	{/if}
 	<span></span>
 	<span></span>
 	{#each exercise.sets as set, idx}
@@ -562,7 +693,7 @@
 				{idx + 1}
 			</span>
 			{#if !editing}
-				{@const previous = formatPreviousSet(previousSets[idx], loadKind)}
+				{@const previous = formatPreviousSet(previousSets[idx], loadKind, measure)}
 				{#if previous !== '–' && !set.completed && !set.skipped}
 					<button
 						class="truncate text-left text-xs text-muted-foreground underline-offset-2 hover:underline min-[375px]:text-sm"
@@ -582,7 +713,64 @@
 					</span>
 				{/if}
 			{/if}
-			{#if !set.skipped}
+			{#if set.skipped}
+				<div class="flex items-center gap-2" style:grid-column="span {boxCount}">
+					<Separator class="w-px grow" />
+					<span class="text-sm text-muted-foreground">uncompleted</span>
+					<Separator class="w-px grow" />
+				</div>
+			{:else if isCardio}
+				{#if isLevels}
+					<Input
+						id="{exercise.name}-set-{idx + 1}-load"
+						class="{boxClass} {isMissing(idx, 'level') ? 'border-destructive' : ''}"
+						aria-invalid={isMissing(idx, 'level')}
+						aria-label="Set {idx + 1} level"
+						data-suggested={isSuggested(set, 'load')}
+						onfocus={() => noteSet1(set, 'load')}
+						oninput={(e) => changed(e, set, idx, 'load')}
+						disabled={set.completed}
+						min={1}
+						placeholder={suggestionHint(set, 'load')}
+						step={1}
+						type="number"
+						value={shownValue(set, 'load')}
+					/>
+				{/if}
+				{#if isDistance}
+					<Input
+						id="{exercise.name}-set-{idx + 1}-distance"
+						class="{boxClass} {isMissing(idx, 'distance') ? 'border-destructive' : ''}"
+						aria-invalid={isMissing(idx, 'distance')}
+						aria-label="Set {idx + 1} distance in {distanceUnitLabel(distanceUnit)}"
+						data-suggested={isSuggested(set, 'distance')}
+						onfocus={() => noteSet1(set, 'distance')}
+						oninput={(e) => changed(e, set, idx, 'distance')}
+						disabled={set.completed}
+						max={roundDistance(fromMeters(MAX_DISTANCE_METERS, distanceUnit))}
+						min={distanceStep(distanceUnit)}
+						placeholder={suggestionHint(set, 'distance')}
+						step={distanceStep(distanceUnit)}
+						type="number"
+						value={shownValue(set, 'distance')}
+					/>
+				{/if}
+				<Input
+					id="{exercise.name}-set-{idx + 1}-time"
+					class="{boxClass} {isMissing(idx, 'time') ? 'border-destructive' : ''}"
+					aria-invalid={isMissing(idx, 'time')}
+					aria-label="Set {idx + 1} time"
+					data-suggested={isSuggested(set, 'timeSeconds')}
+					onfocus={() => noteSet1(set, 'timeSeconds')}
+					onchange={(e) => timeChanged(e, set, idx)}
+					disabled={set.completed}
+					inputmode="numeric"
+					pattern="[0-9:.]*"
+					placeholder={timeHint(set)}
+					type="text"
+					value={timeShown(set)}
+				/>
+			{:else}
 				{#if repsOnly}
 					<span
 						class="grid place-items-center text-sm text-muted-foreground"
@@ -632,12 +820,6 @@
 					type="number"
 					value={shownValue(set, 'RIR')}
 				/>
-			{:else}
-				<div class="col-span-3 flex items-center gap-2">
-					<Separator class="w-px grow" />
-					<span class="text-sm text-muted-foreground">uncompleted</span>
-					<Separator class="w-px grow" />
-				</div>
 			{/if}
 			<Button
 				class="h-9 w-9 border-2 p-1"
@@ -675,6 +857,12 @@
 				<TrashIcon class="h-4 w-4" />
 			</Button>
 		</form>
+		{@const setPace = pace(set)}
+		{#if setPace && !set.skipped}
+			<span class="col-span-full -mt-1 text-xs text-muted-foreground" data-testid="{exercise.name}-set-{idx + 1}-pace">
+				{setPace}
+			</span>
+		{/if}
 		{@const bodyweightLoad = countedLoad(isSameLoadExercise ? exercise.sets[0].load : set.load)}
 		{#if bodyweightLoad && !set.skipped}
 			<span
@@ -816,12 +1004,12 @@
 	{/if}
 	<Button
 		class="col-span-full mt-1 h-8 gap-1"
-		aria-label="Add a set to {exercise.name}"
+		aria-label="Add {isCardio ? 'an interval' : 'a set'} to {exercise.name}"
 		data-testid="{exercise.name}-add-set"
 		onclick={addSet}
 		size="sm"
 		variant="ghost"
 	>
-		<AddIcon class="h-4 w-4" /> Add set
+		<AddIcon class="h-4 w-4" /> Add {isCardio ? 'interval' : 'set'}
 	</Button>
 </div>
