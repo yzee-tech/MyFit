@@ -1,4 +1,5 @@
 import { version } from '$app/environment';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import {
@@ -9,6 +10,7 @@ import {
 	buildCsvExport,
 	buildJsonExport,
 	fetchExportData,
+	gzipExportBody,
 	type ExportFormat
 } from '$lib/server/export';
 import { checkExportRateLimit, recordExport } from '$lib/server/exportRateLimit';
@@ -18,7 +20,12 @@ import type { ServerlessConfig } from '@sveltejs/adapter-vercel';
 // Within every Vercel plan's cap; the transaction timeout (20s) stays below it
 export const config: ServerlessConfig = { maxDuration: 30 };
 
-const tooLargeResponse = () => new Response('Export exceeds the maximum download size of 4 MB.', { status: 413 });
+const tooLargeResponse = (format: ExportFormat) =>
+	new Response(
+		'Export exceeds the maximum download size of 4 MB.' +
+			(format === 'json' ? ' Try the CSV format, which is smaller.' : ''),
+		{ status: 413 }
+	);
 
 export const GET: RequestHandler = async (event) => {
 	const session = await event.locals.auth();
@@ -41,23 +48,33 @@ export const GET: RequestHandler = async (event) => {
 	let body: string;
 	try {
 		const data = await prisma.$transaction((tx) => fetchExportData(tx, userId), EXPORT_TX_OPTIONS);
-		body = format === 'json' ? buildJsonExport(data, version) : buildCsvExport(data);
+		// The deployed commit SHA on Vercel, the kit build id elsewhere (a timestamp locally)
+		const appVersion = env.VERCEL_GIT_COMMIT_SHA ?? version;
+		body = format === 'json' ? buildJsonExport(data, appVersion) : buildCsvExport(data);
 	} catch (caught) {
-		if (caught instanceof ExportTooLargeError) return tooLargeResponse();
+		if (caught instanceof ExportTooLargeError) return tooLargeResponse(format);
 		throw caught;
 	}
 
-	// Backstop on the exact wire bytes (UTF-8, BOM included); the preflight estimate ran first
-	if (new TextEncoder().encode(body).byteLength > EXPORT_MAX_BYTES) return tooLargeResponse();
+	// Only compress when the client explicitly accepts gzip (and has not disabled it with q=0).
+	const acceptsGzip = (event.request.headers.get('accept-encoding') ?? '').split(',').some((entry) => {
+		const [coding, ...params] = entry.trim().toLowerCase().split(';');
+		const quality = params.find((param) => param.trim().startsWith('q='));
+		return coding.trim() === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0);
+	});
+	const payload = acceptsGzip ? await gzipExportBody(body) : new TextEncoder().encode(body);
+	// Apply the backstop to the exact bytes sent, compressed or not. Preflight ran first.
+	if (payload.byteLength > EXPORT_MAX_BYTES) return tooLargeResponse(format);
 
 	// Only a delivered export counts toward the rate limit
 	recordExport(userId, format);
 
 	const date = new Date().toISOString().slice(0, 10);
-	return new Response(body, {
+	return new Response(payload, {
 		headers: {
 			'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8',
 			'Content-Disposition': `attachment; filename="myfit-export-${date}.${format}"`,
+			...(acceptsGzip ? { 'Content-Encoding': 'gzip' } : {}),
 			'Cache-Control': 'private, no-store'
 		}
 	});
