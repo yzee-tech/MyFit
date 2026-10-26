@@ -20,9 +20,10 @@ import type { ServerlessConfig } from '@sveltejs/adapter-vercel';
 // Within every Vercel plan's cap; the transaction timeout (20s) stays below it
 export const config: ServerlessConfig = { maxDuration: 30 };
 
-const tooLargeResponse = () =>
+const tooLargeResponse = (format: ExportFormat) =>
 	new Response(
-		'Export exceeds the maximum download size of 4 MB. Try the CSV format, which is smaller; if it is still too large, contact support.',
+		'Export exceeds the maximum download size of 4 MB.' +
+			(format === 'json' ? ' Try the CSV format, which is smaller.' : ''),
 		{ status: 413 }
 	);
 
@@ -51,24 +52,29 @@ export const GET: RequestHandler = async (event) => {
 		const appVersion = env.VERCEL_GIT_COMMIT_SHA ?? version;
 		body = format === 'json' ? buildJsonExport(data, appVersion) : buildCsvExport(data);
 	} catch (caught) {
-		if (caught instanceof ExportTooLargeError) return tooLargeResponse();
+		if (caught instanceof ExportTooLargeError) return tooLargeResponse(format);
 		throw caught;
 	}
 
-	// Backstop on the exact wire bytes: the response goes out gzip-compressed, so the limit applies to
-	// the compressed size. The preflight estimate ran first and stays as it was.
-	const compressed = await gzipExportBody(body);
-	if (compressed.byteLength > EXPORT_MAX_BYTES) return tooLargeResponse();
+	// Only compress when the client explicitly accepts gzip (and has not disabled it with q=0).
+	const acceptsGzip = (event.request.headers.get('accept-encoding') ?? '').split(',').some((entry) => {
+		const [coding, ...params] = entry.trim().toLowerCase().split(';');
+		const quality = params.find((param) => param.trim().startsWith('q='));
+		return coding.trim() === 'gzip' && (!quality || Number(quality.trim().slice(2)) > 0);
+	});
+	const payload = acceptsGzip ? await gzipExportBody(body) : new TextEncoder().encode(body);
+	// Apply the backstop to the exact bytes sent, compressed or not. Preflight ran first.
+	if (payload.byteLength > EXPORT_MAX_BYTES) return tooLargeResponse(format);
 
 	// Only a delivered export counts toward the rate limit
 	recordExport(userId, format);
 
 	const date = new Date().toISOString().slice(0, 10);
-	return new Response(compressed, {
+	return new Response(payload, {
 		headers: {
 			'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8',
 			'Content-Disposition': `attachment; filename="myfit-export-${date}.${format}"`,
-			'Content-Encoding': 'gzip',
+			...(acceptsGzip ? { 'Content-Encoding': 'gzip' } : {}),
 			'Cache-Control': 'private, no-store'
 		}
 	});

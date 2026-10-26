@@ -1,4 +1,6 @@
 import { randomBytes, randomUUID } from 'crypto';
+import { get } from 'node:http';
+import { gunzipSync } from 'node:zlib';
 import type { Browser, BrowserContext } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
@@ -329,7 +331,9 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	};
 
 	// JSON
-	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`, {
+		headers: { 'Accept-Encoding': 'gzip' }
+	});
 	expect(jsonResponse.status()).toBe(200);
 	expect(jsonResponse.headers()['content-type']).toContain('application/json');
 	expect(jsonResponse.headers()['cache-control']).toBe('private, no-store');
@@ -383,7 +387,9 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(jsonText).not.toContain(otherUserId);
 
 	// CSV
-	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
+	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`, {
+		headers: { 'Accept-Encoding': 'gzip' }
+	});
 	expect(csvResponse.status()).toBe(200);
 	expect(csvResponse.headers()['content-type']).toContain('text/csv');
 	expect(csvResponse.headers()['content-encoding']).toBe('gzip');
@@ -451,6 +457,60 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 		countsBefore.sets
 	);
 
+	await context.close();
+});
+
+// Unlike browser/fetch clients, node:http neither advertises nor automatically decodes gzip.
+for (const encoding of [undefined, 'identity', 'br', 'gzip;q=0', 'xgzip', 'br, GZip;q=0.5']) {
+	test(`negotiates export encoding for ${encoding ?? 'an absent header'}`, async ({ browser }) => {
+		const { userId, context } = await createUserContext(browser);
+		const cookie = (await context.cookies()).map(({ name, value }) => `${name}=${value}`).join('; ');
+		for (const format of ['json', 'csv']) {
+			const response = await new Promise<{ status: number; encoding?: string; body: Buffer }>((resolve, reject) => {
+				get(
+					`${BASE_URL}/settings/export?format=${format}`,
+					{ headers: { Cookie: cookie, ...(encoding ? { 'Accept-Encoding': encoding } : {}) } },
+					(response) => {
+						const chunks: Buffer[] = [];
+						response.on('data', (chunk) => chunks.push(chunk));
+						response.on('end', () =>
+							resolve({
+								status: response.statusCode!,
+								encoding: response.headers['content-encoding'],
+								body: Buffer.concat(chunks)
+							})
+						);
+						response.on('error', reject);
+					}
+				).on('error', reject);
+			});
+			expect(response.status).toBe(200);
+			const gzip = encoding === 'br, GZip;q=0.5';
+			expect(response.encoding).toBe(gzip ? 'gzip' : undefined);
+			const text = (gzip ? gunzipSync(response.body) : response.body).toString('utf8');
+			if (format === 'json') expect(JSON.parse(text).profile.email).toBe(`test-user-${userId}@myfit.com`);
+			else expect(text).toBe('\uFEFF' + EXPECTED_HEADER.join(',') + '\r\n');
+		}
+		await context.close();
+	});
+}
+
+test('checks the raw UTF-8 size when gzip is not accepted', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	await createBigNoteWorkout(userId, 'wD0000000000000000000006', 4_100_000);
+	const response = await context.request.get(`${BASE_URL}/settings/export?format=json`, {
+		headers: { 'Accept-Encoding': 'identity' }
+	});
+	expect(response.status()).toBe(413);
+	expect(await response.text()).toContain('Try the CSV format');
+	expect(await response.text()).not.toContain('support');
+	// A refused plain export does not consume the rate limit slot: gzip can still deliver it.
+	const compressed = await context.request.get(`${BASE_URL}/settings/export?format=json`, {
+		headers: { 'Accept-Encoding': 'gzip' }
+	});
+	expect(compressed.status()).toBe(200);
+	expect(compressed.headers()['content-encoding']).toBe('gzip');
+	expect((await compressed.json()).workouts[0].note).toHaveLength(4_100_000);
 	await context.close();
 });
 
@@ -577,6 +637,10 @@ test('answers 413 from the preflight estimate for an absurdly large account', as
 	await createBigNoteWorkout(userId, 'wD0000000000000000000002', 11_000_000);
 	const response = await context.request.get(`${BASE_URL}/settings/export?format=json`);
 	expect(response.status()).toBe(413);
+	expect(await response.text()).not.toContain('support');
+	const csv = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
+	expect(csv.status()).toBe(413);
+	expect(await csv.text()).toBe('Export exceeds the maximum download size of 4 MB.');
 	await context.close();
 });
 

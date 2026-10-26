@@ -5,8 +5,9 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
  * Vercel caps a function's response payload at 4.5 MB; stay clearly below that on the wire.
- * The export is served gzip-compressed and this limit applies to the COMPRESSED bytes, so roughly
- * 30-40 MB of raw JSON/CSV still fits; the preflight only stops absurdly large accounts.
+ * Gzip-accepting clients get compressed bytes; otherwise the limit applies to raw UTF-8 bytes.
+ * With gzip, the pessimistic preflight caps typical exports at roughly 20 MB raw (data-dependent),
+ * even if the compressed response would fit. The exact wire-byte check still enforces this limit.
  * https://vercel.com/docs/functions/limitations
  */
 export const EXPORT_MAX_BYTES = 4_000_000;

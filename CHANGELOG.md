@@ -6,11 +6,11 @@ What changed in MyFit, newest first.
 
 ### Changed
 
-- **Export downloads are now gzip-compressed**, so the 4 MB download limit applies to the compressed file.
-  Only genuinely huge accounts can still hit the limit; the download itself is unchanged.
+- **Export downloads use gzip when the client accepts it**, so the 4 MB download limit applies to the
+  compressed file. Other clients receive plain UTF-8 with the same byte limit; the download itself is unchanged.
 
-- If an export is still too large, the message now says what to do: try the CSV format (smaller), or contact
-  support.
+- If a JSON export is still too large, the message suggests trying the smaller CSV format. A refused CSV
+  no longer suggests trying CSV again, and neither message points to unsupported contact options.
 
 - The JSON export's `appVersion` is now the deployed commit instead of a build timestamp, so it identifies
   the exact app version that produced the file.
