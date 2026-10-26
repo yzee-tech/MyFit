@@ -12,7 +12,7 @@ import type { Prisma } from '@prisma/client';
 
 export const TransactionIsolationLevelSchema = z.enum(['ReadUncommitted','ReadCommitted','RepeatableRead','Serializable']);
 
-export const ExerciseScalarFieldEnumSchema = z.enum(['id','name','targetMuscleGroup','customMuscleGroup','bodyweightFraction','note','repsOnly','maxReps','levelsFrom','levelsTo','levelStep','machineWeights','machineUnit','assisted','archived','userId']);
+export const ExerciseScalarFieldEnumSchema = z.enum(['id','name','targetMuscleGroup','customMuscleGroup','bodyweightFraction','note','repsOnly','maxReps','levelsFrom','levelsTo','levelStep','machineWeights','machineUnit','assisted','measure','distanceUnit','archived','userId']);
 
 export const ExerciseSplitScalarFieldEnumSchema = z.enum(['id','name','userId']);
 
@@ -42,7 +42,7 @@ export const WorkoutScalarFieldEnumSchema = z.enum(['id','userBodyweight','start
 
 export const WorkoutExerciseScalarFieldEnumSchema = z.enum(['id','exerciseIndex','name','workoutId','targetMuscleGroup','customMuscleGroup','bodyweightFraction','setType','changeType','changeAmount','repRangeStart','repRangeEnd','note','exerciseNote','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
 
-export const WorkoutExerciseSetScalarFieldEnumSchema = z.enum(['id','setIndex','workoutExerciseId','reps','load','RIR','skipped']);
+export const WorkoutExerciseSetScalarFieldEnumSchema = z.enum(['id','setIndex','workoutExerciseId','reps','load','RIR','skipped','timeSeconds','distanceMeters']);
 
 export const WorkoutExerciseMiniSetScalarFieldEnumSchema = z.enum(['id','miniSetIndex','reps','load','RIR','workoutExerciseSetId']);
 
@@ -52,7 +52,7 @@ export const QueryModeSchema = z.enum(['default','insensitive']);
 
 export const NullsOrderSchema = z.enum(['first','last']);
 
-export const MuscleGroupSchema = z.enum(['Chest','FrontDelts','SideDelts','RearDelts','Lats','Traps','Triceps','Biceps','Forearms','Quads','Hamstrings','Glutes','Calves','Abs','Neck','Adductors','Abductors','Custom']);
+export const MuscleGroupSchema = z.enum(['Chest','FrontDelts','SideDelts','RearDelts','Lats','Traps','Triceps','Biceps','Forearms','Quads','Hamstrings','Glutes','Calves','Abs','Neck','Adductors','Abductors','Cardio','Custom']);
 
 export type MuscleGroupType = `${z.infer<typeof MuscleGroupSchema>}`
 
@@ -76,6 +76,14 @@ export const RoutineWeightUnitSchema = z.enum(['KG','LB','ASK']);
 
 export type RoutineWeightUnitType = `${z.infer<typeof RoutineWeightUnitSchema>}`
 
+export const ExerciseMeasureSchema = z.enum(['Reps','Time','DistanceTime']);
+
+export type ExerciseMeasureType = `${z.infer<typeof ExerciseMeasureSchema>}`
+
+export const DistanceUnitSchema = z.enum(['KM','MI','M','FT']);
+
+export type DistanceUnitType = `${z.infer<typeof DistanceUnitSchema>}`
+
 /////////////////////////////////////////
 // MODELS
 /////////////////////////////////////////
@@ -95,6 +103,14 @@ export const ExerciseSchema = z.object({
    * The unit printed on the machine (KG or LB): its sets always show in it. Set whenever it has weights
    */
   machineUnit: WeightUnitSchema.nullable(),
+  /**
+   * How it's measured: reps and weight (default), time, or distance and time. Fixed once it has history
+   */
+  measure: ExerciseMeasureSchema,
+  /**
+   * A DistanceTime exercise's display unit; distances are stored in metres
+   */
+  distanceUnit: DistanceUnitSchema.nullable(),
   id: z.string().cuid2(),
   name: z.string(),
   customMuscleGroup: z.string().nullable(),
@@ -450,6 +466,14 @@ export const WorkoutExerciseSetSchema = z.object({
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  /**
+   * Seconds, for Time and DistanceTime sets; a set's measure is read from these, never from the exercise
+   */
+  timeSeconds: z.number().int().nullable(),
+  /**
+   * Metres, for DistanceTime sets; converted for display like loads in kg
+   */
+  distanceMeters: z.number().nullable(),
 })
 
 export type WorkoutExerciseSet = z.infer<typeof WorkoutExerciseSetSchema>
@@ -512,6 +536,8 @@ export const ExerciseSelectSchema: z.ZodType<Prisma.ExerciseSelect> = z.object({
   machineWeights: z.boolean().optional(),
   machineUnit: z.boolean().optional(),
   assisted: z.boolean().optional(),
+  measure: z.boolean().optional(),
+  distanceUnit: z.boolean().optional(),
   archived: z.boolean().optional(),
   userId: z.boolean().optional(),
   user: z.union([z.boolean(),z.lazy(() => UserArgsSchema)]).optional(),
@@ -993,6 +1019,8 @@ export const WorkoutExerciseSetSelectSchema: z.ZodType<Prisma.WorkoutExerciseSet
   load: z.boolean().optional(),
   RIR: z.boolean().optional(),
   skipped: z.boolean().optional(),
+  timeSeconds: z.boolean().optional(),
+  distanceMeters: z.boolean().optional(),
   workoutExercise: z.union([z.boolean(),z.lazy(() => WorkoutExerciseArgsSchema)]).optional(),
   miniSets: z.union([z.boolean(),z.lazy(() => WorkoutExerciseMiniSetFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => WorkoutExerciseSetCountOutputTypeArgsSchema)]).optional(),
@@ -1043,6 +1071,8 @@ export const ExerciseWhereInputSchema: z.ZodType<Prisma.ExerciseWhereInput> = z.
   machineWeights: z.lazy(() => FloatNullableListFilterSchema).optional(),
   machineUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
   assisted: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  measure: z.union([ z.lazy(() => EnumExerciseMeasureFilterSchema),z.lazy(() => ExerciseMeasureSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => EnumDistanceUnitNullableFilterSchema),z.lazy(() => DistanceUnitSchema) ]).optional().nullable(),
   archived: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
@@ -1065,6 +1095,8 @@ export const ExerciseOrderByWithRelationInputSchema: z.ZodType<Prisma.ExerciseOr
   machineWeights: z.lazy(() => SortOrderSchema).optional(),
   machineUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   assisted: z.lazy(() => SortOrderSchema).optional(),
+  measure: z.lazy(() => SortOrderSchema).optional(),
+  distanceUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   archived: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional(),
   user: z.lazy(() => UserOrderByWithRelationInputSchema).optional(),
@@ -1103,6 +1135,8 @@ export const ExerciseWhereUniqueInputSchema: z.ZodType<Prisma.ExerciseWhereUniqu
   machineWeights: z.lazy(() => FloatNullableListFilterSchema).optional(),
   machineUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
   assisted: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  measure: z.union([ z.lazy(() => EnumExerciseMeasureFilterSchema),z.lazy(() => ExerciseMeasureSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => EnumDistanceUnitNullableFilterSchema),z.lazy(() => DistanceUnitSchema) ]).optional().nullable(),
   archived: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   user: z.union([ z.lazy(() => UserScalarRelationFilterSchema),z.lazy(() => UserWhereInputSchema) ]).optional(),
@@ -1125,6 +1159,8 @@ export const ExerciseOrderByWithAggregationInputSchema: z.ZodType<Prisma.Exercis
   machineWeights: z.lazy(() => SortOrderSchema).optional(),
   machineUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   assisted: z.lazy(() => SortOrderSchema).optional(),
+  measure: z.lazy(() => SortOrderSchema).optional(),
+  distanceUnit: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   archived: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => ExerciseCountOrderByAggregateInputSchema).optional(),
@@ -1152,6 +1188,8 @@ export const ExerciseScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Exer
   machineWeights: z.lazy(() => FloatNullableListFilterSchema).optional(),
   machineUnit: z.union([ z.lazy(() => EnumWeightUnitNullableWithAggregatesFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
   assisted: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
+  measure: z.union([ z.lazy(() => EnumExerciseMeasureWithAggregatesFilterSchema),z.lazy(() => ExerciseMeasureSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => EnumDistanceUnitNullableWithAggregatesFilterSchema),z.lazy(() => DistanceUnitSchema) ]).optional().nullable(),
   archived: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
 }).strict();
@@ -2359,6 +2397,8 @@ export const WorkoutExerciseSetWhereInputSchema: z.ZodType<Prisma.WorkoutExercis
   load: z.union([ z.lazy(() => FloatFilterSchema),z.number() ]).optional(),
   RIR: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   skipped: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  timeSeconds: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
+  distanceMeters: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   workoutExercise: z.union([ z.lazy(() => WorkoutExerciseScalarRelationFilterSchema),z.lazy(() => WorkoutExerciseWhereInputSchema) ]).optional(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetListRelationFilterSchema).optional()
 }).strict();
@@ -2371,6 +2411,8 @@ export const WorkoutExerciseSetOrderByWithRelationInputSchema: z.ZodType<Prisma.
   load: z.lazy(() => SortOrderSchema).optional(),
   RIR: z.lazy(() => SortOrderSchema).optional(),
   skipped: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
+  distanceMeters: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   workoutExercise: z.lazy(() => WorkoutExerciseOrderByWithRelationInputSchema).optional(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetOrderByRelationAggregateInputSchema).optional()
 }).strict();
@@ -2389,6 +2431,8 @@ export const WorkoutExerciseSetWhereUniqueInputSchema: z.ZodType<Prisma.WorkoutE
   load: z.union([ z.lazy(() => FloatFilterSchema),z.number() ]).optional(),
   RIR: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
   skipped: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  timeSeconds: z.union([ z.lazy(() => IntNullableFilterSchema),z.number().int() ]).optional().nullable(),
+  distanceMeters: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   workoutExercise: z.union([ z.lazy(() => WorkoutExerciseScalarRelationFilterSchema),z.lazy(() => WorkoutExerciseWhereInputSchema) ]).optional(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetListRelationFilterSchema).optional()
 }).strict());
@@ -2401,6 +2445,8 @@ export const WorkoutExerciseSetOrderByWithAggregationInputSchema: z.ZodType<Pris
   load: z.lazy(() => SortOrderSchema).optional(),
   RIR: z.lazy(() => SortOrderSchema).optional(),
   skipped: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
+  distanceMeters: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   _count: z.lazy(() => WorkoutExerciseSetCountOrderByAggregateInputSchema).optional(),
   _avg: z.lazy(() => WorkoutExerciseSetAvgOrderByAggregateInputSchema).optional(),
   _max: z.lazy(() => WorkoutExerciseSetMaxOrderByAggregateInputSchema).optional(),
@@ -2419,6 +2465,8 @@ export const WorkoutExerciseSetScalarWhereWithAggregatesInputSchema: z.ZodType<P
   load: z.union([ z.lazy(() => FloatWithAggregatesFilterSchema),z.number() ]).optional(),
   RIR: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
   skipped: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema),z.boolean() ]).optional(),
+  timeSeconds: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
+  distanceMeters: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
 }).strict();
 
 export const WorkoutExerciseMiniSetWhereInputSchema: z.ZodType<Prisma.WorkoutExerciseMiniSetWhereInput> = z.object({
@@ -2501,6 +2549,8 @@ export const ExerciseCreateInputSchema: z.ZodType<Prisma.ExerciseCreateInput> = 
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
   exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
@@ -2522,6 +2572,8 @@ export const ExerciseUncheckedCreateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
@@ -2543,6 +2595,8 @@ export const ExerciseUpdateInputSchema: z.ZodType<Prisma.ExerciseUpdateInput> = 
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
@@ -2564,6 +2618,8 @@ export const ExerciseUncheckedUpdateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
@@ -2585,6 +2641,8 @@ export const ExerciseCreateManyInputSchema: z.ZodType<Prisma.ExerciseCreateManyI
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string()
 }).strict();
@@ -2604,6 +2662,8 @@ export const ExerciseUpdateManyMutationInputSchema: z.ZodType<Prisma.ExerciseUpd
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -2622,6 +2682,8 @@ export const ExerciseUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ExerciseUn
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
@@ -3843,6 +3905,8 @@ export const WorkoutExerciseSetCreateInputSchema: z.ZodType<Prisma.WorkoutExerci
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable(),
   workoutExercise: z.lazy(() => WorkoutExerciseCreateNestedOneWithoutSetsInputSchema),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetCreateNestedManyWithoutParentSetInputSchema).optional()
 }).strict();
@@ -3855,6 +3919,8 @@ export const WorkoutExerciseSetUncheckedCreateInputSchema: z.ZodType<Prisma.Work
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUncheckedCreateNestedManyWithoutParentSetInputSchema).optional()
 }).strict();
 
@@ -3865,6 +3931,8 @@ export const WorkoutExerciseSetUpdateInputSchema: z.ZodType<Prisma.WorkoutExerci
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   workoutExercise: z.lazy(() => WorkoutExerciseUpdateOneRequiredWithoutSetsNestedInputSchema).optional(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUpdateManyWithoutParentSetNestedInputSchema).optional()
 }).strict();
@@ -3877,6 +3945,8 @@ export const WorkoutExerciseSetUncheckedUpdateInputSchema: z.ZodType<Prisma.Work
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUncheckedUpdateManyWithoutParentSetNestedInputSchema).optional()
 }).strict();
 
@@ -3887,7 +3957,9 @@ export const WorkoutExerciseSetCreateManyInputSchema: z.ZodType<Prisma.WorkoutEx
   reps: z.number().int(),
   load: z.number(),
   RIR: z.number().int(),
-  skipped: z.boolean()
+  skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable()
 }).strict();
 
 export const WorkoutExerciseSetUpdateManyMutationInputSchema: z.ZodType<Prisma.WorkoutExerciseSetUpdateManyMutationInput> = z.object({
@@ -3897,6 +3969,8 @@ export const WorkoutExerciseSetUpdateManyMutationInputSchema: z.ZodType<Prisma.W
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutExerciseSetUncheckedUpdateManyInputSchema: z.ZodType<Prisma.WorkoutExerciseSetUncheckedUpdateManyInput> = z.object({
@@ -3907,6 +3981,8 @@ export const WorkoutExerciseSetUncheckedUpdateManyInputSchema: z.ZodType<Prisma.
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutExerciseMiniSetCreateInputSchema: z.ZodType<Prisma.WorkoutExerciseMiniSetCreateInput> = z.object({
@@ -4050,6 +4126,20 @@ export const EnumWeightUnitNullableFilterSchema: z.ZodType<Prisma.EnumWeightUnit
   not: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NestedEnumWeightUnitNullableFilterSchema) ]).optional().nullable(),
 }).strict();
 
+export const EnumExerciseMeasureFilterSchema: z.ZodType<Prisma.EnumExerciseMeasureFilter> = z.object({
+  equals: z.lazy(() => ExerciseMeasureSchema).optional(),
+  in: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  notIn: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  not: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => NestedEnumExerciseMeasureFilterSchema) ]).optional(),
+}).strict();
+
+export const EnumDistanceUnitNullableFilterSchema: z.ZodType<Prisma.EnumDistanceUnitNullableFilter> = z.object({
+  equals: z.lazy(() => DistanceUnitSchema).optional().nullable(),
+  in: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  notIn: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  not: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
 export const UserScalarRelationFilterSchema: z.ZodType<Prisma.UserScalarRelationFilter> = z.object({
   is: z.lazy(() => UserWhereInputSchema).optional(),
   isNot: z.lazy(() => UserWhereInputSchema).optional()
@@ -4100,6 +4190,8 @@ export const ExerciseCountOrderByAggregateInputSchema: z.ZodType<Prisma.Exercise
   machineWeights: z.lazy(() => SortOrderSchema).optional(),
   machineUnit: z.lazy(() => SortOrderSchema).optional(),
   assisted: z.lazy(() => SortOrderSchema).optional(),
+  measure: z.lazy(() => SortOrderSchema).optional(),
+  distanceUnit: z.lazy(() => SortOrderSchema).optional(),
   archived: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -4127,6 +4219,8 @@ export const ExerciseMaxOrderByAggregateInputSchema: z.ZodType<Prisma.ExerciseMa
   levelStep: z.lazy(() => SortOrderSchema).optional(),
   machineUnit: z.lazy(() => SortOrderSchema).optional(),
   assisted: z.lazy(() => SortOrderSchema).optional(),
+  measure: z.lazy(() => SortOrderSchema).optional(),
+  distanceUnit: z.lazy(() => SortOrderSchema).optional(),
   archived: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -4145,6 +4239,8 @@ export const ExerciseMinOrderByAggregateInputSchema: z.ZodType<Prisma.ExerciseMi
   levelStep: z.lazy(() => SortOrderSchema).optional(),
   machineUnit: z.lazy(() => SortOrderSchema).optional(),
   assisted: z.lazy(() => SortOrderSchema).optional(),
+  measure: z.lazy(() => SortOrderSchema).optional(),
+  distanceUnit: z.lazy(() => SortOrderSchema).optional(),
   archived: z.lazy(() => SortOrderSchema).optional(),
   userId: z.lazy(() => SortOrderSchema).optional()
 }).strict();
@@ -4252,6 +4348,26 @@ export const EnumWeightUnitNullableWithAggregatesFilterSchema: z.ZodType<Prisma.
   _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
   _min: z.lazy(() => NestedEnumWeightUnitNullableFilterSchema).optional(),
   _max: z.lazy(() => NestedEnumWeightUnitNullableFilterSchema).optional()
+}).strict();
+
+export const EnumExerciseMeasureWithAggregatesFilterSchema: z.ZodType<Prisma.EnumExerciseMeasureWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => ExerciseMeasureSchema).optional(),
+  in: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  notIn: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  not: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => NestedEnumExerciseMeasureWithAggregatesFilterSchema) ]).optional(),
+  _count: z.lazy(() => NestedIntFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumExerciseMeasureFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumExerciseMeasureFilterSchema).optional()
+}).strict();
+
+export const EnumDistanceUnitNullableWithAggregatesFilterSchema: z.ZodType<Prisma.EnumDistanceUnitNullableWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => DistanceUnitSchema).optional().nullable(),
+  in: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  notIn: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  not: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NestedEnumDistanceUnitNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema).optional()
 }).strict();
 
 export const ExerciseSplitDayListRelationFilterSchema: z.ZodType<Prisma.ExerciseSplitDayListRelationFilter> = z.object({
@@ -5229,14 +5345,18 @@ export const WorkoutExerciseSetCountOrderByAggregateInputSchema: z.ZodType<Prism
   reps: z.lazy(() => SortOrderSchema).optional(),
   load: z.lazy(() => SortOrderSchema).optional(),
   RIR: z.lazy(() => SortOrderSchema).optional(),
-  skipped: z.lazy(() => SortOrderSchema).optional()
+  skipped: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.lazy(() => SortOrderSchema).optional(),
+  distanceMeters: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutExerciseSetAvgOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutExerciseSetAvgOrderByAggregateInput> = z.object({
   setIndex: z.lazy(() => SortOrderSchema).optional(),
   reps: z.lazy(() => SortOrderSchema).optional(),
   load: z.lazy(() => SortOrderSchema).optional(),
-  RIR: z.lazy(() => SortOrderSchema).optional()
+  RIR: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.lazy(() => SortOrderSchema).optional(),
+  distanceMeters: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutExerciseSetMaxOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutExerciseSetMaxOrderByAggregateInput> = z.object({
@@ -5246,7 +5366,9 @@ export const WorkoutExerciseSetMaxOrderByAggregateInputSchema: z.ZodType<Prisma.
   reps: z.lazy(() => SortOrderSchema).optional(),
   load: z.lazy(() => SortOrderSchema).optional(),
   RIR: z.lazy(() => SortOrderSchema).optional(),
-  skipped: z.lazy(() => SortOrderSchema).optional()
+  skipped: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.lazy(() => SortOrderSchema).optional(),
+  distanceMeters: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutExerciseSetMinOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutExerciseSetMinOrderByAggregateInput> = z.object({
@@ -5256,14 +5378,18 @@ export const WorkoutExerciseSetMinOrderByAggregateInputSchema: z.ZodType<Prisma.
   reps: z.lazy(() => SortOrderSchema).optional(),
   load: z.lazy(() => SortOrderSchema).optional(),
   RIR: z.lazy(() => SortOrderSchema).optional(),
-  skipped: z.lazy(() => SortOrderSchema).optional()
+  skipped: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.lazy(() => SortOrderSchema).optional(),
+  distanceMeters: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutExerciseSetSumOrderByAggregateInputSchema: z.ZodType<Prisma.WorkoutExerciseSetSumOrderByAggregateInput> = z.object({
   setIndex: z.lazy(() => SortOrderSchema).optional(),
   reps: z.lazy(() => SortOrderSchema).optional(),
   load: z.lazy(() => SortOrderSchema).optional(),
-  RIR: z.lazy(() => SortOrderSchema).optional()
+  RIR: z.lazy(() => SortOrderSchema).optional(),
+  timeSeconds: z.lazy(() => SortOrderSchema).optional(),
+  distanceMeters: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
 export const WorkoutExerciseSetScalarRelationFilterSchema: z.ZodType<Prisma.WorkoutExerciseSetScalarRelationFilter> = z.object({
@@ -5389,6 +5515,14 @@ export const ExerciseUpdatemachineWeightsInputSchema: z.ZodType<Prisma.ExerciseU
 
 export const NullableEnumWeightUnitFieldUpdateOperationsInputSchema: z.ZodType<Prisma.NullableEnumWeightUnitFieldUpdateOperationsInput> = z.object({
   set: z.lazy(() => WeightUnitSchema).optional().nullable()
+}).strict();
+
+export const EnumExerciseMeasureFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumExerciseMeasureFieldUpdateOperationsInput> = z.object({
+  set: z.lazy(() => ExerciseMeasureSchema).optional()
+}).strict();
+
+export const NullableEnumDistanceUnitFieldUpdateOperationsInputSchema: z.ZodType<Prisma.NullableEnumDistanceUnitFieldUpdateOperationsInput> = z.object({
+  set: z.lazy(() => DistanceUnitSchema).optional().nullable()
 }).strict();
 
 export const UserUpdateOneRequiredWithoutExercisesNestedInputSchema: z.ZodType<Prisma.UserUpdateOneRequiredWithoutExercisesNestedInput> = z.object({
@@ -6537,6 +6671,20 @@ export const NestedEnumWeightUnitNullableFilterSchema: z.ZodType<Prisma.NestedEn
   not: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NestedEnumWeightUnitNullableFilterSchema) ]).optional().nullable(),
 }).strict();
 
+export const NestedEnumExerciseMeasureFilterSchema: z.ZodType<Prisma.NestedEnumExerciseMeasureFilter> = z.object({
+  equals: z.lazy(() => ExerciseMeasureSchema).optional(),
+  in: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  notIn: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  not: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => NestedEnumExerciseMeasureFilterSchema) ]).optional(),
+}).strict();
+
+export const NestedEnumDistanceUnitNullableFilterSchema: z.ZodType<Prisma.NestedEnumDistanceUnitNullableFilter> = z.object({
+  equals: z.lazy(() => DistanceUnitSchema).optional().nullable(),
+  in: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  notIn: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  not: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
 export const NestedStringWithAggregatesFilterSchema: z.ZodType<Prisma.NestedStringWithAggregatesFilter> = z.object({
   equals: z.string().optional(),
   in: z.string().array().optional(),
@@ -6640,6 +6788,26 @@ export const NestedEnumWeightUnitNullableWithAggregatesFilterSchema: z.ZodType<P
   _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
   _min: z.lazy(() => NestedEnumWeightUnitNullableFilterSchema).optional(),
   _max: z.lazy(() => NestedEnumWeightUnitNullableFilterSchema).optional()
+}).strict();
+
+export const NestedEnumExerciseMeasureWithAggregatesFilterSchema: z.ZodType<Prisma.NestedEnumExerciseMeasureWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => ExerciseMeasureSchema).optional(),
+  in: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  notIn: z.lazy(() => ExerciseMeasureSchema).array().optional(),
+  not: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => NestedEnumExerciseMeasureWithAggregatesFilterSchema) ]).optional(),
+  _count: z.lazy(() => NestedIntFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumExerciseMeasureFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumExerciseMeasureFilterSchema).optional()
+}).strict();
+
+export const NestedEnumDistanceUnitNullableWithAggregatesFilterSchema: z.ZodType<Prisma.NestedEnumDistanceUnitNullableWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => DistanceUnitSchema).optional().nullable(),
+  in: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  notIn: z.lazy(() => DistanceUnitSchema).array().optional().nullable(),
+  not: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NestedEnumDistanceUnitNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumDistanceUnitNullableFilterSchema).optional()
 }).strict();
 
 export const NestedEnumRoutineWeightUnitFilterSchema: z.ZodType<Prisma.NestedEnumRoutineWeightUnitFilter> = z.object({
@@ -7483,6 +7651,8 @@ export const ExerciseCreateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
   workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -7503,6 +7673,8 @@ export const ExerciseUncheckedCreateWithoutExerciseTemplatesInputSchema: z.ZodTy
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -7566,6 +7738,8 @@ export const ExerciseUpdateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -7586,6 +7760,8 @@ export const ExerciseUncheckedUpdateWithoutExerciseTemplatesInputSchema: z.ZodTy
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -8116,6 +8292,8 @@ export const ExerciseCreateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseCrea
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -8136,6 +8314,8 @@ export const ExerciseUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -8375,6 +8555,8 @@ export const ExerciseScalarWhereInputSchema: z.ZodType<Prisma.ExerciseScalarWher
   machineWeights: z.lazy(() => FloatNullableListFilterSchema).optional(),
   machineUnit: z.union([ z.lazy(() => EnumWeightUnitNullableFilterSchema),z.lazy(() => WeightUnitSchema) ]).optional().nullable(),
   assisted: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  measure: z.union([ z.lazy(() => EnumExerciseMeasureFilterSchema),z.lazy(() => ExerciseMeasureSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => EnumDistanceUnitNullableFilterSchema),z.lazy(() => DistanceUnitSchema) ]).optional().nullable(),
   archived: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
   userId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
 }).strict();
@@ -9105,6 +9287,8 @@ export const WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema: z.ZodTyp
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetCreateNestedManyWithoutParentSetInputSchema).optional()
 }).strict();
 
@@ -9115,6 +9299,8 @@ export const WorkoutExerciseSetUncheckedCreateWithoutWorkoutExerciseInputSchema:
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUncheckedCreateNestedManyWithoutParentSetInputSchema).optional()
 }).strict();
 
@@ -9143,6 +9329,8 @@ export const ExerciseCreateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   user: z.lazy(() => UserCreateNestedOneWithoutExercisesInputSchema),
   exerciseTemplates: z.lazy(() => ExerciseTemplateCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -9163,6 +9351,8 @@ export const ExerciseUncheckedCreateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional(),
   userId: z.string(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedCreateNestedManyWithoutExerciseInputSchema).optional()
@@ -9235,6 +9425,8 @@ export const WorkoutExerciseSetScalarWhereInputSchema: z.ZodType<Prisma.WorkoutE
   load: z.union([ z.lazy(() => FloatFilterSchema),z.number() ]).optional(),
   RIR: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   skipped: z.union([ z.lazy(() => BoolFilterSchema),z.boolean() ]).optional(),
+  timeSeconds: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
+  distanceMeters: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
 }).strict();
 
 export const ExerciseUpsertWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.ExerciseUpsertWithoutWorkoutExercisesInput> = z.object({
@@ -9263,6 +9455,8 @@ export const ExerciseUpdateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   user: z.lazy(() => UserUpdateOneRequiredWithoutExercisesNestedInputSchema).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -9283,6 +9477,8 @@ export const ExerciseUncheckedUpdateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   userId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -9469,6 +9665,8 @@ export const WorkoutExerciseSetCreateWithoutMiniSetsInputSchema: z.ZodType<Prism
   load: z.number(),
   RIR: z.number().int(),
   skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable(),
   workoutExercise: z.lazy(() => WorkoutExerciseCreateNestedOneWithoutSetsInputSchema)
 }).strict();
 
@@ -9479,7 +9677,9 @@ export const WorkoutExerciseSetUncheckedCreateWithoutMiniSetsInputSchema: z.ZodT
   reps: z.number().int(),
   load: z.number(),
   RIR: z.number().int(),
-  skipped: z.boolean()
+  skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable()
 }).strict();
 
 export const WorkoutExerciseSetCreateOrConnectWithoutMiniSetsInputSchema: z.ZodType<Prisma.WorkoutExerciseSetCreateOrConnectWithoutMiniSetsInput> = z.object({
@@ -9505,6 +9705,8 @@ export const WorkoutExerciseSetUpdateWithoutMiniSetsInputSchema: z.ZodType<Prism
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   workoutExercise: z.lazy(() => WorkoutExerciseUpdateOneRequiredWithoutSetsNestedInputSchema).optional()
 }).strict();
 
@@ -9516,6 +9718,8 @@ export const WorkoutExerciseSetUncheckedUpdateWithoutMiniSetsInputSchema: z.ZodT
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const ExerciseTemplateCreateManyExerciseInputSchema: z.ZodType<Prisma.ExerciseTemplateCreateManyExerciseInput> = z.object({
@@ -10025,6 +10229,8 @@ export const ExerciseCreateManyUserInputSchema: z.ZodType<Prisma.ExerciseCreateM
   machineWeights: z.union([ z.lazy(() => ExerciseCreatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.lazy(() => WeightUnitSchema).optional().nullable(),
   assisted: z.boolean().optional(),
+  measure: z.lazy(() => ExerciseMeasureSchema).optional(),
+  distanceUnit: z.lazy(() => DistanceUnitSchema).optional().nullable(),
   archived: z.boolean().optional()
 }).strict();
 
@@ -10207,6 +10413,8 @@ export const ExerciseUpdateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseUpda
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -10227,6 +10435,8 @@ export const ExerciseUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseTemplates: z.lazy(() => ExerciseTemplateUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional(),
   workoutExercises: z.lazy(() => WorkoutExerciseUncheckedUpdateManyWithoutExerciseNestedInputSchema).optional()
@@ -10247,6 +10457,8 @@ export const ExerciseUncheckedUpdateManyWithoutUserInputSchema: z.ZodType<Prisma
   machineWeights: z.union([ z.lazy(() => ExerciseUpdatemachineWeightsInputSchema),z.number().array() ]).optional(),
   machineUnit: z.union([ z.lazy(() => WeightUnitSchema),z.lazy(() => NullableEnumWeightUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   assisted: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  measure: z.union([ z.lazy(() => ExerciseMeasureSchema),z.lazy(() => EnumExerciseMeasureFieldUpdateOperationsInputSchema) ]).optional(),
+  distanceUnit: z.union([ z.lazy(() => DistanceUnitSchema),z.lazy(() => NullableEnumDistanceUnitFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   archived: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 }).strict();
 
@@ -10358,7 +10570,9 @@ export const WorkoutExerciseSetCreateManyWorkoutExerciseInputSchema: z.ZodType<P
   reps: z.number().int(),
   load: z.number(),
   RIR: z.number().int(),
-  skipped: z.boolean()
+  skipped: z.boolean(),
+  timeSeconds: z.number().int().optional().nullable(),
+  distanceMeters: z.number().optional().nullable()
 }).strict();
 
 export const WorkoutExerciseSetUpdateWithoutWorkoutExerciseInputSchema: z.ZodType<Prisma.WorkoutExerciseSetUpdateWithoutWorkoutExerciseInput> = z.object({
@@ -10368,6 +10582,8 @@ export const WorkoutExerciseSetUpdateWithoutWorkoutExerciseInputSchema: z.ZodTyp
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUpdateManyWithoutParentSetNestedInputSchema).optional()
 }).strict();
 
@@ -10378,6 +10594,8 @@ export const WorkoutExerciseSetUncheckedUpdateWithoutWorkoutExerciseInputSchema:
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   miniSets: z.lazy(() => WorkoutExerciseMiniSetUncheckedUpdateManyWithoutParentSetNestedInputSchema).optional()
 }).strict();
 
@@ -10388,6 +10606,8 @@ export const WorkoutExerciseSetUncheckedUpdateManyWithoutWorkoutExerciseInputSch
   load: z.union([ z.number(),z.lazy(() => FloatFieldUpdateOperationsInputSchema) ]).optional(),
   RIR: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   skipped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  timeSeconds: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  distanceMeters: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const WorkoutExerciseMiniSetCreateManyParentSetInputSchema: z.ZodType<Prisma.WorkoutExerciseMiniSetCreateManyParentSetInput> = z.object({

@@ -66,6 +66,10 @@ model WorkoutExerciseSet {
   load              Float
   RIR               Int
   skipped           Boolean
+  /// Seconds, for Time and DistanceTime sets; a set's measure is read from these, never from the exercise
+  timeSeconds       Int?
+  /// Metres, for DistanceTime sets; converted for display like loads in kg
+  distanceMeters    Float?
   miniSets          WorkoutExerciseMiniSet[]
 }
 
