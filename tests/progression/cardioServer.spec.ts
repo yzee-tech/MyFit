@@ -295,6 +295,33 @@ test('a save needs each cardio interval’s time (and distance); reps sets carry
 			workout({ run: [cardioSet(0, { timeSeconds: 1500, distanceMeters: 0 })], rows: [repsSet(0)] })
 		)
 	).rejects.toThrow(/distance is out of range/);
+	// An interval has no mini-sets (a cardio exercise left in a routine as drop sets logs plain intervals)
+	await expect(
+		caller.workouts.create({
+			...workout({ run: [cardioSet(0, { timeSeconds: 1500, distanceMeters: 5000 })], rows: [repsSet(0)] }),
+			workoutExercisesMiniSets: [[[{ miniSetIndex: 0, reps: 5, load: 20, RIR: 1 }]], [[]]]
+		})
+	).rejects.toThrow(/no mini-sets/);
+});
+
+test('an exercise renamed or removed elsewhere mid-workout: its rows still save, and it is made again measured as logged', async () => {
+	const { caller, runExercise } = await seedPerson();
+	// Renamed on another device while the workout was in progress
+	await prisma.exercise.update({ where: { id: runExercise.id }, data: { name: 'Easy run' } });
+	const { workoutId } = await caller.workouts.create({
+		workoutData: { userBodyweight: 80, routineName: 'Cardio day' },
+		workoutExercises: [{ ...run, exerciseIndex: 0 }],
+		workoutExercisesSets: [[cardioSet(0, { timeSeconds: 1500, distanceMeters: 5000 })]] as never,
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const saved = await prisma.workoutExercise.findFirstOrThrow({
+		where: { workoutId },
+		include: { exercise: true, sets: true }
+	});
+	expect(saved.sets[0]).toMatchObject({ timeSeconds: 1500, distanceMeters: 5000 });
+	// A new "Run", a run like its rows, in km until it's set otherwise
+	expect(saved.exercise).toMatchObject({ name: 'Run', measure: 'DistanceTime', distanceUnit: 'KM' });
+	expect(saved.exercise?.id).not.toBe(runExercise.id);
 });
 
 test('how an exercise is measured is fixed once it has workouts; its distance unit can change; merging across measures is refused', async () => {

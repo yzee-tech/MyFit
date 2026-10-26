@@ -5,7 +5,7 @@
  */
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
-import type { MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
+import type { DistanceUnit, ExerciseMeasure, MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
 
 /** The details that belong to the exercise itself, not to a routine or a workout */
 export type ExerciseDetails = {
@@ -13,6 +13,9 @@ export type ExerciseDetails = {
 	targetMuscleGroup: MuscleGroup;
 	customMuscleGroup?: string | null;
 	bodyweightFraction?: number | null;
+	/** Only for an exercise the save has to make: how its rows were logged (reps unless said) */
+	measure?: ExerciseMeasure;
+	distanceUnit?: DistanceUnit | null;
 };
 
 export type ResolvedExercise = {
@@ -72,7 +75,16 @@ export async function resolveExercises(
 	const missing = names.filter((name) => !exercises.some((exercise) => exercise.name === name));
 	if (missing.length > 0) {
 		await prisma.exercise.createMany({
-			data: missing.map((name) => ({ userId, name, ...detailsOf(firstByName.get(name)!) })),
+			data: missing.map((name) => {
+				const item = firstByName.get(name)!;
+				return {
+					userId,
+					name,
+					...detailsOf(item),
+					measure: item.measure ?? 'Reps',
+					distanceUnit: item.measure === 'DistanceTime' ? (item.distanceUnit ?? 'KM') : null
+				};
+			}),
 			skipDuplicates: true
 		});
 		exercises = await prisma.exercise.findMany({ where: { userId, name: { in: names } }, select });
@@ -94,7 +106,14 @@ export async function resolveExercises(
 export function linkToExercise<T extends ExerciseDetails>(item: T, byName: Map<string, ResolvedExercise>) {
 	const exercise = byName.get(item.name);
 	if (!exercise) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `Exercise ${item.name} not found` });
-	const { exercise: _link, exerciseId: _id, ...rest } = item as T & { exercise?: unknown; exerciseId?: unknown };
+	// The measure hints are for making a missing exercise, not for its rows
+	const {
+		exercise: _link,
+		exerciseId: _id,
+		measure: _measure,
+		distanceUnit: _distanceUnit,
+		...rest
+	} = item as T & { exercise?: unknown; exerciseId?: unknown };
 	return {
 		...rest,
 		exerciseId: exercise.id,

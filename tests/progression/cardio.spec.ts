@@ -79,6 +79,10 @@ test('times: m:ss (h:mm:ss past the hour) out, and m:ss, h:mm:ss or minutes in',
 	expect(parseDuration('')).toBeNull();
 	expect(parseDuration('0:00')).toBeNull();
 	expect(parseDuration('0')).toBeNull();
+	// More than a day isn't a time either (the save would refuse it)
+	expect(parseDuration('24:00:00')).toBe(86_400);
+	expect(parseDuration('24:00:01')).toBeNull();
+	expect(parseDuration('1500')).toBeNull();
 
 	// Bounds: whole seconds from 1 to a day; metres over 0 up to 1,000 km
 	expect(isValidTimeSeconds(1)).toBe(true);

@@ -270,6 +270,25 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 	await history.getByLabel('Copy these sets').first().click();
 	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('5');
 	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
+
+	// Swapped for a run in miles (⋯ → Edit): the distances typed so far are shown in miles
+	await prisma.exercise.create({
+		data: { userId, name: 'Trail run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'MI' }
+	});
+	await editWorkoutExercise(page, 'Run');
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByPlaceholder('Search your exercises').fill('Trail run');
+	await page.getByRole('option', { name: 'Trail run', exact: true }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
+	await expect(page.getByTestId('Trail run-distance-unit')).toHaveText('MI');
+	await expect(box(page, 'Trail run', 1, 'distance')).toHaveValue('3.107');
+	await expect(box(page, 'Trail run', 1, 'time')).toHaveValue('26:00');
+	// A time past a day, or a 1,000 km run, is refused at the tick, not after the workout
+	await box(page, 'Trail run', 2, 'distance').fill('700');
+	await box(page, 'Trail run', 2, 'time').fill('25:00:00');
+	await box(page, 'Trail run', 2, 'time').blur();
+	await page.getByTestId('Trail run-set-2-action').click();
+	await expect(page.getByTestId('Trail run-missing')).toContainText('Set 2: enter a distance under 1,000 km and time');
 });
 
 test('once a cardio exercise has workouts its measure is fixed; the stats chart has cardio charts; merge and replace respect measures', async ({
@@ -289,7 +308,7 @@ test('once a cardio exercise has workouts its measure is fixed; the stats chart 
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await expect(page.getByRole('radio', { name: 'Measured in time' })).toBeDisabled();
-	await expect(page.getByRole('main')).toContainText('Fixed once an exercise has workouts');
+	await expect(page.getByRole('dialog')).toContainText('Fixed once an exercise has workouts');
 	await page.keyboard.press('Escape');
 
 	// Stats: Total time, Total distance and Pace; no 1RM or volume

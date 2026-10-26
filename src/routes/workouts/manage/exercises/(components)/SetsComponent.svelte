@@ -9,6 +9,8 @@
 		formatDuration,
 		formatPace,
 		fromMeters,
+		isValidDistanceMeters,
+		isValidTimeSeconds,
 		MAX_DISTANCE_METERS,
 		parseDuration,
 		roundDistance,
@@ -47,7 +49,7 @@
 
 	// Sets someone tried to tick with a box still empty. The notes and outlines are worked out from these
 	// sets as they are now, so they follow a set when others are added or removed, and go once it's filled
-	type Missing = 'reps' | 'load' | 'level' | 'RIR' | 'time' | 'distance';
+	type Missing = 'reps' | 'load' | 'level' | 'RIR' | 'time' | 'distance' | 'a distance under 1,000 km';
 	const triedToTick = new SvelteSet<WorkoutExerciseSet>();
 
 	// Cardio: each set is an interval with a time (and a distance), and a level on a machine with levels.
@@ -62,8 +64,9 @@
 		return typeof kg === 'number' ? fromKg(kg, exercise.weightUnit ?? 'KG') : undefined;
 	}
 
-	// Myo-rep sets share set 1's load; every other set type has a load per set
-	let isSameLoadExercise = $derived(['Myorep', 'MyorepMatch'].includes(exercise.setType));
+	// Myo-rep sets share set 1's load; every other set type has a load per set. Cardio intervals never
+	// share one (a cardio exercise still in a routine as myo-reps or drop sets logs plain intervals)
+	let isSameLoadExercise = $derived(!isCardio && ['Myorep', 'MyorepMatch'].includes(exercise.setType));
 	// A machine's level, not a weight: no bodyweight, and no rep adjusting by weight
 	let isLevels = $derived(isLevelUnit(exercise.weightUnit));
 
@@ -82,8 +85,12 @@
 		const fields: Missing[] = [];
 		if (isCardio) {
 			if (isLevels && typeof set.load !== 'number') fields.push('level');
-			if (isDistance && !(typeof set.distance === 'number' && set.distance > 0)) fields.push('distance');
-			if (!(typeof set.timeSeconds === 'number' && set.timeSeconds > 0)) fields.push('time');
+			// The same bounds the save checks, so nothing is refused after the workout
+			if (isDistance) {
+				if (!(typeof set.distance === 'number' && set.distance > 0)) fields.push('distance');
+				else if (!isValidDistanceMeters(toMeters(set.distance, distanceUnit))) fields.push('a distance under 1,000 km');
+			}
+			if (!isValidTimeSeconds(set.timeSeconds)) fields.push('time');
 			return fields;
 		}
 		if (typeof set.reps !== 'number') fields.push('reps');
@@ -891,7 +898,7 @@
 				</button>
 			</div>
 		{/if}
-		{#if (idx > 0 && (exercise.setType === 'MyorepMatch' || exercise.setType === 'MyorepMatchDown')) || exercise.setType === 'Drop'}
+		{#if !isCardio && ((idx > 0 && (exercise.setType === 'MyorepMatch' || exercise.setType === 'MyorepMatchDown')) || exercise.setType === 'Drop')}
 			{#each set.miniSets as miniSet, miniIdx}
 				{@const miniSetButtonDisabled = shouldMiniSetBeDisabled(idx, miniIdx)}
 				<!-- Under the set's load, reps and RIR: no set number or last time of its own -->

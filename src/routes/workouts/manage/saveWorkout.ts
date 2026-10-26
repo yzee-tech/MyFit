@@ -40,7 +40,8 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 				set.RIR = 0;
 				if (!isLevelUnit(ex.weightUnit)) set.load = 0;
 			}
-			// A skipped cardio set keeps no numbers, like a skipped lift
+			// A skipped cardio set keeps no numbers, like a skipped lift; an interval never has mini-sets
+			if (cardio) set.miniSets = [];
 			const cardioFields = cardio && !set.skipped ? { timeSeconds, distanceMeters: distance ?? null } : {};
 			if (cardio && !set.skipped) {
 				if (timeSeconds === undefined) throw new Error('Time is undefined');

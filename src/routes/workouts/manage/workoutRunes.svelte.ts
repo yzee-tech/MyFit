@@ -9,6 +9,7 @@ import { canWarmUp } from '$lib/utils/oneRepMax';
 import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import type { RouterOutputs } from '$lib/trpc/router';
 import { trpc } from '$lib/trpc/client';
+import { toast } from 'svelte-sonner';
 import {
 	type WorkoutExerciseInProgress,
 	type WorkoutExerciseWithSets,
@@ -229,7 +230,7 @@ function createWorkoutRunes() {
 			});
 			if (!suggested) return;
 			setRepsOnly(exerciseName, suggested);
-			setMeasure(exerciseName, suggested);
+			setMeasure(exerciseName, { measure: suggested.measure, distanceUnit: suggested.distanceUnit });
 			if (suggested.previous) addPreviousExercise(suggested.previous.exercise, suggested.previous.userBodyweight);
 			// Only if it's still there and nothing has been entered yet
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
@@ -252,10 +253,19 @@ function createWorkoutRunes() {
 		if (!editingExercise || editingExerciseIndex === undefined || workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name, editingExerciseIndex)) return false;
 		const current = workoutExercises[editingExerciseIndex];
-		// Swapped for an exercise measured differently: the numbers so far mean something else
-		const measureBefore = measureOf(current.name).measure;
-		if (measure) setMeasure(exercise.name, measure);
+		// Swapped for an exercise measured differently: the numbers so far mean something else; for one in
+		// another distance unit, the distances are shown in it from now on
+		const { measure: measureBefore, distanceUnit: unitBefore } = measureOf(current.name);
+		if (measure) {
+			if (exercise.name !== current.name) setMeasure(current.name, { measure: 'Reps', distanceUnit: null });
+			setMeasure(exercise.name, measure);
+		}
 		const measureChanged = measureOf(exercise.name).measure !== measureBefore;
+		const [fromUnit, toUnit] = [unitBefore ?? 'KM', measureOf(exercise.name).distanceUnit ?? 'KM'];
+		const inDistanceUnit = <T extends { distance?: number }>(set: T): T =>
+			set.distance === undefined || fromUnit === toUnit
+				? set
+				: { ...set, distance: convertDistance(set.distance, fromUnit, toUnit) };
 		// Switching between a machine's levels and weights: the loads so far mean something else
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const machine = machineSetOf(exercise.name, weightSets);
@@ -283,9 +293,9 @@ function createWorkoutRunes() {
 					miniSets: []
 				}))
 			: kindChanged
-				? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
+				? current.sets.map((set) => ({ ...inDistanceUnit(set), load: undefined, completed: false }))
 				: current.sets.map((set) => ({
-						...set,
+						...inDistanceUnit(set),
 						load: inUnit(set.load),
 						miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
 					}));
@@ -406,7 +416,10 @@ function createWorkoutRunes() {
 		const measure = measureOf(exerciseToEdit.name);
 		if (isCardioMeasure(measure.measure)) {
 			// Only a row measured the same way has numbers that mean the same thing
-			if (measureOfSets(exerciseFromHistory.sets) !== measure.measure) return;
+			if (measureOfSets(exerciseFromHistory.sets) !== measure.measure) {
+				toast.error('These sets were logged differently, so they can’t be copied');
+				return;
+			}
 			const unit = measure.distanceUnit ?? 'KM';
 			for (let i = 0; i < exerciseToEdit.sets.length; i++) {
 				const historySet = exerciseFromHistory.sets[i];

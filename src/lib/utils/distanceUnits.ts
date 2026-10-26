@@ -57,21 +57,18 @@ export function formatDuration(seconds: number): string {
 
 /**
  * Seconds from what was typed in a time box: "m:ss", "h:mm:ss", or a bare number of minutes ("30",
- * "12.5"); null for anything else or a non-positive time
+ * "12.5"); null for anything else, a non-positive time, or more than a day
  */
 export function parseDuration(text: string): number | null {
 	const trimmed = text.trim();
 	if (trimmed === '') return null;
-	if (/^\d+(\.\d+)?$/.test(trimmed)) {
-		const seconds = Math.round(Number(trimmed) * 60);
-		return seconds > 0 ? seconds : null;
-	}
+	const inBounds = (seconds: number) => (isValidTimeSeconds(seconds) ? seconds : null);
+	if (/^\d+(\.\d+)?$/.test(trimmed)) return inBounds(Math.round(Number(trimmed) * 60));
 	const match = /^(?:(\d{1,2}):)?(\d{1,3}):(\d{2})$/.exec(trimmed);
 	if (!match) return null;
 	const [, h, m, s] = match;
 	if (Number(s) >= 60 || (h !== undefined && Number(m) >= 60)) return null;
-	const seconds = (h ? Number(h) * 3600 : 0) + Number(m) * 60 + Number(s);
-	return seconds > 0 ? seconds : null;
+	return inBounds((h ? Number(h) * 3600 : 0) + Number(m) * 60 + Number(s));
 }
 
 /**

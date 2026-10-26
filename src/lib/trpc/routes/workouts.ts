@@ -4,7 +4,7 @@ import { resolveExerciseUnit } from '$lib/utils/weightUnits';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
 import { routineSetCount } from '$lib/utils/routineSets';
 import { isValidDistanceMeters, isValidTimeSeconds } from '$lib/utils/distanceUnits';
-import { isCardioMeasure } from '$lib/utils/measure';
+import { isCardioMeasure, measureOfSets } from '$lib/utils/measure';
 import {
 	comparablePerformances,
 	convertExerciseLoads,
@@ -129,8 +129,14 @@ async function assertSetsMatchMeasures(userId: string, input: z.infer<typeof cre
 	});
 	const measureByName = new Map(exercises.map((exercise) => [exercise.name, exercise.measure]));
 	input.workoutExercises.forEach((exercise, exerciseIdx) => {
-		const measure = measureByName.get(exercise.name) ?? 'Reps';
-		for (const set of input.workoutExercisesSets[exerciseIdx] ?? []) {
+		const sets = input.workoutExercisesSets[exerciseIdx] ?? [];
+		// An exercise renamed or removed on another device mid-workout: its rows say what they logged, and the
+		// save makes the exercise again, measured that way (see resolveExercises)
+		const measure = measureByName.get(exercise.name) ?? measureOfSets(sets);
+		if (measure !== 'Reps' && input.workoutExercisesMiniSets[exerciseIdx]?.some((miniSets) => miniSets.length > 0)) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: `${exercise.name}: an interval has no mini-sets` });
+		}
+		for (const set of sets) {
 			if (set.timeSeconds != null && !isValidTimeSeconds(set.timeSeconds)) {
 				throw new TRPCError({ code: 'BAD_REQUEST', message: `${exercise.name}: a set's time is out of range` });
 			}
@@ -150,6 +156,17 @@ async function assertSetsMatchMeasures(userId: string, input: z.infer<typeof cre
 				throw new TRPCError({ code: 'PRECONDITION_FAILED', message: APP_UPDATED_MESSAGE });
 			}
 		}
+	});
+}
+
+/**
+ * The workout's exercises with how each one's rows were logged, so an exercise the save has to make
+ * (renamed or removed elsewhere meanwhile) is measured the way its rows are; distances start in km
+ */
+function withMeasureHints(input: z.infer<typeof createWorkoutSchema>) {
+	return input.workoutExercises.map((exercise, exerciseIdx) => {
+		const measure = measureOfSets(input.workoutExercisesSets[exerciseIdx] ?? []);
+		return { ...exercise, measure, distanceUnit: measure === 'DistanceTime' ? ('KM' as const) : null };
 	});
 }
 
@@ -796,7 +813,7 @@ export const workouts = t.router({
 		}
 
 		// Exercises as they are: their details change only on the Exercises page
-		const { byName, syncQueries } = await resolveExercises(ctx.userId, input.workoutExercises, {
+		const { byName, syncQueries } = await resolveExercises(ctx.userId, withMeasureHints(input), {
 			restore: false
 		});
 		const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.workoutExercises.map((ex) => ({
@@ -872,7 +889,7 @@ export const workouts = t.router({
 				workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt);
 			}
 
-			const { byName, syncQueries } = await resolveExercises(ctx.userId, input.data.workoutExercises, {
+			const { byName, syncQueries } = await resolveExercises(ctx.userId, withMeasureHints(input.data), {
 				restore: false
 			});
 			const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.data.workoutExercises.map((ex) => ({
