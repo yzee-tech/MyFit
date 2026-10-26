@@ -1,4 +1,5 @@
 import { version } from '$app/environment';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import {
@@ -41,7 +42,9 @@ export const GET: RequestHandler = async (event) => {
 	let body: string;
 	try {
 		const data = await prisma.$transaction((tx) => fetchExportData(tx, userId), EXPORT_TX_OPTIONS);
-		body = format === 'json' ? buildJsonExport(data, version) : buildCsvExport(data);
+		// The deployed commit SHA on Vercel, the kit build id elsewhere (a timestamp locally)
+		const appVersion = env.VERCEL_GIT_COMMIT_SHA ?? version;
+		body = format === 'json' ? buildJsonExport(data, appVersion) : buildCsvExport(data);
 	} catch (caught) {
 		if (caught instanceof ExportTooLargeError) return tooLargeResponse();
 		throw caught;
