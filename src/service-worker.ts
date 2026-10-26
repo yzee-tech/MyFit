@@ -12,6 +12,10 @@ function routingStrategyFunction(mode: 'networkOnly' | 'cacheFirst', request: Re
 	// Ignore /auth requests
 	if (url.pathname.startsWith('/auth')) return false;
 
+	// Let the browser handle data exports itself: NetworkOnly's 5 s timeout would otherwise answer a slow
+	// export (or an offline one) with the /offline page, saved under the export's file name
+	if (url.pathname.startsWith('/settings/export')) return false;
+
 	// Decide whether or not asset should be cached (cacheFirstDestinations, and unplugin-icons)
 	const toCache =
 		cacheFirstDestinations.includes(request.destination) ||

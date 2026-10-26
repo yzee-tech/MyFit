@@ -10,6 +10,13 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  */
 export const EXPORT_MAX_BYTES = 4_000_000;
 
+/**
+ * The preflight estimate is deliberately pessimistic (about 2x the real size), so it must not be compared with
+ * EXPORT_MAX_BYTES or it refuses exports that would fit. It only stops absurdly large accounts before their rows
+ * are read into memory; the exact byte check after serializing is what enforces EXPORT_MAX_BYTES.
+ */
+export const EXPORT_PREFLIGHT_MAX_BYTES = 40_000_000;
+
 /** Explicit for Neon cold starts; the timeout must stay below the route's maxDuration (30s) */
 export const EXPORT_TX_OPTIONS = {
 	isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
@@ -19,13 +26,13 @@ export const EXPORT_TX_OPTIONS = {
 
 export class ExportTooLargeError extends Error {
 	constructor(public readonly estimatedBytes: number) {
-		super(`Export exceeds the ${EXPORT_MAX_BYTES}-byte download limit (estimated ${estimatedBytes} bytes)`);
+		super(`Export is far over the ${EXPORT_MAX_BYTES}-byte download limit (estimated ${estimatedBytes} bytes)`);
 	}
 }
 
 type Tx = Prisma.TransactionClient;
 
-/** Rough upper bound, checked before reading full rows; the exact byte check after serializing is the backstop */
+/** Rough upper bound, checked before reading full rows against EXPORT_PREFLIGHT_MAX_BYTES; the exact byte check after serializing enforces the real limit */
 async function estimateExportBytes(tx: Tx, userId: string): Promise<number> {
 	const [row] = await tx.$queryRaw<[{ textbytes: bigint; rowcount: bigint }]>(Prisma.sql`
 		SELECT COALESCE(SUM(t.text_bytes), 0)::bigint AS textbytes, COALESCE(SUM(t.row_count), 0)::bigint AS rowcount
@@ -63,7 +70,7 @@ async function estimateExportBytes(tx: Tx, userId: string): Promise<number> {
 
 export async function fetchExportData(tx: Tx, userId: string) {
 	const estimatedBytes = await estimateExportBytes(tx, userId);
-	if (estimatedBytes > EXPORT_MAX_BYTES) throw new ExportTooLargeError(estimatedBytes);
+	if (estimatedBytes > EXPORT_PREFLIGHT_MAX_BYTES) throw new ExportTooLargeError(estimatedBytes);
 
 	// Sequential: an interactive transaction runs on one connection and rejects concurrent queries
 	const profile = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } });
@@ -81,7 +88,7 @@ export async function fetchExportData(tx: Tx, userId: string) {
 	});
 	const mesocycles = await tx.mesocycle.findMany({
 		where: { userId },
-		orderBy: { id: 'asc' },
+		orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
 		include: {
 			mesocycleCyclicSetChanges: { orderBy: { id: 'asc' } },
 			workoutsOfMesocycle: { orderBy: { workoutId: 'asc' } }
@@ -120,6 +127,7 @@ export function buildJsonExport(data: ExportData, appVersion: string): string {
 	});
 }
 
+/** setIndex counts from 0 as stored; setNumber is the same position counted from 1 */
 const CSV_HEADERS = [
 	'workoutId',
 	'workoutExerciseId',
@@ -135,6 +143,7 @@ const CSV_HEADERS = [
 	'muscleGroup',
 	'setType',
 	'setIndex',
+	'setNumber',
 	'reps',
 	'loadKg',
 	'machineLevel',
@@ -207,6 +216,7 @@ export function buildCsvExport(data: ExportData): string {
 						textCell(exercise.customMuscleGroup ?? exercise.targetMuscleGroup),
 						textCell(exercise.setType),
 						String(set.setIndex),
+						String(set.setIndex + 1),
 						String(set.reps),
 						isLevels ? '' : numCell(set.load),
 						isLevels ? numCell(set.load) : '',

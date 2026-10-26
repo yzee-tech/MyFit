@@ -47,6 +47,7 @@ const EXPECTED_HEADER = [
 	'muscleGroup',
 	'setType',
 	'setIndex',
+	'setNumber',
 	'reps',
 	'loadKg',
 	'machineLevel',
@@ -369,6 +370,9 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	const bySetId = Object.fromEntries(EXPECTED_HEADER.map((h, i) => [h, i]));
 	const row1 = rows[0];
 	expect(row1[bySetId.setId]).toBe('sA0000000000000000000001');
+	// setIndex counts from 0, setNumber from 1
+	expect(row1[bySetId.setIndex]).toBe('0');
+	expect(row1[bySetId.setNumber]).toBe('1');
 	expect(row1[bySetId.workoutStartedAt]).toBe('2024-01-01T10:00:00.000Z');
 	expect(row1[bySetId.routineName]).toBe('Pull day');
 	expect(row1[bySetId.mesocycleName]).toBe('Block 1');
@@ -391,6 +395,8 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 
 	const row2 = rows[1];
 	expect(row2[bySetId.setId]).toBe('sB0000000000000000000001');
+	expect(row2[bySetId.setIndex]).toBe('1');
+	expect(row2[bySetId.setNumber]).toBe('2');
 	expect(row2[bySetId.skipped]).toBe('true');
 	expect(row2[bySetId.loadKg]).toBe('60.5');
 	expect(row2[bySetId.miniSets]).toBe('');
@@ -481,23 +487,81 @@ test('rate limits a rapid repeat of the same format only', async ({ browser }) =
 	await context.close();
 });
 
-test('answers 413 for an export over the size limit', async ({ browser }) => {
-	const { userId, context } = await createUserContext(browser);
+async function createBigNoteWorkout(userId: string, id: string, noteBytes: number) {
 	await prisma.workout.create({
 		data: {
-			id: 'wD0000000000000000000001',
+			id,
 			userId,
 			userBodyweight: 80,
 			startedAt: new Date('2024-02-01T10:00:00Z'),
 			endedAt: new Date('2024-02-01T11:00:00Z'),
-			note: 'x'.repeat(1_100_000)
+			note: 'x'.repeat(noteBytes)
 		}
 	});
-	// 1.1 MB of text estimates over 4 MB after escaping overhead
+}
+
+test('answers 413 for an export whose exact size is over the limit', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	// Passes the preflight estimate, but the serialized file is over 4 MB
+	await createBigNoteWorkout(userId, 'wD0000000000000000000001', 4_100_000);
 	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
 	expect(jsonResponse.status()).toBe(413);
+	// The CSV has one row per set and this workout has none, so it is tiny and still downloads
 	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
-	expect(csvResponse.status()).toBe(413);
+	expect(csvResponse.status()).toBe(200);
+	await context.close();
+});
+
+test('answers 413 from the preflight estimate for an absurdly large account', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	await createBigNoteWorkout(userId, 'wD0000000000000000000002', 11_000_000);
+	const response = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	expect(response.status()).toBe(413);
+	await context.close();
+});
+
+test('exports an account that fits the limit even when the estimate is high', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	// The estimate is about 4x the note (4.4 MB), over the download limit; the real files are about 1.1 MB
+	await createBigNoteWorkout(userId, 'wD0000000000000000000003', 1_100_000);
+	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	expect(jsonResponse.status()).toBe(200);
+	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
+	expect(csvResponse.status()).toBe(200);
+	await context.close();
+});
+
+test('a refused export does not use up the rate limit slot', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	await createBigNoteWorkout(userId, 'wD0000000000000000000004', 4_100_000);
+	expect((await context.request.get(`${BASE_URL}/settings/export?format=json`)).status()).toBe(413);
+	// Not 429: the refused export was not counted
+	expect((await context.request.get(`${BASE_URL}/settings/export?format=json`)).status()).toBe(413);
+	await context.close();
+});
+
+test('orders mesocycles by start date, not by id', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	const base = {
+		userId,
+		weeklyRIR: [3, 2, 1],
+		startOverloadPercentage: 2.5,
+		lastSetToFailure: false,
+		forceRIRMatching: false
+	};
+	// The earlier block has the larger id; a block without a start date comes last
+	await prisma.mesocycle.create({
+		data: { ...base, id: 'mB0000000000000000000001', name: 'Later', startDate: new Date('2024-06-01T00:00:00Z') }
+	});
+	await prisma.mesocycle.create({
+		data: { ...base, id: 'mB0000000000000000000002', name: 'Earlier', startDate: new Date('2024-01-01T00:00:00Z') }
+	});
+	await prisma.mesocycle.create({
+		data: { ...base, id: 'mB0000000000000000000000', name: 'Undated', startDate: null }
+	});
+	const response = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	const json = await response.json();
+	expect(json.mesocycles.map((m: { name: string }) => m.name)).toEqual(['Earlier', 'Later', 'Undated']);
 	await context.close();
 });
 
@@ -536,12 +600,43 @@ test('settings page shows the Your data card and the buttons download', async ({
 	const page = await context.newPage();
 	await page.goto('/settings');
 	await expect(page.getByText('Your data')).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Download JSON' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Download JSON' })).toBeVisible();
 
 	const [download] = await Promise.all([
 		page.waitForEvent('download'),
-		page.getByRole('link', { name: 'Download CSV' }).click()
+		page.getByRole('button', { name: 'Download CSV' }).click()
 	]);
 	expect(download.suggestedFilename()).toMatch(/^myfit-export-\d{4}-\d{2}-\d{2}\.csv$/);
+	await context.close();
+});
+
+test('the Download button shows a spinner while it waits and a toast when the export is refused', async ({
+	browser
+}) => {
+	const { context } = await createUserContext(browser);
+	const page = await context.newPage();
+	await page.goto('/settings');
+
+	let release: () => void = () => {};
+	const gate = new Promise<void>((resolve) => (release = resolve));
+	await page.route('**/settings/export?format=json', async (route) => {
+		await gate;
+		await route.fulfill({ status: 429, contentType: 'text/plain', body: 'Too many exports; retry in 42 seconds.' });
+	});
+	await page.route('**/settings/export?format=csv', (route) =>
+		route.fulfill({ status: 413, contentType: 'text/plain', body: 'Export exceeds the maximum download size of 4 MB.' })
+	);
+
+	const jsonButton = page.getByRole('button', { name: 'Download JSON' });
+	await jsonButton.click();
+	// Busy: both buttons are disabled until the response arrives
+	await expect(jsonButton).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Download CSV' })).toBeDisabled();
+	release();
+	await expect(page.getByText('Too many exports; retry in 42 seconds.')).toBeVisible();
+	await expect(jsonButton).toBeEnabled();
+
+	await page.getByRole('button', { name: 'Download CSV' }).click();
+	await expect(page.getByText('Export exceeds the maximum download size of 4 MB.')).toBeVisible();
 	await context.close();
 });

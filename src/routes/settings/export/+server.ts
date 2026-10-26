@@ -11,7 +11,7 @@ import {
 	fetchExportData,
 	type ExportFormat
 } from '$lib/server/export';
-import { checkExportRateLimit } from '$lib/server/exportRateLimit';
+import { checkExportRateLimit, recordExport } from '$lib/server/exportRateLimit';
 
 import type { ServerlessConfig } from '@sveltejs/adapter-vercel';
 
@@ -49,6 +49,9 @@ export const GET: RequestHandler = async (event) => {
 
 	// Backstop on the exact wire bytes (UTF-8, BOM included); the preflight estimate ran first
 	if (new TextEncoder().encode(body).byteLength > EXPORT_MAX_BYTES) return tooLargeResponse();
+
+	// Only a delivered export counts toward the rate limit
+	recordExport(userId, format);
 
 	const date = new Date().toISOString().slice(0, 10);
 	return new Response(body, {
