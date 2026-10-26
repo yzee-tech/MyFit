@@ -4,8 +4,9 @@ export const EXPORT_FORMATS = ['json', 'csv'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
- * Vercel caps a buffered function response at 4.5 MB; stay clearly below that on the wire.
- * Applies to the exact UTF-8 bytes of either format, BOM included.
+ * Vercel caps a function's response payload at 4.5 MB; stay clearly below that on the wire.
+ * The export is served gzip-compressed and this limit applies to the COMPRESSED bytes, so roughly
+ * 30-40 MB of raw JSON/CSV still fits; the preflight only stops absurdly large accounts.
  * https://vercel.com/docs/functions/limitations
  */
 export const EXPORT_MAX_BYTES = 4_000_000;
@@ -23,6 +24,15 @@ export const EXPORT_TX_OPTIONS = {
 	maxWait: 10_000,
 	timeout: 20_000
 };
+
+/**
+ * gzip the serialized export. The route serves the result with Content-Encoding: gzip;
+ * browsers and fetch clients decompress transparently, so the download is unchanged.
+ */
+export async function gzipExportBody(body: string): Promise<Uint8Array> {
+	const stream = new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'));
+	return new Uint8Array(await new Response(stream).arrayBuffer());
+}
 
 export class ExportTooLargeError extends Error {
 	constructor(public readonly estimatedBytes: number) {

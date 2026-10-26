@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import type { Browser, BrowserContext } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
@@ -126,6 +126,13 @@ async function seedRichData(userId: string) {
 				customMuscleGroup: 'Upper back',
 				archived: true,
 				userId
+			},
+			{
+				// Non-ASCII name: umlauts + CJK, so both formats must carry UTF-8 (CSV through the BOM)
+				id: 'exC000000000000000000001',
+				name: 'Übungen 日本語',
+				targetMuscleGroup: 'SideDelts',
+				userId
 			}
 		]
 	});
@@ -249,6 +256,20 @@ async function seedRichData(userId: string) {
 						repRangeStart: 10,
 						repRangeEnd: 15,
 						weightUnit: 'KG'
+					},
+					{
+						id: 'weD000000000000000000001',
+						exerciseIndex: 3,
+						name: 'Übungen 日本語',
+						targetMuscleGroup: 'SideDelts',
+						setType: 'Straight',
+						repRangeStart: 8,
+						repRangeEnd: 12,
+						weightUnit: 'KG',
+						exerciseId: 'exC000000000000000000001',
+						sets: {
+							create: [{ id: 'sD0000000000000000000001', setIndex: 0, reps: 10, load: 40, RIR: 2, skipped: false }]
+						}
 					}
 				]
 			}
@@ -315,6 +336,7 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(jsonResponse.headers()['content-disposition']).toMatch(
 		/attachment; filename="myfit-export-\d{4}-\d{2}-\d{2}\.json"/
 	);
+	expect(jsonResponse.headers()['content-encoding']).toBe('gzip');
 	const jsonText = await jsonResponse.text();
 	const json = JSON.parse(jsonText);
 
@@ -326,8 +348,10 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(json.weightSets).toHaveLength(2);
 	expect(json.weightSets.map((w: { name: string }) => w.name)).toEqual(['Home dumbbells', 'Assisted pull-up machine']);
 	// Archived exercises are included
-	expect(json.exercises).toHaveLength(2);
+	expect(json.exercises).toHaveLength(3);
 	expect(json.exercises.find((e: { id: string }) => e.id === 'exB000000000000000000001').archived).toBe(true);
+	// Non-ASCII names round-trip unchanged
+	expect(json.exercises.map((e: { name: string }) => e.name)).toContain('Übungen 日本語');
 	expect(json.exerciseSplit.exerciseSplitDays[0].exercises[0].name).toBe('Pull-ups');
 	expect(json.mesocycles[0].name).toBe('Block 1');
 	expect(json.mesocycles[0].workoutsOfMesocycle[0].workoutId).toBe('wA0000000000000000000001');
@@ -337,14 +361,16 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	const workout = json.workouts[0];
 	// Raw rows, exactly as stored: formula-like text is NOT prefixed in JSON
 	expect(workout.note).toBe('  =1+1 leading whitespace');
-	expect(workout.workoutExercises).toHaveLength(3);
-	const [pullUps, pecDeck, zeroSet] = workout.workoutExercises;
+	expect(workout.workoutExercises).toHaveLength(4);
+	const [pullUps, pecDeck, zeroSet, unicodeExercise] = workout.workoutExercises;
 	expect(pullUps.sets).toHaveLength(2);
 	expect(pullUps.sets[0].load).toBe(-20);
 	expect(pullUps.sets[0].miniSets).toHaveLength(1);
 	expect(pullUps.sets[1].skipped).toBe(true);
 	expect(pecDeck.weightUnit).toBe('LEVEL');
 	expect(zeroSet.sets).toHaveLength(0);
+	expect(unicodeExercise.name).toBe('Übungen 日本語');
+	expect(unicodeExercise.sets).toHaveLength(1);
 	// The empty workout appears in JSON
 	expect(json.workouts[1].workoutExercises).toHaveLength(0);
 	expect(json.workouts[1].isDeload).toBe(true);
@@ -360,12 +386,13 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
 	expect(csvResponse.status()).toBe(200);
 	expect(csvResponse.headers()['content-type']).toContain('text/csv');
+	expect(csvResponse.headers()['content-encoding']).toBe('gzip');
 	const csvText = await csvResponse.text();
 	expect(csvText.charCodeAt(0)).toBe(0xfeff);
 	const [header, ...rows] = parseCsv(csvText.slice(1));
 	expect(header).toEqual(EXPECTED_HEADER);
 	// One row per parent set, skipped included; zero-set exercises and the empty workout excluded
-	expect(rows).toHaveLength(3);
+	expect(rows).toHaveLength(4);
 
 	const bySetId = Object.fromEntries(EXPECTED_HEADER.map((h, i) => [h, i]));
 	const row1 = rows[0];
@@ -409,6 +436,11 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(row3[bySetId.displayUnit]).toBe('LEVEL');
 	// The custom muscle name wins over the enum
 	expect(row3[bySetId.muscleGroup]).toBe('Upper chest');
+
+	// Non-ASCII exercise name through the CSV, BOM included
+	const row4 = rows[3];
+	expect(row4[bySetId.setId]).toBe('sD0000000000000000000001');
+	expect(row4[bySetId.exerciseName]).toBe('Übungen 日本語');
 
 	expect(csvText).not.toContain('OTHER USER');
 
@@ -500,12 +532,40 @@ async function createBigNoteWorkout(userId: string, id: string, noteBytes: numbe
 	});
 }
 
-test('answers 413 for an export whose exact size is over the limit', async ({ browser }) => {
+/** Random base64 barely compresses, so a note of this size stays over the limit even gzipped */
+async function createIncompressibleNoteWorkout(userId: string, id: string) {
+	await prisma.workout.create({
+		data: {
+			id,
+			userId,
+			userBodyweight: 80,
+			startedAt: new Date('2024-02-01T10:00:00Z'),
+			endedAt: new Date('2024-02-01T11:00:00Z'),
+			note: randomBytes(6_000_000).toString('base64')
+		}
+	});
+}
+
+test('serves an export whose raw size is over 4 MB once it compresses under the limit', async ({ browser }) => {
 	const { userId, context } = await createUserContext(browser);
-	// Passes the preflight estimate, but the serialized file is over 4 MB
+	// Passes the preflight estimate; the serialized file is over 4 MB raw but a few KB gzipped
 	await createBigNoteWorkout(userId, 'wD0000000000000000000001', 4_100_000);
 	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
+	expect(jsonResponse.status()).toBe(200);
+	expect(jsonResponse.headers()['content-encoding']).toBe('gzip');
+	const json = await jsonResponse.json();
+	expect(json.workouts[0].note).toBe('x'.repeat(4_100_000));
+	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
+	expect(csvResponse.status()).toBe(200);
+	await context.close();
+});
+
+test('answers 413 when even the compressed export is over the limit', async ({ browser }) => {
+	const { userId, context } = await createUserContext(browser);
+	await createIncompressibleNoteWorkout(userId, 'wD0000000000000000000005');
+	const jsonResponse = await context.request.get(`${BASE_URL}/settings/export?format=json`);
 	expect(jsonResponse.status()).toBe(413);
+	expect(await jsonResponse.text()).toContain('Try the CSV format');
 	// The CSV has one row per set and this workout has none, so it is tiny and still downloads
 	const csvResponse = await context.request.get(`${BASE_URL}/settings/export?format=csv`);
 	expect(csvResponse.status()).toBe(200);
@@ -533,7 +593,7 @@ test('exports an account that fits the limit even when the estimate is high', as
 
 test('a refused export does not use up the rate limit slot', async ({ browser }) => {
 	const { userId, context } = await createUserContext(browser);
-	await createBigNoteWorkout(userId, 'wD0000000000000000000004', 4_100_000);
+	await createIncompressibleNoteWorkout(userId, 'wD0000000000000000000004');
 	expect((await context.request.get(`${BASE_URL}/settings/export?format=json`)).status()).toBe(413);
 	// Not 429: the refused export was not counted
 	expect((await context.request.get(`${BASE_URL}/settings/export?format=json`)).status()).toBe(413);
@@ -624,7 +684,11 @@ test('the Download button shows a spinner while it waits and a toast when the ex
 		await route.fulfill({ status: 429, contentType: 'text/plain', body: 'Too many exports; retry in 42 seconds.' });
 	});
 	await page.route('**/settings/export?format=csv', (route) =>
-		route.fulfill({ status: 413, contentType: 'text/plain', body: 'Export exceeds the maximum download size of 4 MB.' })
+		route.fulfill({
+			status: 413,
+			contentType: 'text/plain',
+			body: 'Export exceeds the maximum download size of 4 MB. Try the CSV format, which is smaller; if it is still too large, contact support.'
+		})
 	);
 
 	const jsonButton = page.getByRole('button', { name: 'Download JSON' });
@@ -637,7 +701,7 @@ test('the Download button shows a spinner while it waits and a toast when the ex
 	await expect(jsonButton).toBeEnabled();
 
 	await page.getByRole('button', { name: 'Download CSV' }).click();
-	await expect(page.getByText('Export exceeds the maximum download size of 4 MB.')).toBeVisible();
+	await expect(page.getByText('Export exceeds the maximum download size of 4 MB. Try the CSV format')).toBeVisible();
 	await context.close();
 });
 

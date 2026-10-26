@@ -10,6 +10,7 @@ import {
 	buildCsvExport,
 	buildJsonExport,
 	fetchExportData,
+	gzipExportBody,
 	type ExportFormat
 } from '$lib/server/export';
 import { checkExportRateLimit, recordExport } from '$lib/server/exportRateLimit';
@@ -19,7 +20,11 @@ import type { ServerlessConfig } from '@sveltejs/adapter-vercel';
 // Within every Vercel plan's cap; the transaction timeout (20s) stays below it
 export const config: ServerlessConfig = { maxDuration: 30 };
 
-const tooLargeResponse = () => new Response('Export exceeds the maximum download size of 4 MB.', { status: 413 });
+const tooLargeResponse = () =>
+	new Response(
+		'Export exceeds the maximum download size of 4 MB. Try the CSV format, which is smaller; if it is still too large, contact support.',
+		{ status: 413 }
+	);
 
 export const GET: RequestHandler = async (event) => {
 	const session = await event.locals.auth();
@@ -50,17 +55,20 @@ export const GET: RequestHandler = async (event) => {
 		throw caught;
 	}
 
-	// Backstop on the exact wire bytes (UTF-8, BOM included); the preflight estimate ran first
-	if (new TextEncoder().encode(body).byteLength > EXPORT_MAX_BYTES) return tooLargeResponse();
+	// Backstop on the exact wire bytes: the response goes out gzip-compressed, so the limit applies to
+	// the compressed size. The preflight estimate ran first and stays as it was.
+	const compressed = await gzipExportBody(body);
+	if (compressed.byteLength > EXPORT_MAX_BYTES) return tooLargeResponse();
 
 	// Only a delivered export counts toward the rate limit
 	recordExport(userId, format);
 
 	const date = new Date().toISOString().slice(0, 10);
-	return new Response(body, {
+	return new Response(compressed, {
 		headers: {
 			'Content-Type': format === 'json' ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8',
 			'Content-Disposition': `attachment; filename="myfit-export-${date}.${format}"`,
+			'Content-Encoding': 'gzip',
 			'Cache-Control': 'private, no-store'
 		}
 	});
