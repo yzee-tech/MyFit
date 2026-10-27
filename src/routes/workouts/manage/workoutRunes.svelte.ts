@@ -1,4 +1,4 @@
-import { browserTimeZone } from '$lib/utils/workoutUtils';
+import { browserTimeZone, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -219,7 +219,8 @@ function createWorkoutRunes() {
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
 			if (!suggested.sets || !current || !untouched) return;
-			current.sets = suggested.sets;
+			// The hint starts from these final numbers: none until the weight changes
+			current.sets = withHintBase(suggested.sets);
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);
@@ -245,10 +246,11 @@ function createWorkoutRunes() {
 		const inUnit = (load: number | undefined) =>
 			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = kindChanged
-			? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
+			? current.sets.map(({ hintBase, ...set }) => ({ ...set, load: undefined, completed: false }))
 			: current.sets.map((set) => ({
 					...set,
 					load: inUnit(set.load),
+					...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
 					miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
 				}));
 		workoutExercises[editingExerciseIndex] = {
@@ -353,7 +355,7 @@ function createWorkoutRunes() {
 		for (let i = 0; i < exerciseToEdit.sets.length; i++) {
 			if (!exerciseFromHistory.sets[i]) break;
 			const { workoutExerciseId, ...historySet } = exerciseFromHistory.sets[i];
-			exerciseToEdit.sets[i] = {
+			const copied: WorkoutExerciseInProgress['sets'][number] = {
 				...historySet,
 				load: sameKindOfLoad ? historySet.load : exerciseToEdit.sets[i].load,
 				completed: false,
@@ -366,9 +368,12 @@ function createWorkoutRunes() {
 					return { ...restOfTheMiniSet, completed: false };
 				})
 			};
+			// A new starting point from the copied numbers (RIR too): no hint until the weight changes
+			exerciseToEdit.sets[i] = editingWorkoutId === null ? { ...copied, hintBase: hintBaseOf(copied) } : copied;
 		}
 
 		exerciseHistorySheetOpen = false;
+		saveStoresToLocalStorage();
 	}
 
 	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {

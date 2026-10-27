@@ -9,10 +9,11 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { arraySum, floorToNearestMultiple } from '$lib/utils';
 	import {
-		cleanupInProgressMiniSets,
 		solveBergerFormula,
 		type SetField,
-		type WorkoutExerciseInProgress
+		type WorkoutExerciseInProgress,
+		hintBaseOf,
+		type HintBase
 	} from '$lib/utils/workoutUtils';
 	import CheckIcon from 'virtual:icons/lucide/check';
 	import ArrowDownIcon from 'virtual:icons/lucide/chevron-down';
@@ -26,12 +27,11 @@
 
 	type PropsType = {
 		exercise: WorkoutExerciseInProgress;
-		originalSetLoads: (number | undefined)[];
 		/** Reps only: no load to enter (it's 0) */
 		repsOnly?: boolean;
 	};
 	type WorkoutExerciseSet = WorkoutExerciseInProgress['sets'][number];
-	let { exercise = $bindable(), originalSetLoads = $bindable(), repsOnly = false }: PropsType = $props();
+	let { exercise = $bindable(), repsOnly = false }: PropsType = $props();
 
 	// Sets someone tried to tick with a box still empty. The notes and outlines are worked out from these
 	// sets as they are now, so they follow a set when others are added or removed, and go once it's filled
@@ -113,7 +113,6 @@
 			skipped: false,
 			miniSets: []
 		});
-		originalSetLoads.push(undefined);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -151,22 +150,19 @@
 			return;
 		}
 		armedSet = null;
-		const originalLoad = originalSetLoads[idx];
 		// Its note about missing numbers comes back with it
 		const wasTried = triedToTick.delete(set);
 		exercise.sets.splice(idx, 1);
-		originalSetLoads.splice(idx, 1);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 		toast(`Set ${idx + 1} removed`, {
-			action: { label: 'Undo', onClick: () => restoreSet(set, idx, originalLoad, wasTried) }
+			action: { label: 'Undo', onClick: () => restoreSet(set, idx, wasTried) }
 		});
 	}
 
 	/** Puts a removed set back where it was, with its numbers */
-	function restoreSet(set: WorkoutExerciseSet, idx: number, originalLoad: number | undefined, wasTried: boolean) {
+	function restoreSet(set: WorkoutExerciseSet, idx: number, wasTried: boolean) {
 		const at = Math.min(idx, exercise.sets.length);
 		exercise.sets.splice(at, 0, set);
-		originalSetLoads.splice(at, 0, originalLoad);
 		if (wasTried) triedToTick.add(exercise.sets[at]);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
@@ -359,7 +355,12 @@
 	function emptied(set: WorkoutExerciseSet, idx: number, field: SetField) {
 		const set1Value = exercise.sets[0]?.[field];
 		const wasCopy = idx > 0 && typedOverCopy.get(set)?.has(field) && typeof set1Value === 'number';
-		const restored = wasCopy ? set1Value : set.suggested?.[field];
+		// The reps box goes back to where the hint starts from, else to its suggestion
+		const restored = wasCopy
+			? set1Value
+			: field === 'reps' && set.hintBase
+				? set.hintBase.reps
+				: set.suggested?.[field];
 		if (typeof restored !== 'number') {
 			set[field] = undefined;
 			workoutRunes.workoutExercises = workoutRunes.workoutExercises;
@@ -407,8 +408,12 @@
 		set.reps = previous.reps;
 		if (hasLoadBox(idx)) {
 			set.load = previous.load;
-			// Last time's reps go with last time's weight: nothing to adjust
-			originalSetLoads[idx] = previous.load;
+		}
+		// Last time's numbers go together: nothing to adjust until the weight changes. RIR is not copied, so
+		// the baseline keeps the suggested RIR. Later myo-rep sets share set 1's weight
+		if (!editing) {
+			const load = hasLoadBox(idx) ? previous.load : exercise.sets[0]?.load;
+			set.hintBase = hintBaseOf({ load, reps: previous.reps, RIR: set.hintBase?.RIR ?? set.RIR });
 		}
 		markChosen(set, ...(hasLoadBox(idx) ? (['reps', 'load'] as const) : (['reps'] as const)));
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
@@ -424,39 +429,40 @@
 	function repsHint(idx: number): RepsHint | null {
 		if (editing || repsOnly || isLevels || !hasLoadBox(idx)) return null;
 		const set = exercise.sets[idx];
-		const startLoad = originalSetLoads[idx];
+		const base = set?.hintBase;
 		const newLoad = set?.load;
-		if (!set || set.completed || set.skipped || typeof newLoad !== 'number' || startLoad === undefined) return null;
-		if (newLoad === startLoad) return null;
+		if (!set || !base || set.completed || set.skipped || typeof newLoad !== 'number') return null;
+		if (newLoad === base.load) return null;
 
 		// Today's bodyweight on both sides: the starting weight is from today too
 		const bodyweight = inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number;
-		const known = (from: WorkoutExerciseSet) => ({
-			oldSet: { reps: from.reps!, load: startLoad, RIR: from.RIR!, miniSets: cleanupInProgressMiniSets(from.miniSets) },
+		// Only the starting numbers count, on both sides: what is typed in reps or RIR, and mini-sets in
+		// progress, never move the hint
+		const known = (from: HintBase) => ({
+			oldSet: { reps: from.reps, load: from.load, RIR: from.RIR, miniSets: [] },
 			oldUserBodyweight: bodyweight,
 			newUserBodyweight: bodyweight,
 			bodyweightFraction: exercise.bodyweightFraction ?? null
 		});
-		const hasNumbers = (from: WorkoutExerciseSet) => typeof from.reps === 'number' && typeof from.RIR === 'number';
 		const reps = new Map<number, number>();
 
 		const sets = isSameLoadExercise ? exercise.sets.map((from, i) => [from, i] as const) : [[set, idx] as const];
 		let extraOverloadAchieved = 0;
 		for (const [from, i] of sets) {
-			// A set already done keeps its numbers
-			if (from.completed || from.skipped || !hasNumbers(from)) continue;
-			const newSet = { load: newLoad, RIR: from.RIR!, miniSets: cleanupInProgressMiniSets(from.miniSets) };
+			// A set already done keeps its numbers; one without a starting point has no hint
+			if (from.completed || from.skipped || !from.hintBase) continue;
+			const newSet = { load: newLoad, RIR: from.hintBase.RIR, miniSets: [] };
 			const newReps = Math.round(
 				solveBergerFormula({
 					variableToSolve: 'NewReps',
-					knownValues: { ...known(from), newSet, overloadPercentage: -extraOverloadAchieved }
+					knownValues: { ...known(from.hintBase), newSet, overloadPercentage: -extraOverloadAchieved }
 				})
 			);
 			if (!Number.isFinite(newReps) || newReps < 1) return null;
 			if (isSameLoadExercise) {
 				extraOverloadAchieved += solveBergerFormula({
 					variableToSolve: 'OverloadPercentage',
-					knownValues: { ...known(from), newSet: { ...newSet, reps: newReps } }
+					knownValues: { ...known(from.hintBase), newSet: { ...newSet, reps: newReps } }
 				});
 			}
 			reps.set(i, newReps);
@@ -464,13 +470,15 @@
 		return reps.size > 0 ? { load: newLoad, reps } : null;
 	}
 
+	const repsWord = (n: number) => (n === 1 ? 'rep' : 'reps');
+
 	/** The hint's words, e.g. "At 70 kg, aim for about 7 reps" */
 	function describeHint(hint: RepsHint) {
 		const at = formatHintLoad(hint.load, unitLabel(exercise.weightUnit ?? 'KG'), loadKind);
 		const values = [...hint.reps.values()];
-		if (!isSameLoadExercise) return `At ${at}, aim for about ${values[0]} reps`;
-		if (new Set(values).size === 1) return `At ${at}, aim for about ${values[0]} reps on each set`;
-		return `At ${at}, aim for about ${values.slice(0, -1).join(', ')} and ${values.at(-1)} reps`;
+		if (!isSameLoadExercise) return `At ${at}, aim for about ${values[0]} ${repsWord(values[0])}`;
+		if (new Set(values).size === 1) return `At ${at}, aim for about ${values[0]} ${repsWord(values[0])} on each set`;
+		return `At ${at}, aim for about ${values.slice(0, -1).join(', ')} and ${values.at(-1)} ${repsWord(values.at(-1)!)}`;
 	}
 
 	/** Fills in the hint's reps; the new weight is then where the set starts */
@@ -480,9 +488,10 @@
 		for (const [i, reps] of hint.reps) {
 			exercise.sets[i].reps = reps;
 			markChosen(exercise.sets[i], 'reps');
-			originalSetLoads[i] = hint.load;
+			// The new weight with these reps is where the set starts from now
+			const from = exercise.sets[i].hintBase!;
+			exercise.sets[i].hintBase = { load: hint.load, reps, RIR: from.RIR };
 		}
-		originalSetLoads[idx] = hint.load;
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 </script>

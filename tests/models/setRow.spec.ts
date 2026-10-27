@@ -1,6 +1,11 @@
 import { test, expect, type Page } from '../fixtures';
+import { convertWeight, roundWeight } from '../../src/lib/utils/weightUnits';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
-import { solveBergerFormula } from '../../src/lib/utils/workoutUtils';
+import {
+	solveBergerFormula,
+	switchExerciseUnit,
+	type WorkoutExerciseInProgress
+} from '../../src/lib/utils/workoutUtils';
 import { boxNumber, editWorkoutExercise, expectBox, expectBoxNot, pickRoutine, quickAdd } from './commonFunctions';
 
 const prisma = new PrismaClient();
@@ -264,9 +269,8 @@ test('reps hint: after a weight change, about how many reps for the same effort;
 	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
 	// Changed again: back, from the reps it has now
 	await box(page, 'Barbell rows', 2, 'load').fill(String(heavier + 5));
-	await expect(hint(page, 'Barbell rows', 2)).toContainText(
-		`aim for about ${expectedReps(heavier + 5, firstGuess, heavier)} reps`
-	);
+	const again = expectedReps(heavier + 5, firstGuess, heavier);
+	await expect(hint(page, 'Barbell rows', 2)).toContainText(`aim for about ${again} ${again === 1 ? 'rep' : 'reps'}`);
 	// Ticked: done, no hint
 	await page.getByTestId('Barbell rows-set-2-action').click();
 	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
@@ -487,3 +491,462 @@ test('a suggestion is the box’s placeholder: a tap selects nothing, typing rep
 	await box(page, 'Barbell rows', 1, 'load').fill('70');
 	await expectBox(box(page, 'Barbell rows', 2, 'load'), load2);
 });
+
+/** The hint's text, once it shows */
+const hintText = async (page: Page, exercise: string, set: number) =>
+	(await hint(page, exercise, set).innerText()).replace(/\s+/g, ' ');
+
+test('reps hint stays put while reps or RIR are typed or emptied; emptying reps restores the starting reps; Use starts a new baseline', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const startLoad = Number(await boxNumber(box(page, 'Barbell rows', 2, 'load')));
+	const startReps = await boxNumber(box(page, 'Barbell rows', 2, 'reps'));
+	await box(page, 'Barbell rows', 2, 'load').fill(String(startLoad + 10));
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	const shown = await hintText(page, 'Barbell rows', 2);
+
+	// Typing "10" key by key, then RIR, then emptying either box: the hint never moves
+	const reps = box(page, 'Barbell rows', 2, 'reps');
+	await reps.fill('');
+	await reps.press('1');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	await reps.press('0');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	await box(page, 'Barbell rows', 2, 'RIR').fill('4');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	await box(page, 'Barbell rows', 2, 'RIR').fill('');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	await reps.fill('');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	// Emptied reps are back to where the hint starts from
+	await expectBox(reps, startReps);
+
+	// Use fills the hint's reps; emptying then brings those back, not the first suggestion
+	await hint(page, 'Barbell rows', 2).getByRole('button').click();
+	const used = await boxNumber(reps);
+	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+	await reps.fill('');
+	await expectBox(reps, used);
+});
+
+test('reps hint: no hint on an added set; a removed set comes back with its hint; reload keeps the hint', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const startLoad = Number(await boxNumber(box(page, 'Barbell rows', 2, 'load')));
+	// Added set: a copy of the last one, no starting point, so no hint
+	await page.getByTestId('Barbell rows-add-set').click();
+	await box(page, 'Barbell rows', 4, 'load').fill(String(startLoad + 10));
+	await expect(hint(page, 'Barbell rows', 4)).toHaveCount(0);
+
+	// Remove set 2 and Undo: its hint is still there
+	await box(page, 'Barbell rows', 2, 'load').fill(String(startLoad + 10));
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	const shown = await hintText(page, 'Barbell rows', 2);
+	await page.getByTestId('Barbell rows-set-2-remove').click();
+	await page.getByTestId('Barbell rows-set-2-remove').click();
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+
+	// Reload mid-workout: the hint is kept with the workout
+	await page.reload();
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+});
+
+test('reps hint: Previous starts from last time with the suggested RIR; a lb switch hides it until the weight changes', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	await box(page, 'Barbell rows', 1, 'load').fill('50');
+	await previous(page, 'Barbell rows', 1).click();
+	await expect(hint(page, 'Barbell rows', 1)).toHaveCount(0);
+	await box(page, 'Barbell rows', 1, 'load').fill('70');
+	await expect(hint(page, 'Barbell rows', 1)).toContainText('At 70 kg, aim for about');
+
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-load-header')).toHaveText('LB');
+	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+	const afterSwitch = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const snapped = afterSwitch.workoutExercises.find((ex: { name: string }) => ex.name === 'Barbell rows').sets[1];
+	expect(snapped.hintBase).toEqual({ load: snapped.load, reps: snapped.reps, RIR: snapped.RIR });
+	const lb = Number(await boxNumber(box(page, 'Barbell rows', 2, 'load')));
+	await box(page, 'Barbell rows', 2, 'load').fill(String(lb + 20));
+	await expect(hint(page, 'Barbell rows', 2)).toContainText('aim for about');
+});
+
+test('hint baseline survives the drawer clone; old local workouts show no hint', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	await box(page, 'Barbell rows', 2, 'load').fill('70');
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	const before = await hintText(page, 'Barbell rows', 2);
+	await editWorkoutExercise(page, 'Barbell rows');
+	await page.getByRole('button', { name: 'Update', exact: true }).click();
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(before);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	// Simulate a workout persisted by the old app: no hintBase fields.
+	await page.evaluate(() => {
+		const state = JSON.parse(localStorage.getItem('workoutRunes')!);
+		for (const ex of state.workoutExercises) for (const set of ex.sets) delete set.hintBase;
+		localStorage.setItem('workoutRunes', JSON.stringify(state));
+	});
+	await page.reload();
+	await expect(box(page, 'Barbell rows', 2, 'load')).toBeVisible();
+	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+});
+
+test('hint baselines: History resets it, async suggestions capture it, copy-down rows never invent one', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	await box(page, 'Barbell rows', 2, 'load').fill('70');
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	await page.getByLabel('Copy these sets').first().click();
+	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+	const historyState = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const copied = historyState.workoutExercises.find((ex: { name: string }) => ex.name === 'Barbell rows').sets[1];
+	expect(copied.hintBase).toEqual({ load: copied.load, reps: copied.reps, RIR: copied.RIR });
+	await box(page, 'Barbell rows', 2, 'load').fill('70');
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	// Remove the existing exercise and add it again, obtaining async suggestions.
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	await quickAdd(page, ['Barbell rows']);
+	await expectBox(box(page, 'Barbell rows', 1, 'load'), /^\d/);
+	await expect(hint(page, 'Barbell rows', 1)).toHaveCount(0);
+	const load = Number(await boxNumber(box(page, 'Barbell rows', 1, 'load')));
+	await box(page, 'Barbell rows', 1, 'load').fill(String(load + 10));
+	await expect(hint(page, 'Barbell rows', 1)).toBeVisible();
+	// Simulate empty manual rows and fill them only by copy-down.
+	await page.evaluate(() => {
+		const saved = JSON.parse(localStorage.getItem('workoutRunes')!);
+		const ex = saved.workoutExercises.find((x: { name: string }) => x.name === 'Barbell rows');
+		ex.setType = 'Straight';
+		ex.sets = [0, 1].map(() => ({ completed: false, skipped: false, miniSets: [] }));
+		localStorage.setItem('workoutRunes', JSON.stringify(saved));
+	});
+	await page.reload();
+	for (const [field, value] of [
+		['load', '60'],
+		['reps', '10'],
+		['RIR', '2']
+	] as const)
+		await box(page, 'Barbell rows', 1, field).fill(value);
+	await expectBox(box(page, 'Barbell rows', 2, 'load'), '60');
+	await box(page, 'Barbell rows', 2, 'load').fill('70');
+	await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+});
+
+test('save payload strips every hint baseline from a suggested workout', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	// Keep one exercise, with its own suggestion and baseline.
+	for (const ex of ['Pull-ups', 'Leg press', 'Lateral raises']) {
+		await page.getByTestId(`${ex}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+	}
+	for (const set of [1, 2, 3]) {
+		for (const [field, value] of [
+			['load', '60'],
+			['reps', '10'],
+			['RIR', '2']
+		] as const)
+			await box(page, 'Barbell rows', set, field).fill(value);
+		await page.getByTestId(`Barbell rows-set-${set}-action`).click();
+	}
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	const request = page.waitForRequest((r) => r.url().includes('workouts.create') && r.method() === 'POST');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	const sent = await request;
+	expect(sent.postData()).not.toContain('hintBase');
+	await page.waitForURL('/workouts');
+});
+
+test('myo main-set hint ignores typed reps and RIR', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const load = Number(await boxNumber(box(page, 'Leg press', 1, 'load')));
+	await box(page, 'Leg press', 1, 'load').fill(String(load + 20));
+	await expect(hint(page, 'Leg press', 1)).toBeVisible();
+	const before = await hintText(page, 'Leg press', 1);
+	await box(page, 'Leg press', 2, 'reps').fill('1');
+	await box(page, 'Leg press', 2, 'RIR').fill('4');
+	expect(await hintText(page, 'Leg press', 1)).toBe(before);
+});
+
+for (const setType of ['MyorepMatch', 'MyorepMatchDown'] as const) {
+	test(`${setType}: main-set hint ignores mini-set inputs and Use resets every affected baseline`, async ({
+		page,
+		userData
+	}) => {
+		await setUpLastTime(userData.userId);
+		await prisma.exerciseTemplate.updateMany({
+			where: { name: 'Leg press', exerciseSplitDay: { exerciseSplit: { userId: userData.userId } } },
+			data: { setType }
+		});
+		await prisma.workoutExercise.updateMany({
+			where: { name: 'Leg press', workout: { userId: userData.userId } },
+			data: { setType }
+		});
+		await startTestDay(page);
+		const row = setType === 'MyorepMatch' ? 1 : 2;
+		const load = Number(await boxNumber(box(page, 'Leg press', row, 'load')));
+		await box(page, 'Leg press', row, 'load').fill(String(load + 10));
+		await expect(hint(page, 'Leg press', row)).toBeVisible();
+		const before = await hintText(page, 'Leg press', row);
+		await page.getByLabel('add-mini-set-to-set-2-of-Leg press').click();
+		await page.locator('[id="Leg press-set-2-mini-set-1-reps"]').fill('3');
+		await page.locator('[id="Leg press-set-2-mini-set-1-RIR"]').fill('4');
+		expect(await hintText(page, 'Leg press', row)).toBe(before);
+		await hint(page, 'Leg press', row).getByRole('button').click();
+		await expect(hint(page, 'Leg press', row)).toHaveCount(0);
+		const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+		const ex = saved.workoutExercises.find((x: { name: string }) => x.name === 'Leg press');
+		for (const set of setType === 'MyorepMatch' ? ex.sets : [ex.sets[row - 1]]) {
+			expect(set.hintBase.load).toBe(load + 10);
+			expect(set.hintBase.reps).toBe(set.reps);
+		}
+	});
+}
+
+test('Straight cross-set copy-down: typing set 1 reps never moves set 2 hint', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	// Keep a captured baseline but leave the live reps box empty, so copyDown owns it.
+	await page.evaluate(() => {
+		const saved = JSON.parse(localStorage.getItem('workoutRunes')!);
+		const second = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Barbell rows').sets[1];
+		delete second.reps;
+		delete second.suggested;
+		delete second.chosen;
+		localStorage.setItem('workoutRunes', JSON.stringify(saved));
+	});
+	await page.reload();
+	const load = Number(await boxNumber(box(page, 'Barbell rows', 2, 'load')));
+	await box(page, 'Barbell rows', 2, 'load').fill(String(load + 10));
+	await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+	const shown = await hintText(page, 'Barbell rows', 2);
+	const reps = box(page, 'Barbell rows', 1, 'reps');
+	await reps.fill('');
+	await reps.press('1');
+	await expectBox(box(page, 'Barbell rows', 2, 'reps'), '1');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+	await reps.press('0');
+	await expectBox(box(page, 'Barbell rows', 2, 'reps'), '10');
+	expect(await hintText(page, 'Barbell rows', 2)).toBe(shown);
+});
+
+for (const source of ['History', 'Previous'] as const) {
+	for (const field of source === 'History' ? (['RIR', 'load'] as const) : (['load'] as const)) {
+		test(`unit switch keeps baseline after ${source} and empty ${field}`, async ({ page, userData }) => {
+			await setUpLastTime(userData.userId);
+			await startTestDay(page);
+			if (source === 'History') {
+				await page.getByTestId('Barbell rows-menu-button').click();
+				await page.getByRole('menuitem', { name: 'History' }).click();
+				await page.getByLabel('Copy these sets').first().click();
+			} else await previous(page, 'Barbell rows', 2).click();
+			const before = await page.evaluate(() =>
+				JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+					(ex: { name: string }) => ex.name === 'Barbell rows'
+				)
+			);
+			const expected =
+				field === 'load'
+					? { ...before.sets[1], load: roundWeight(convertWeight(before.sets[1].hintBase.load, 'KG', 'LB')) }
+					: switchExerciseUnit(before, 'LB', 100).sets[1];
+			await box(page, 'Barbell rows', 2, field).fill('');
+			await page.getByTestId('Barbell rows-unit-toggle').click();
+			expect(await box(page, 'Barbell rows', 2, field).inputValue()).toBe('');
+			const state = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+			const set = state.workoutExercises.find((ex: { name: string }) => ex.name === 'Barbell rows').sets[1];
+			expect(set.hintBase).toBeDefined();
+			expect(set.hintBase).toEqual({ load: expected.load, reps: expected.reps, RIR: expected.RIR });
+			expect(set.hintBase.RIR).toBe(2);
+			await box(page, 'Barbell rows', 2, 'RIR').fill('2');
+			await box(page, 'Barbell rows', 2, 'load').fill(String(set.hintBase.load));
+			await expect(hint(page, 'Barbell rows', 2)).toHaveCount(0);
+			await box(page, 'Barbell rows', 2, 'load').fill(String(set.hintBase.load + 20));
+			const reps = Math.round(
+				solveBergerFormula({
+					variableToSolve: 'NewReps',
+					knownValues: {
+						oldSet: { ...set.hintBase, miniSets: [] },
+						newSet: { load: set.hintBase.load + 20, RIR: set.hintBase.RIR, miniSets: [] },
+						oldUserBodyweight: 220.46,
+						newUserBodyweight: 220.46,
+						bodyweightFraction: null,
+						overloadPercentage: 0
+					}
+				})
+			);
+			await expect(hint(page, 'Barbell rows', 2)).toContainText(`aim for about ${reps} reps`);
+			await page.reload();
+			await expect(page.getByTestId('Barbell rows-sets')).toBeVisible();
+			const restored = await page.evaluate(
+				() =>
+					JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+						(ex: { name: string }) => ex.name === 'Barbell rows'
+					).sets[1]
+			);
+			expect(restored.hintBase).toEqual(set.hintBase);
+			await box(page, 'Barbell rows', 2, 'load').fill(String(set.hintBase.load + 20));
+			await expect(hint(page, 'Barbell rows', 2)).toBeVisible();
+		});
+	}
+}
+
+test('unit switch complete, shared-load, no-baseline and skipped controls', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	await page.getByTestId('Leg press-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	await page.getByLabel('Copy these sets').first().click();
+	const before: WorkoutExerciseInProgress = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Leg press'
+		)
+	);
+	const expected = switchExerciseUnit(before, 'LB', 100);
+	await box(page, 'Leg press', 2, 'RIR').fill('');
+	await page.getByTestId('Leg press-unit-toggle').click();
+	await expectBox(box(page, 'Leg press', 2, 'RIR'), '');
+	const shared: WorkoutExerciseInProgress = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Leg press'
+		)
+	);
+	for (const [i, set] of shared.sets.entries())
+		expect(set.hintBase).toEqual({
+			load: expected.sets[i].load,
+			reps: expected.sets[i].reps,
+			RIR: expected.sets[i].RIR
+		});
+	const rows: WorkoutExerciseInProgress = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Barbell rows'
+		)
+	);
+	const complete = switchExerciseUnit(rows, 'LB', 100);
+	await page.getByTestId('Barbell rows-add-set').click();
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	const switched: WorkoutExerciseInProgress = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Barbell rows'
+		)
+	);
+	expect(switched.sets[0].hintBase).toEqual({
+		load: complete.sets[0].load,
+		reps: complete.sets[0].reps,
+		RIR: complete.sets[0].RIR
+	});
+	expect(switched.sets[3].hintBase).toBeUndefined();
+	await page.evaluate(() => {
+		const s = JSON.parse(localStorage.getItem('workoutRunes')!);
+		const ex = s.workoutExercises.find((x: { name: string }) => x.name === 'Barbell rows');
+		delete ex.sets[0].hintBase;
+		ex.sets[1].skipped = true;
+		localStorage.setItem('workoutRunes', JSON.stringify(s));
+	});
+	await page.reload();
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	const final: WorkoutExerciseInProgress = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Barbell rows'
+		)
+	);
+	expect(final.sets[0].hintBase).toBeUndefined();
+	expect(final.sets[1].hintBase).toBeUndefined();
+});
+
+test('shared weight-set baseline uses visible target, never a second snapped neighbour', async ({ page, userData }) => {
+	await setUpLastTime(userData.userId);
+	const weights = await prisma.weightSet.create({
+		data: {
+			userId: userData.userId,
+			name: 'LB steps',
+			unit: 'LB',
+			weights: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+		}
+	});
+	await prisma.exerciseTemplate.updateMany({
+		where: { name: 'Barbell rows', exerciseSplitDay: { exerciseSplit: { userId: userData.userId } } },
+		data: { weightSetId: weights.id, weightUnit: 'KG', repRangeStart: 8, repRangeEnd: 12 }
+	});
+	const ex = await prisma.workoutExercise.findFirstOrThrow({
+		where: { name: 'Barbell rows', workout: { userId: userData.userId } }
+	});
+	await prisma.workoutExerciseSet.updateMany({
+		where: { workoutExerciseId: ex.id },
+		data: { load: 10, reps: 10, RIR: 2, skipped: false }
+	});
+	await prisma.workoutExerciseSet.updateMany({ where: { workoutExerciseId: ex.id, setIndex: 0 }, data: { reps: 20 } });
+	await startTestDay(page);
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	await page.getByLabel('Copy these sets').first().click();
+	await box(page, 'Barbell rows', 1, 'RIR').fill('');
+	const original = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Barbell rows'
+		)
+	);
+	const visible = switchExerciseUnit(original, 'LB', 100, [weights]);
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	const actual = await page.evaluate(() =>
+		JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+			(x: { name: string }) => x.name === 'Barbell rows'
+		)
+	);
+	for (const [i, set] of actual.sets.entries()) {
+		const { hintBase: ignored, ...live } = set;
+		const { hintBase: ignoredExpected, ...expected } = visible.sets[i];
+		expect(live).toEqual(expected);
+		expect(set.hintBase.load).toBe(set.load);
+		await expect(hint(page, 'Barbell rows', i + 1)).toHaveCount(0);
+	}
+	expect(actual.sets[0].hintBase).toEqual({ load: 20, reps: 24, RIR: 2 });
+	expect(actual.sets[1].hintBase).toEqual({ load: 20, reps: 14, RIR: 2 });
+	await expectBox(box(page, 'Barbell rows', 1, 'RIR'), '');
+});
+for (const setType of ['Myorep', 'MyorepMatch'] as const) {
+	test(`${setType} empty later RIR baseline matches visible shared load`, async ({ page, userData }) => {
+		await setUpLastTime(userData.userId);
+		await prisma.exerciseTemplate.updateMany({
+			where: { name: 'Leg press', exerciseSplitDay: { exerciseSplit: { userId: userData.userId } } },
+			data: { setType }
+		});
+		await prisma.workoutExercise.updateMany({
+			where: { name: 'Leg press', workout: { userId: userData.userId } },
+			data: { setType }
+		});
+		await startTestDay(page);
+		await page.getByTestId('Leg press-menu-button').click();
+		await page.getByRole('menuitem', { name: 'History' }).click();
+		await page.getByLabel('Copy these sets').first().click();
+		await box(page, 'Leg press', 2, 'RIR').fill('');
+		await page.getByTestId('Leg press-unit-toggle').click();
+		const ex = await page.evaluate(() =>
+			JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+				(x: { name: string }) => x.name === 'Leg press'
+			)
+		);
+		for (const set of ex.sets)
+			if (set.hintBase && typeof set.load === 'number') expect(set.hintBase.load).toBe(set.load);
+		await expectBox(box(page, 'Leg press', 2, 'RIR'), '');
+	});
+}

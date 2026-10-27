@@ -2,7 +2,16 @@ import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerci
 import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Mesocycle, type Prisma } from '@prisma/client';
-import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
+import {
+	convertWeight,
+	defaultWeightStep,
+	fromKg,
+	isLevelUnit,
+	roundWeight,
+	snapToStep,
+	toKg,
+	type MassUnit
+} from './weightUnits';
 import type { WeightUnit } from './prismaEnums';
 import {
 	availableWeightsFor,
@@ -192,7 +201,38 @@ type SetInProgress = {
 	 * phone: not saved
 	 */
 	suggested?: Partial<Record<SetField, number>>;
+	/**
+	 * What the reps hint is worked out from: the weight, reps and RIR the set started with (the
+	 * suggestion, or the last time Use or Previous filled it). Frozen, so typing reps or RIR never moves
+	 * the hint. A set without one (added, or from a workout started before this) shows no hint. Only on
+	 * the phone: kept with the workout in progress, not saved
+	 */
+	hintBase?: HintBase;
 };
+
+export type HintBase = { load: number; reps: number; RIR: number };
+
+/** A set's numbers as the hint's starting point; none unless all three are numbers */
+export function hintBaseOf(set: {
+	load?: number;
+	reps?: number;
+	RIR?: number;
+	skipped?: boolean;
+}): HintBase | undefined {
+	const { load, reps, RIR } = set;
+	if (set.skipped || typeof load !== 'number' || typeof reps !== 'number' || typeof RIR !== 'number') return undefined;
+	return { load, reps, RIR };
+}
+
+/** The sets with the hint's starting point captured from their numbers, once the suggestions are final */
+export function withHintBase<
+	T extends { load?: number; reps?: number; RIR?: number; skipped?: boolean; hintBase?: HintBase }
+>(sets: T[]): T[] {
+	return sets.map((set) => {
+		const hintBase = hintBaseOf(set);
+		return hintBase ? { ...set, hintBase } : set;
+	});
+}
 
 export type PreviousPerformance = {
 	exercise: WorkoutExercise;
@@ -694,6 +734,34 @@ function moveSetToLoad(
 	// The formula can't tell (e.g. from 0 kg): the set stays where it was
 	if (!Number.isFinite(newReps)) return set;
 	return { ...set, load: newLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
+}
+
+/** A unit-switch baseline at the visible target, without choosing a second snapped weight. */
+export function hintBaseAfterUnitSwitch(
+	original: WorkoutExerciseInProgress,
+	index: number,
+	visible: WorkoutExerciseInProgress['sets'][number],
+	to: MassUnit,
+	userBodyweight: number
+): HintBase | undefined {
+	const set = original.sets[index];
+	const base = set.hintBase;
+	if (!base || set.skipped) return undefined;
+	if ([set.load, set.reps, set.RIR].every((value) => typeof value === 'number')) return hintBaseOf(visible);
+	const from = original.weightUnit ?? 'KG';
+	if (typeof visible.load !== 'number') {
+		return {
+			load: roundWeight(convertWeight(base.load, from, to)),
+			reps: set.reps ?? base.reps,
+			RIR: set.RIR ?? base.RIR
+		};
+	}
+	const effective = { ...set, load: set.load ?? base.load, reps: set.reps ?? base.reps, RIR: set.RIR ?? base.RIR };
+	const inKg = convertExerciseLoads({ ...original, sets: [effective] }, 'toKg');
+	const targetKg = toKg(visible.load, to);
+	const moved = set.completed ? inKg.sets[0] : moveSetToLoad(inKg, inKg.sets[0], targetKg, userBodyweight, (kg) => kg);
+	// The finite-value guard may keep the original reps; the target still is exactly the visible load.
+	return { load: visible.load, reps: moved.reps!, RIR: moved.RIR! };
 }
 
 /**

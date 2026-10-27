@@ -13,7 +13,7 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { TRPCClientError } from '@trpc/client';
-	import { browserTimeZone } from '$lib/utils/workoutUtils';
+	import { browserTimeZone, withHintBase } from '$lib/utils/workoutUtils';
 	import { toast } from 'svelte-sonner';
 	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
@@ -107,7 +107,10 @@
 			return;
 		if (!needsLoad()) return;
 		if (serverData !== null) {
-			workoutRunes.workoutExercises = serverData.todaysWorkoutExercises;
+			workoutRunes.workoutExercises = serverData.todaysWorkoutExercises.map((exercise) => ({
+				...exercise,
+				sets: withHintBase(exercise.sets)
+			}));
 			workoutRunes.previousWorkoutData = serverData.previousWorkoutData ?? null;
 			if (serverData.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
 			workoutRunes.suggestionsFailed = false;

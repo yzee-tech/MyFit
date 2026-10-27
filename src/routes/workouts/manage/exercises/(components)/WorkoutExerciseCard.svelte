@@ -9,7 +9,8 @@
 		allSetsAtMaxReps,
 		getNextWeightHint,
 		switchExerciseUnit,
-		type WorkoutExerciseInProgress
+		type WorkoutExerciseInProgress,
+		hintBaseAfterUnitSwitch
 	} from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
@@ -36,7 +37,6 @@
 
 	let { readOnly, idx, reordering = false, comparing = false, exercise = $bindable() }: PropsType = $props();
 
-	let originalSetLoads = $state(exercise.sets.map((set) => set.load));
 	let isContextMenuOpen = $state(false);
 
 	// Reps only: suggestions add reps, never weight, up to an optional cap
@@ -72,15 +72,17 @@
 	);
 
 	function toggleUnit() {
+		const hadHintBase = exercise.sets.map((set) => set.hintBase !== undefined);
+		const snapshot = $state.snapshot(exercise);
 		const to = (exercise.weightUnit ?? 'KG') === 'KG' ? 'LB' : 'KG';
-		exercise = switchExerciseUnit(
-			$state.snapshot(exercise),
-			to,
-			workoutRunes.workoutData?.userBodyweight ?? 0,
-			weightSets,
-			isRepsOnly
-		);
-		originalSetLoads = exercise.sets.map((set) => set.load);
+		const switchUnit = (source: WorkoutExerciseInProgress) =>
+			switchExerciseUnit(source, to, workoutRunes.workoutData?.userBodyweight ?? 0, weightSets, isRepsOnly);
+		// Keep the visible conversion unchanged, including empty boxes.
+		exercise = switchUnit(snapshot);
+		exercise.sets.forEach((set, i) => {
+			if (hadHintBase[i])
+				set.hintBase = hintBaseAfterUnitSwitch(snapshot, i, set, to, workoutRunes.workoutData?.userBodyweight ?? 0);
+		});
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -256,7 +258,7 @@
 		{#if comparing}
 			<CompareComponent {exercise} />
 		{:else}
-			<SetsComponent repsOnly={isRepsOnly} bind:originalSetLoads bind:exercise />
+			<SetsComponent repsOnly={isRepsOnly} bind:exercise />
 		{/if}
 	{/if}
 </div>
