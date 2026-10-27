@@ -1,3 +1,4 @@
+import { browserTimeZone } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -27,6 +28,8 @@ function createWorkoutRunes() {
 	let workoutExercises: WorkoutExerciseInProgress[] | null = $state(null);
 	let editingWorkoutId: string | null = $state(null);
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
+	/** A failed routine load can retry its empty placeholder; null history alone is not a failure. */
+	let suggestionsFailed = $state(false);
 	/** This workout's reps-only exercises by name, with their rep cap (null for none) */
 	let repsOnly: Record<string, number | null> = $state({});
 	/** When a set was last ticked: a new workout ends there, not when it's saved */
@@ -60,6 +63,7 @@ function createWorkoutRunes() {
 					editingWorkoutId = null,
 					editSnapshot = null,
 					previousWorkoutData,
+					suggestionsFailed = false,
 					repsOnly = {},
 					lastActivityAt = null
 				} = saved);
@@ -85,6 +89,7 @@ function createWorkoutRunes() {
 				editingWorkoutId,
 				editSnapshot,
 				previousWorkoutData,
+				suggestionsFailed,
 				repsOnly,
 				lastActivityAt
 			})
@@ -97,6 +102,7 @@ function createWorkoutRunes() {
 		editingWorkoutId = null;
 		editSnapshot = null;
 		previousWorkoutData = null;
+		suggestionsFailed = false;
 		repsOnly = {};
 		lastActivityAt = null;
 		saveStoresToLocalStorage();
@@ -169,6 +175,7 @@ function createWorkoutRunes() {
 			weightUnit,
 			weightSetId
 		});
+		suggestionsFailed = false;
 		saveStoresToLocalStorage();
 		suggestSetsFromLastTime(exercise.name);
 		return true;
@@ -202,7 +209,8 @@ function createWorkoutRunes() {
 				changeAmount: exercise.changeAmount,
 				weightUnit: exercise.weightUnit ?? 'KG',
 				weightSetId: exercise.weightSetId,
-				userBodyweight
+				userBodyweight,
+				timeZone: browserTimeZone()
 			});
 			if (!suggested) return;
 			setRepsOnly(exerciseName, suggested);
@@ -450,6 +458,13 @@ function createWorkoutRunes() {
 			saveStoresToLocalStorage();
 		},
 		setRepsOnly,
+		get suggestionsFailed() {
+			return suggestionsFailed;
+		},
+		set suggestionsFailed(value: boolean) {
+			suggestionsFailed = value;
+			saveStoresToLocalStorage();
+		},
 		get previousWorkoutData() {
 			return previousWorkoutData;
 		},

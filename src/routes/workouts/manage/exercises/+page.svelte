@@ -10,6 +10,10 @@
 	import { arraySum } from '$lib/utils.js';
 	import { formatWorkoutClock } from '$lib/utils/workoutLength';
 	import { onMount } from 'svelte';
+	import { trpc } from '$lib/trpc/client';
+	import type { RouterOutputs } from '$lib/trpc/router';
+	import { TRPCClientError } from '@trpc/client';
+	import { browserTimeZone } from '$lib/utils/workoutUtils';
 	import { toast } from 'svelte-sonner';
 	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
@@ -70,17 +74,61 @@
 			: null
 	);
 
-	onMount(async () => {
+	onMount(() => {
 		if (workoutRunes.workoutData === null) goto('./start');
-		const serverData = await data.serverData;
-		if (workoutRunes.workoutExercises === null) {
-			workoutRunes.workoutExercises = serverData?.todaysWorkoutExercises ?? [];
-		}
-		if (workoutRunes.previousWorkoutData === null) {
-			workoutRunes.previousWorkoutData = serverData?.previousWorkoutData ?? null;
-		}
-		if (serverData?.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
+		void loadSuggestions();
 	});
+
+	async function loadSuggestions() {
+		const request = data.suggestionsRequest;
+		// Edits, blank workouts and keepCurrent carry no suggestion request.
+		if (request === null) {
+			if (workoutRunes.workoutExercises === null) workoutRunes.workoutExercises = [];
+			return;
+		}
+		const needsLoad = () =>
+			workoutRunes.workoutExercises === null ||
+			(workoutRunes.suggestionsFailed && workoutRunes.workoutExercises.length === 0);
+		if (!needsLoad()) return;
+		const startedAt = workoutRunes.workoutData?.startedAt;
+		const startedMs = startedAt === undefined ? NaN : new Date(startedAt).getTime();
+		let serverData: RouterOutputs['workouts']['getWorkoutExercisesWithPreviousData'] | null = null;
+		let failure: unknown;
+		try {
+			serverData = await trpc().workouts.getWorkoutExercisesWithPreviousData.query({
+				...request,
+				timeZone: browserTimeZone()
+			});
+		} catch (error) {
+			failure = error;
+		}
+		// A discarded/replaced workout, or a list filled while this was pending, owns its own state.
+		if (workoutRunes.workoutData === null || new Date(workoutRunes.workoutData.startedAt).getTime() !== startedMs)
+			return;
+		if (!needsLoad()) return;
+		if (serverData !== null) {
+			workoutRunes.workoutExercises = serverData.todaysWorkoutExercises;
+			workoutRunes.previousWorkoutData = serverData.previousWorkoutData ?? null;
+			if (serverData.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
+			workoutRunes.suggestionsFailed = false;
+		} else {
+			toast.error(
+				failure instanceof TRPCClientError ? failure.message : "Couldn't get your exercises, check your connection",
+				{
+					action: {
+						label: 'Retry',
+						onClick: () => {
+							void loadSuggestions();
+						}
+					}
+				}
+			);
+			if (workoutRunes.workoutExercises === null) {
+				workoutRunes.workoutExercises = [];
+				workoutRunes.suggestionsFailed = true;
+			}
+		}
+	}
 
 	function getFormattedDate(date: string | Date) {
 		if (typeof date === 'string') date = new Date(date);

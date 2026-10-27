@@ -350,12 +350,57 @@ export function formatWeekEffort(weeklyRIR: number[], week: number): string {
  */
 export type ProgressionMode = 'normal' | 'deload' | 'welcomeBack';
 
-const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const DAYS_IN_BLOCK_WEEK = 7;
 
-/** 1-based calendar week of a block, counted from its start date */
-export function getBlockWeek(startDate: Date | string, now: Date = new Date()): number {
-	const elapsed = now.getTime() - new Date(startDate).getTime();
-	return Math.max(1, Math.floor(elapsed / WEEK_IN_MS) + 1);
+/** The longest IANA timezone name there is is well under this: anything longer is not one */
+const MAX_TIME_ZONE_LENGTH = 64;
+
+/** The calendar day an instant falls on in a timezone, as a number of days (Date.UTC of its local date) */
+function localDayNumber(date: Date, timeZone: string): number {
+	const parts = new Intl.DateTimeFormat('en-US', {
+		timeZone,
+		year: 'numeric',
+		month: 'numeric',
+		day: 'numeric'
+	}).formatToParts(date);
+	const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+	return Math.floor(Date.UTC(part('year'), part('month') - 1, part('day')) / 86400000);
+}
+
+/**
+ * 1-based week of a block, counted in calendar days of the timezone (the phone's): the 8th day
+ * since the start day is in Week 2, whatever time the block was started at. A missing, empty, invalid
+ * or over-long timezone counts the days in UTC. It never throws
+ */
+export function getBlockWeek(startDate: Date | string, now: Date = new Date(), timeZone?: string | null): number {
+	const start = new Date(startDate);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(now.getTime())) return 1;
+	const days = (zone: string) => localDayNumber(now, zone) - localDayNumber(start, zone);
+	let elapsedDays: number;
+	try {
+		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
+		elapsedDays = days(timeZone);
+	} catch {
+		elapsedDays = days('UTC');
+	}
+	return Math.max(1, Math.floor(elapsedDays / DAYS_IN_BLOCK_WEEK) + 1);
+}
+
+/**
+ * The phone's timezone, read from the browser on every call (never kept), so travelling is followed.
+ * Undefined when the browser can't say: the server then counts UTC days
+ */
+export function browserTimeZone(): string | undefined {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone;
+	} catch {
+		return undefined;
+	}
+}
+
+/** The week in the phone's timezone */
+export function getBlockWeekHere(startDate: Date | string, now: Date = new Date()): number {
+	return getBlockWeek(startDate, now, browserTimeZone());
 }
 
 function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {

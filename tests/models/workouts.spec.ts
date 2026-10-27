@@ -2443,6 +2443,8 @@ test('an “ask each time” routine: no weight set to pick, and the gym picked 
 	await page.getByRole('option', { name: 'Gym DBs' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	// The suggestions come once the page is up
+	await expect.poll(async () => (await savedWorkoutState(page))?.workoutExercises?.length ?? 0).toBeGreaterThan(0);
 	await expect
 		.poll(
 			async () =>
