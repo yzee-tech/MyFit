@@ -220,7 +220,7 @@
 						? { from: levelsFrom, to: levelsTo, step: halfLevels ? 0.5 : 1 }
 						: null,
 				machine: weighted && !repsOnly && hasMachineWeights ? { weights: machineWeights, unit: machineUnit } : null,
-				assisted: !(weighted && repsOnly) && isMachine && assisted,
+				assisted: weighted && !repsOnly && isMachine && assisted,
 				measure,
 				distanceUnit: measure === 'DistanceTime' ? distanceUnit : null
 			});
@@ -290,7 +290,10 @@
 
 	<div class="grid gap-1.5">
 		<Select.Root
-			onSelectedChange={(v) => (targetMuscleGroup = v?.value)}
+			onSelectedChange={(v) => {
+				targetMuscleGroup = v?.value;
+				if (targetMuscleGroup === 'Cardio' && measure === 'Reps' && !measureLocked) measure = 'Time';
+			}}
 			required
 			selected={targetMuscleGroup
 				? { value: targetMuscleGroup, label: convertCamelCaseToNormal(targetMuscleGroup) }
@@ -301,7 +304,7 @@
 				<Select.Value placeholder="Pick one" />
 			</Select.Trigger>
 			<Select.Content class="h-48 overflow-y-auto">
-				{#each Object.values(MuscleGroups) as muscleGroup}
+				{#each Object.values(MuscleGroups).filter((group) => group !== 'Cardio' || !measureLocked || isCardio) as muscleGroup}
 					<Select.Item label={convertCamelCaseToNormal(muscleGroup)} value={muscleGroup} />
 				{/each}
 			</Select.Content>
@@ -345,7 +348,11 @@
 				value={measure}
 				variant="outline"
 			>
-				<ToggleGroup.Item aria-label="Measured in reps and weight" value="Reps">Reps</ToggleGroup.Item>
+				<ToggleGroup.Item
+					aria-label="Measured in reps and weight"
+					disabled={targetMuscleGroup === 'Cardio'}
+					value="Reps">Reps</ToggleGroup.Item
+				>
 				<ToggleGroup.Item aria-label="Measured in time" value="Time">Time</ToggleGroup.Item>
 				<ToggleGroup.Item aria-label="Measured in distance and time" value="DistanceTime">Distance</ToggleGroup.Item>
 			</ToggleGroup.Root>

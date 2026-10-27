@@ -94,7 +94,8 @@ test('New exercise: how it’s measured, with a distance unit for distances and 
 	await page.getByLabel('Name', { exact: true }).fill('Bike');
 	await page.getByRole('combobox', { name: 'Muscle group' }).click();
 	await page.getByRole('option', { name: 'Cardio' }).click();
-	await page.getByRole('radio', { name: 'Measured in time' }).click();
+	await expect(page.getByRole('radio', { name: 'Measured in time' })).toHaveAttribute('data-state', 'on');
+	await expect(page.getByRole('radio', { name: 'Measured in reps and weight' })).toBeDisabled();
 	await expect(page.getByRole('radio', { name: 'Distance in km' })).toHaveCount(0);
 	await page.getByLabel('Machine', { exact: true }).click();
 	// A cardio machine shows levels: there's no weights/levels choice to make
@@ -439,3 +440,99 @@ for (const setType of ['Drop', 'Myorep', 'MyorepMatch', 'MyorepMatchDown']) {
 			expect(set).toMatchObject({ timeSeconds: 60, distanceMeters: 200, reps: 0, load: 0, RIR: 0, miniSets: [] });
 	});
 }
+
+test('changing an assisted machine to time clears assistance on save', async ({ page, userData }) => {
+	await createExercises(userData.userId, [
+		{ name: 'Legacy machine', targetMuscleGroup: 'Lats', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	const ex = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Legacy machine' } }
+	});
+	await prisma.exercise.update({ where: { id: ex.id }, data: { assisted: true } });
+	await page.goto(`/exercises/${ex.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('radio', { name: 'Measured in time' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-measure')).toHaveText('Time');
+	expect(await prisma.exercise.findUniqueOrThrow({ where: { id: ex.id } })).toMatchObject({
+		measure: 'Time',
+		assisted: false
+	});
+});
+test('a cardio routine with a legacy 1-1 range can be updated despite hidden rep boxes', async ({ page, userData }) => {
+	await createExercises(userData.userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	await page.evaluate(() => {
+		const state = JSON.parse(localStorage.getItem('workoutRunes')!);
+		state.workoutExercises[0].repRangeStart = 1;
+		state.workoutExercises[0].repRangeEnd = 1;
+		localStorage.setItem('workoutRunes', JSON.stringify(state));
+	});
+	await page.reload();
+	await editWorkoutExercise(page, 'Run');
+	await expect(page.getByLabel('Rep range end')).toBeHidden();
+	await expect(page.getByLabel('Rep range end')).not.toHaveAttribute('min');
+	await page.getByLabel('Intervals').fill('2');
+	await page.getByRole('button', { name: 'Update', exact: true }).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByTestId('Run-set-2-action')).toBeVisible();
+});
+
+test('a cardio-only block has no muscle-volume cards or muscle chart', async ({ page, userData }) => {
+	const ex = await prisma.exercise.create({
+		data: {
+			userId: userData.userId,
+			name: 'Run',
+			targetMuscleGroup: 'Cardio',
+			measure: 'DistanceTime',
+			distanceUnit: 'KM'
+		}
+	});
+	const block = await prisma.mesocycle.create({
+		data: {
+			userId: userData.userId,
+			name: 'Cardio only',
+			weeklyRIR: [2, 1, -1],
+			startOverloadPercentage: 1.25,
+			lastSetToFailure: false,
+			forceRIRMatching: false,
+			startDate: new Date()
+		}
+	});
+	await prisma.workout.create({
+		data: {
+			userId: userData.userId,
+			userBodyweight: 80,
+			startedAt: new Date(),
+			endedAt: new Date(),
+			workoutOfMesocycle: { create: { mesocycleId: block.id } },
+			workoutExercises: {
+				create: {
+					name: 'Run',
+					targetMuscleGroup: 'Cardio',
+					exerciseId: ex.id,
+					exerciseIndex: 0,
+					setType: 'V2',
+					repRangeStart: 1,
+					repRangeEnd: 1,
+					sets: {
+						create: { setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false, timeSeconds: 600, distanceMeters: 2000 }
+					}
+				}
+			}
+		}
+	});
+	await page.setViewportSize({ width: 390, height: 1000 });
+	await page.goto(`/mesocycles/${block.id}`);
+	await page.getByRole('button', { name: 'Stats', exact: true }).click();
+	await expect(page.getByText('Completion', { exact: true })).toBeVisible();
+	await expect(page.getByText('Most sets', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('Best muscle', { exact: true })).toHaveCount(0);
+	await expect(page.getByTestId('error-page')).toHaveCount(0);
+	await page.getByRole('tab', { name: 'Routines', exact: true }).click();
+	await expect(page.getByText('No sets yet', { exact: true })).toBeVisible();
+});

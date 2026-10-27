@@ -431,3 +431,32 @@ test('stats: cardio intervals count as sets done, but not toward any muscle or a
 	expect(stats.setsByMuscle).toEqual({ Lats: 2, Abs: 1 });
 	expect(stats.setsByArea).toEqual({ Back: 2, Chest: 0, Core: 1, Shoulders: 0, Arms: 0, Legs: 0 });
 });
+
+test('mesocycle muscle totals exclude Cardio but preserve timed exercises assigned to a muscle', async () => {
+	const { getSetsPerformedPerMuscleGroup, generatePerformanceChangesPerMuscleGroup } = await import(
+		'../../src/lib/utils/mesocycleUtils'
+	);
+	const strength = performance('Rows', [{}]).exercise;
+	strength.targetMuscleGroup = 'Lats';
+	const timed = performance('Plank', [{ timeSeconds: 60 }]).exercise;
+	timed.targetMuscleGroup = 'Abs';
+	const cardio = performance('Run', [{ timeSeconds: 600, distanceMeters: 2000 }]).exercise;
+	const data = [
+		{
+			workoutId: 'past-workout',
+			workout: { userBodyweight: 80, routineName: 'Mixed', workoutExercises: [strength, timed, cardio] }
+		}
+	] as Parameters<typeof getSetsPerformedPerMuscleGroup>[0];
+	expect(getSetsPerformedPerMuscleGroup(data)).toEqual([
+		{ muscleGroup: 'Lats', totalSets: 1 },
+		{ muscleGroup: 'Abs', totalSets: 1 }
+	]);
+	expect(
+		generatePerformanceChangesPerMuscleGroup(data)
+			.map((row) => row.muscleGroup)
+			.sort()
+	).toEqual(['Abs', 'Lats']);
+	const cardioOnly = [{ ...data[0], workout: { ...data[0].workout, workoutExercises: [cardio] } }];
+	expect(getSetsPerformedPerMuscleGroup(cardioOnly)).toEqual([]);
+	expect(generatePerformanceChangesPerMuscleGroup(cardioOnly)).toEqual([]);
+});

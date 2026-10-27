@@ -15,7 +15,10 @@
 	let routines = $derived(mesocycle.routines ?? []);
 	let exercises = $derived(
 		routines.flatMap((routine) =>
-			routine.exercises.map((exercise) => ({ ...exercise, sets: routineSetCount(exercise.sets) }))
+			routine.exercises.map((exercise) => ({
+				...exercise,
+				sets: routineSetCount(exercise.sets)
+			}))
 		)
 	);
 
@@ -34,7 +37,9 @@
 					{
 						label: 'Sets',
 						data: routines.map((routine) =>
-							routine.exercises.reduce((total, exercise) => total + routineSetCount(exercise.sets), 0)
+							routine.exercises
+								.filter((ex) => ex.targetMuscleGroup !== 'Cardio')
+								.reduce((total, exercise) => total + routineSetCount(exercise.sets), 0)
 						),
 						backgroundColor: `hsl(${palette.primary})`,
 						borderRadius: 4

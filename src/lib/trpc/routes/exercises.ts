@@ -390,6 +390,9 @@ export const exercises = t.router({
 		await assertNameFree(ctx.userId, input.name);
 		const machine = machineSettings(input, { machineWeights: [], machineUnit: null, assisted: false });
 		const measure = input.measure ?? 'Reps';
+		if (input.targetMuscleGroup === 'Cardio' && measure === 'Reps')
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cardio requires time or distance and time' });
+		if (measure !== 'Reps') machine.assisted = false;
 		if (measure === 'DistanceTime' && input.distanceUnit === null) {
 			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Pick the distance unit' });
 		}
@@ -405,6 +408,9 @@ export const exercises = t.router({
 			// The note, reps-only, machine and measure settings live on the exercise alone; the rest is copied everywhere
 			const machine = machineSettings(input.details, exercise);
 			const measured = await measureSettings(input.details, exercise);
+			if (input.details.targetMuscleGroup === 'Cardio' && measured.measure === 'Reps')
+				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cardio requires time or distance and time' });
+			if (measured.measure !== 'Reps') machine.assisted = false;
 			const {
 				note,
 				repsOnly,

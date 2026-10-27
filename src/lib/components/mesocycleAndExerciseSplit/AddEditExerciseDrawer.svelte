@@ -552,7 +552,7 @@
 				</Label>
 				<Input
 					id="exercise-rep-range-end"
-					min={(currentExercise.repRangeStart ?? 0) + 1}
+					min={isCardio ? undefined : (currentExercise.repRangeStart ?? 0) + 1}
 					placeholder="Type here"
 					required={!isCardio}
 					type="number"

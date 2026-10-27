@@ -1,7 +1,7 @@
 import { prisma } from '$lib/prisma';
 import type { WeightUnit } from '@prisma/client';
 import { type WeightSetLike } from '$lib/utils/weightSets';
-import { userWeightSets } from '$lib/server/weightSets';
+import { userExerciseResources } from '$lib/server/weightSets';
 import type { CardioExercises } from '$lib/utils/measure';
 
 export const load = async ({ locals, depends }) => {
@@ -16,19 +16,13 @@ export const load = async ({ locals, depends }) => {
 	// machine's levels, known wherever an exercise is shown by name)
 	let cardioExercises: CardioExercises = {};
 	if (session?.user?.id) {
-		const [userSettings, allWeightSets, cardio] = await Promise.all([
+		const [userSettings, resources] = await Promise.all([
 			prisma.userSettings.findUnique({ where: { userId: session.user.id }, select: { homeWeightUnit: true } }),
-			userWeightSets(session.user.id),
-			prisma.exercise.findMany({
-				where: { userId: session.user.id, measure: { not: 'Reps' } },
-				select: { name: true, measure: true, distanceUnit: true }
-			})
+			userExerciseResources(session.user.id)
 		]);
 		homeWeightUnit = userSettings?.homeWeightUnit ?? 'KG';
-		weightSets = allWeightSets;
-		cardioExercises = Object.fromEntries(
-			cardio.map((exercise) => [exercise.name, { measure: exercise.measure, distanceUnit: exercise.distanceUnit }])
-		);
+		weightSets = resources.weightSets;
+		cardioExercises = resources.cardioExercises;
 	}
 	return { session, homeWeightUnit, weightSets, cardioExercises };
 };

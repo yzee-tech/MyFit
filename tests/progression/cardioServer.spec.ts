@@ -511,3 +511,46 @@ test('create and edit both reject cardio mini-sets while accepting plain interva
 	});
 	expect(saved.sets[0]).toMatchObject({ timeSeconds: 60, distanceMeters: 200, miniSets: [] });
 });
+
+test('Cardio cannot use Reps on create or edit and timed machines cannot retain assistance', async () => {
+	const { caller, runExercise } = await seedPerson();
+	const details = {
+		name: 'Invalid cardio',
+		targetMuscleGroup: 'Cardio' as const,
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		note: null,
+		measure: 'Reps' as const
+	};
+	await expect(caller.exercises.create(details)).rejects.toThrow(/Cardio requires/);
+	await expect(
+		caller.exercises.update({
+			id: runExercise.id,
+			details: {
+				...details,
+				name: 'Run',
+				measure: 'DistanceTime',
+				distanceUnit: 'KM',
+				assisted: true,
+				levels: { from: 1, to: 20, step: 1 }
+			}
+		})
+	).resolves.toBeDefined();
+	expect(await prisma.exercise.findUniqueOrThrow({ where: { id: runExercise.id } })).toMatchObject({ assisted: false });
+	const reps = await caller.exercises.create({ ...details, name: 'Rows two', targetMuscleGroup: 'Lats' });
+	await expect(caller.exercises.update({ id: reps.id, details: { ...details, name: reps.name } })).rejects.toThrow(
+		/Cardio requires/
+	);
+});
+
+test('layout resources share one exercise read for cardio metadata and machine suggestions', async () => {
+	const { runExercise } = await seedPerson();
+	const { userExerciseResources, userWeightSets } = await import('../../src/lib/server/weightSets');
+	const resources = await userExerciseResources(runExercise.userId);
+	expect(resources.cardioExercises).toEqual({
+		Run: { measure: 'DistanceTime', distanceUnit: 'KM' },
+		Bike: { measure: 'Time', distanceUnit: null }
+	});
+	expect(resources.weightSets).toEqual(await userWeightSets(runExercise.userId));
+	expect(resources.weightSets.some((set) => set.unit === 'LEVEL')).toBe(true);
+});
