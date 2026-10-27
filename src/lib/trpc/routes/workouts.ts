@@ -372,8 +372,8 @@ export const workouts = t.router({
 		return { firstWorkoutDate, lastWorkoutDate, allMesocycles };
 	}),
 
-	findById: t.procedure.input(z.string().cuid2()).query(({ input, ctx }) =>
-		prisma.workout.findUnique({
+	findById: t.procedure.input(z.string().cuid2()).query(async ({ input, ctx }) => {
+		const workout = await prisma.workout.findUnique({
 			where: { id: input, userId: ctx.userId },
 			include: {
 				workoutOfMesocycle: { include: { mesocycle: true } },
@@ -384,8 +384,18 @@ export const workouts = t.router({
 					}
 				}
 			}
-		})
-	),
+		});
+		if (!workout) return null;
+		// Whether My routines still has the routine this workout was done from (it may be renamed or deleted)
+		const routineExists =
+			workout.routineName === null
+				? false
+				: (await prisma.exerciseSplitDay.findFirst({
+						where: { name: workout.routineName, exerciseSplit: { userId: ctx.userId } },
+						select: { id: true }
+					})) !== null;
+		return { ...workout, routineExists };
+	}),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
 		await prisma.workout.delete({ where: { id: input, userId: ctx.userId } });

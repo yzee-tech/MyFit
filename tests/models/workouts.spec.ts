@@ -256,7 +256,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100 kg');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Week 1 Pull A User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Load (kg) Reps RIR 1 0 12 3 2 0 11 3 3 0 10 0'
@@ -416,7 +416,7 @@ test('edit a workout', async ({ page }) => {
 
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Mesocycle MyMeso Pull A User bodyweight 95 kg Targeted muscle groups Lats'
+		'Mesocycle MyMeso Week 1 Pull A User bodyweight 95 kg Targeted muscle groups Lats'
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
