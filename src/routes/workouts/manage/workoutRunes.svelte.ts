@@ -196,6 +196,8 @@ function createWorkoutRunes() {
 		const exercise = workoutExercises?.find((ex) => ex.name === exerciseName);
 		const userBodyweight = workoutData?.userBodyweight;
 		if (!exercise || typeof userBodyweight !== 'number' || exercise.sets.length === 0) return;
+		// The answer belongs to this workout: if it was discarded or replaced meanwhile, it is dropped
+		const startedMs = new Date(workoutData?.startedAt ?? NaN).getTime();
 		try {
 			const suggested = await trpc().workouts.suggestSets.query({
 				exerciseName,
@@ -213,6 +215,7 @@ function createWorkoutRunes() {
 				timeZone: browserTimeZone()
 			});
 			if (!suggested) return;
+			if (workoutData === null || new Date(workoutData.startedAt).getTime() !== startedMs) return;
 			setRepsOnly(exerciseName, suggested);
 			if (suggested.previous) addPreviousExercise(suggested.previous.exercise, suggested.previous.userBodyweight);
 			// Only if it's still there and nothing has been entered yet

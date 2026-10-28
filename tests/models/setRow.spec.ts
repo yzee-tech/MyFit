@@ -1036,3 +1036,48 @@ test('all three typed over, then a unit switch: weight comes back converted, rep
 	await expectBox(box(page, 'Barbell rows', 1, 'reps'), String(afterSwitch.hintBase.reps));
 	await expectBox(box(page, 'Barbell rows', 1, 'RIR'), suggestedRIR);
 });
+
+test('a suggestions answer that arrives after the workout was discarded cannot write into the next workout', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	let requested!: () => void;
+	const seen = new Promise<void>((resolve) => (requested = resolve));
+	let first = true;
+	await page.route(/suggestSets/, async (route) => {
+		if (!first) return route.continue();
+		first = false;
+		const response = await route.fetch();
+		requested();
+		await held;
+		await route.fulfill({ response });
+	});
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await quickAdd(page, ['Barbell rows']);
+	await seen;
+	// Workout A is thrown away while its answer is still on the way; workout B starts (no navigation away from the app)
+	await page.getByRole('button', { name: 'Discard workout', exact: true }).click();
+	await page.getByRole('button', { name: 'Yes, discard', exact: true }).click();
+	await page.waitForURL('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('90');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	const before = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	release();
+	await page.waitForTimeout(500);
+	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(after.previousWorkoutData).toBeNull();
+	expect(after.repsOnly).toEqual(before.repsOnly);
+	expect(after.workoutExercises).toEqual(before.workoutExercises);
+	expect(after.workoutData.userBodyweight).toBe(90);
+});

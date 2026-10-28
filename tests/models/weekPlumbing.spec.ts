@@ -295,3 +295,42 @@ test('legacy saved workout without failure flag preserves exercises and defaults
 	expect((await savedState(page)).suggestionsFailed).toBe(false);
 	expect(requests).toBe(0);
 });
+
+async function switchToBlankWorkout(page: import('../fixtures').Page) {
+	await page.goto('/workouts/manage/start');
+	await page.getByPlaceholder('Type here').fill('80');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await page.getByRole('button', { name: 'Switch', exact: true }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+}
+
+test('starting another workout clears a failed-load flag left by the one before', async ({ page }) => {
+	await prepareRoutine(page);
+	await failSuggestions(page);
+	expect((await savedState(page)).suggestionsFailed).toBe(true);
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	await switchToBlankWorkout(page);
+	await expect.poll(async () => (await savedState(page)).workoutExercises).toEqual([]);
+	expect((await savedState(page)).suggestionsFailed).toBe(false);
+});
+
+test('starting another workout clears the reps-only marks of the one before; Continue keeps them', async ({ page }) => {
+	await prepareRoutine(page);
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	await page.evaluate(() => {
+		const s = JSON.parse(localStorage.getItem('workoutRunes')!);
+		s.repsOnly = { 'Left over': null };
+		localStorage.setItem('workoutRunes', JSON.stringify(s));
+	});
+	await page.reload();
+	// Continue workout is the same workout: everything stays
+	await page.goto('/workouts/manage/start');
+	await page.getByRole('button', { name: 'Continue workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	expect((await savedState(page)).repsOnly).toEqual({ 'Left over': null });
+	// A different workout starts clean
+	await switchToBlankWorkout(page);
+	await expect.poll(async () => (await savedState(page)).repsOnly).toEqual({});
+});

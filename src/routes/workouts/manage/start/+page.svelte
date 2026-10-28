@@ -146,6 +146,8 @@
 	});
 
 	async function startWorkout(fromDialog = false, mode: 'keepCurrent' | 'overwrite' = 'overwrite') {
+		// A past workout being edited is not replaced from here (the redirect to it may not have run yet)
+		if (workoutRunes.editingWorkoutId !== null) return;
 		// A workout in progress carries on; only picking a different routine starts over (after asking)
 		if (inProgress && !fromDialog) {
 			if (!sameAsInProgress) {
@@ -168,10 +170,9 @@
 		if (mode === 'overwrite') {
 			// A new workout starts now. Resuming one (keepCurrent) never moves its start
 			newWorkoutData.startedAt = new Date();
+			// All of the old workout's saved state goes (a failed load, reps-only marks...), not only some of it
+			workoutRunes.resetStores();
 			workoutRunes.workoutData = newWorkoutData;
-			workoutRunes.workoutExercises = null;
-			workoutRunes.previousWorkoutData = null;
-			workoutRunes.lastActivityAt = null;
 		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
 		workoutRunes.saveStoresToLocalStorage();
 
