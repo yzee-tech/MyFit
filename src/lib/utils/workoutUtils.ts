@@ -2,7 +2,16 @@ import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerci
 import { arrayAverage, arraySum } from '../utils';
 import type { Workout, WorkoutExercise } from './types';
 import { type Mesocycle, type Prisma } from '@prisma/client';
-import { defaultWeightStep, fromKg, isLevelUnit, roundWeight, snapToStep, toKg, type MassUnit } from './weightUnits';
+import {
+	convertWeight,
+	defaultWeightStep,
+	fromKg,
+	isLevelUnit,
+	roundWeight,
+	snapToStep,
+	toKg,
+	type MassUnit
+} from './weightUnits';
 import type { WeightUnit } from './prismaEnums';
 import {
 	availableWeightsFor,
@@ -192,7 +201,38 @@ type SetInProgress = {
 	 * phone: not saved
 	 */
 	suggested?: Partial<Record<SetField, number>>;
+	/**
+	 * What the reps hint is worked out from: the weight, reps and RIR the set started with (the
+	 * suggestion, or the last time Use or Previous filled it). Frozen, so typing reps or RIR never moves
+	 * the hint. A set without one (added, or from a workout started before this) shows no hint. Only on
+	 * the phone: kept with the workout in progress, not saved
+	 */
+	hintBase?: HintBase;
 };
+
+export type HintBase = { load: number; reps: number; RIR: number };
+
+/** A set's numbers as the hint's starting point; none unless all three are numbers */
+export function hintBaseOf(set: {
+	load?: number;
+	reps?: number;
+	RIR?: number;
+	skipped?: boolean;
+}): HintBase | undefined {
+	const { load, reps, RIR } = set;
+	if (set.skipped || typeof load !== 'number' || typeof reps !== 'number' || typeof RIR !== 'number') return undefined;
+	return { load, reps, RIR };
+}
+
+/** The sets with the hint's starting point captured from their numbers, once the suggestions are final */
+export function withHintBase<
+	T extends { load?: number; reps?: number; RIR?: number; skipped?: boolean; hintBase?: HintBase }
+>(sets: T[]): T[] {
+	return sets.map((set) => {
+		const hintBase = hintBaseOf(set);
+		return hintBase ? { ...set, hintBase } : set;
+	});
+}
 
 export type PreviousPerformance = {
 	exercise: WorkoutExercise;
@@ -350,12 +390,57 @@ export function formatWeekEffort(weeklyRIR: number[], week: number): string {
  */
 export type ProgressionMode = 'normal' | 'deload' | 'welcomeBack';
 
-const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const DAYS_IN_BLOCK_WEEK = 7;
 
-/** 1-based calendar week of a block, counted from its start date */
-export function getBlockWeek(startDate: Date | string, now: Date = new Date()): number {
-	const elapsed = now.getTime() - new Date(startDate).getTime();
-	return Math.max(1, Math.floor(elapsed / WEEK_IN_MS) + 1);
+/** The longest IANA timezone name there is is well under this: anything longer is not one */
+const MAX_TIME_ZONE_LENGTH = 64;
+
+/** The calendar day an instant falls on in a timezone, as a number of days (Date.UTC of its local date) */
+function localDayNumber(date: Date, timeZone: string): number {
+	const parts = new Intl.DateTimeFormat('en-US', {
+		timeZone,
+		year: 'numeric',
+		month: 'numeric',
+		day: 'numeric'
+	}).formatToParts(date);
+	const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+	return Math.floor(Date.UTC(part('year'), part('month') - 1, part('day')) / 86400000);
+}
+
+/**
+ * 1-based week of a block, counted in calendar days of the timezone (the phone's): the 8th day
+ * since the start day is in Week 2, whatever time the block was started at. A missing, empty, invalid
+ * or over-long timezone counts the days in UTC. It never throws
+ */
+export function getBlockWeek(startDate: Date | string, now: Date = new Date(), timeZone?: string | null): number {
+	const start = new Date(startDate);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(now.getTime())) return 1;
+	const days = (zone: string) => localDayNumber(now, zone) - localDayNumber(start, zone);
+	let elapsedDays: number;
+	try {
+		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
+		elapsedDays = days(timeZone);
+	} catch {
+		elapsedDays = days('UTC');
+	}
+	return Math.max(1, Math.floor(elapsedDays / DAYS_IN_BLOCK_WEEK) + 1);
+}
+
+/**
+ * The phone's timezone, read from the browser on every call (never kept), so travelling is followed.
+ * Undefined when the browser can't say: the server then counts UTC days
+ */
+export function browserTimeZone(): string | undefined {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone;
+	} catch {
+		return undefined;
+	}
+}
+
+/** The week in the phone's timezone */
+export function getBlockWeekHere(startDate: Date | string, now: Date = new Date()): number {
+	return getBlockWeek(startDate, now, browserTimeZone());
 }
 
 function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {
@@ -649,6 +734,34 @@ function moveSetToLoad(
 	// The formula can't tell (e.g. from 0 kg): the set stays where it was
 	if (!Number.isFinite(newReps)) return set;
 	return { ...set, load: newLoad, reps: Math.max(1, Math.round(newReps)), miniSets };
+}
+
+/** A unit-switch baseline at the visible target, without choosing a second snapped weight. */
+export function hintBaseAfterUnitSwitch(
+	original: WorkoutExerciseInProgress,
+	index: number,
+	visible: WorkoutExerciseInProgress['sets'][number],
+	to: MassUnit,
+	userBodyweight: number
+): HintBase | undefined {
+	const set = original.sets[index];
+	const base = set.hintBase;
+	if (!base || set.skipped) return undefined;
+	if ([set.load, set.reps, set.RIR].every((value) => typeof value === 'number')) return hintBaseOf(visible);
+	const from = original.weightUnit ?? 'KG';
+	if (typeof visible.load !== 'number') {
+		return {
+			load: roundWeight(convertWeight(base.load, from, to)),
+			reps: set.reps ?? base.reps,
+			RIR: set.RIR ?? base.RIR
+		};
+	}
+	const effective = { ...set, load: set.load ?? base.load, reps: set.reps ?? base.reps, RIR: set.RIR ?? base.RIR };
+	const inKg = convertExerciseLoads({ ...original, sets: [effective] }, 'toKg');
+	const targetKg = toKg(visible.load, to);
+	const moved = set.completed ? inKg.sets[0] : moveSetToLoad(inKg, inKg.sets[0], targetKg, userBodyweight, (kg) => kg);
+	// The finite-value guard may keep the original reps; the target still is exactly the visible load.
+	return { load: visible.load, reps: moved.reps!, RIR: moved.RIR! };
 }
 
 /**

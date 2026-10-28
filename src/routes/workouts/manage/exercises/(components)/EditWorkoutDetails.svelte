@@ -34,13 +34,21 @@
 
 	function setTime(change: { date?: string; time?: string; minutes?: number }) {
 		if (!workoutRunes.workoutData) return;
-		const startedAt = new Date(`${change.date ?? details.date}T${change.time ?? details.time}`);
+		// The start is rebuilt from the date and time only when one of them is really different from what is
+		// there: those boxes only hold minutes, so rebuilding it for a change of length (or the same time typed
+		// again) would drop the seconds and could pick the wrong hour when the clocks go back
+		const startChanged =
+			(change.date !== undefined && change.date !== details.date) ||
+			(change.time !== undefined && change.time !== details.time);
+		const startedAt = startChanged
+			? new Date(`${change.date ?? details.date}T${change.time ?? details.time}`)
+			: new Date(details.startedAt.getTime());
 		const minutes = change.minutes ?? details.minutes;
 		// A cleared or half-typed box keeps what was there
 		if (Number.isNaN(startedAt.getTime()) || !Number.isFinite(minutes)) return;
 		// 0 is fine: a workout saved straight after it started
 		const length = Math.min(Math.max(Math.round(minutes), 0), 600);
-		workoutRunes.workoutData.startedAt = startedAt;
+		if (startChanged) workoutRunes.workoutData.startedAt = startedAt;
 		workoutRunes.workoutData.endedAt = new Date(startedAt.getTime() + length * 60000);
 		workoutRunes.saveStoresToLocalStorage();
 	}

@@ -4,7 +4,7 @@
  */
 import { trpc } from '$lib/trpc/client';
 import type { RouterInputs } from '$lib/trpc/router';
-import { convertExerciseLoads, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
+import { browserTimeZone, convertExerciseLoads, type WorkoutExerciseInProgress } from '$lib/utils/workoutUtils';
 import { toast } from 'svelte-sonner';
 import { workoutRunes } from './workoutRunes.svelte';
 
@@ -21,7 +21,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 	const workoutExercisesSets = exercisesInKg.map((ex) => {
 		return ex.sets.map((_set, idx) => {
 			// Ticks and which boxes were typed are for the workout screen only: the set schema is strict
-			const { completed, chosen, suggested, ...set } = _set;
+			const { completed, chosen, suggested, hintBase, ...set } = _set;
 			if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
 			return { ...set, setIndex: idx };
 		});
@@ -35,6 +35,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 	const userBodyweight = workoutRunes.workoutData.userBodyweight;
 
 	return {
+		timeZone: browserTimeZone(),
 		workoutData: {
 			startedAt: workoutRunes.workoutData.startedAt,
 			// A new workout ends at its last ticked set (none: when it's saved). An edit sends its own

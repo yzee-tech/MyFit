@@ -5,7 +5,8 @@
 	import * as Card from '$lib/components/ui/card';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { formatWeekEffort } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { useNow } from '$lib/utils/useNow.svelte';
 	import { workoutRunes } from '../../workouts/manage/workoutRunes.svelte';
 	import WorkoutProgressionChart from './WorkoutProgressionChart.svelte';
 	import ChevronRight from 'virtual:icons/lucide/chevron-right';
@@ -15,6 +16,9 @@
 		pastWorkouts: Promise<RouterOutputs['mesocycles']['getWorkouts']>;
 	};
 	let { todaysWorkoutData, pastWorkouts }: PropsType = $props();
+
+	// The week is counted on the phone (its clock and timezone), so nothing until the page is up
+	const now = useNow();
 
 	function createNewWorkout() {
 		if (workoutRunes.editingWorkoutId !== null) workoutRunes.resetStores();
@@ -36,17 +40,23 @@
 		</Card.Footer>
 	{:then todaysWorkoutData}
 		{@const block = todaysWorkoutData.activeBlock}
+		{@const weekNumber =
+			block?.mesocycle.startDate && now.value ? getBlockWeekHere(block.mesocycle.startDate, now.value) : null}
 		{#if block}
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					{block.mesocycle.name}
-					<Badge variant="secondary">{formatWeekEffort(block.mesocycle.weeklyRIR, block.weekNumber)}</Badge>
+					{#if weekNumber !== null}
+						<Badge variant="secondary">{formatWeekEffort(block.mesocycle.weeklyRIR, weekNumber)}</Badge>
+					{/if}
 				</Card.Title>
 				<Card.Description>
-					{#if block.blockFinished}
+					{#if weekNumber === null}
+						{block.routines.length} routines
+					{:else if weekNumber > block.totalWeeks}
 						Block finished, all {block.totalWeeks} weeks done
 					{:else}
-						Week {block.weekNumber} of {block.totalWeeks} · {block.routines.length} routines
+						Week {weekNumber} of {block.totalWeeks} · {block.routines.length} routines
 					{/if}
 				</Card.Description>
 			</Card.Header>

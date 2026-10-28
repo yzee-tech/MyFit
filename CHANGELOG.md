@@ -2,6 +2,28 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-27: workout weeks and reps hints (PR #57)
+
+### Fixed
+
+- Weeks are now counted by local calendar day in the phone's timezone: day 8 is Week 2,
+  even when fewer than 168 hours have passed. This applies to week labels and deload suggestions.
+  A missing or invalid timezone falls back to UTC. Saved deload flags are not rewritten; editing
+  a workout keeps its flag unless its start changes. A displayed week can differ from the
+  week an earlier in-progress label showed; a workout already in progress keeps its starting week.
+- The reps hint stays put while reps or RIR are typed or cleared. Use and Previous start a new
+  baseline. The hint now says "1 rep".
+- Editing only a workout's length keeps the original start time, including seconds and milliseconds.
+- A failed request for workout suggestions shows a message with a Retry button; reloading the page loads them.
+
+### Changed
+
+- A block's weekly effort marks its current week. The deload badge is no longer filled by default.
+- A past workout shows its block week under the block name, without capping it: Week 9 can appear
+  in a 6-week block when that workout was done after the planned end.
+- The routine chip opens that routine in My routines when it still exists. The block name stays
+  a link without an underline.
+
 ## 2026-10-26: export follow-ups (PR #55)
 
 ### Changed

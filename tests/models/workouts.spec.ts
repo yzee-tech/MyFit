@@ -256,7 +256,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save' }).click();
 	await expect(page.getByRole('status')).toContainText('Workout created successfully');
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
-	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Pull A User bodyweight 100 kg');
+	await expect(page.getByRole('tabpanel')).toContainText('Mesocycle MyMeso Week 1 Pull A User bodyweight 100 kg');
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
 		'Pull-ups 3 Straight sets of 5 to 15 reps BW Lats Load (kg) Reps RIR 1 0 12 3 2 0 11 3 3 0 10 0'
@@ -416,7 +416,7 @@ test('edit a workout', async ({ page }) => {
 
 	await page.getByRole('link', { name: new RegExp(`^${getTodaysDateString()}.* Pull A`) }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
-		'Mesocycle MyMeso Pull A User bodyweight 95 kg Targeted muscle groups Lats'
+		'Mesocycle MyMeso Week 1 Pull A User bodyweight 95 kg Targeted muscle groups Lats'
 	);
 	await page.getByRole('tab', { name: 'Exercises' }).click();
 	await expect(page.getByRole('tabpanel')).toContainText(
@@ -1611,6 +1611,38 @@ test('editing a past workout: its date, start time and length on its exercises; 
 	await expect(page.getByTestId('workout-length')).toHaveText('1 h 15 min');
 });
 
+test('editing a past workout: a length-only edit, or the same start time typed again, keeps the start instant to the millisecond', async ({
+	page,
+	userData
+}) => {
+	const workout = await createPastWorkout(userData.userId);
+	// Seconds and milliseconds, as a workout started with the app has
+	const original = new Date(workout.startedAt.getTime() - (workout.startedAt.getTime() % 60000) + 37123);
+	await prisma.workout.update({
+		where: { id: workout.id },
+		data: { startedAt: original, endedAt: new Date(original.getTime() + 3600000) }
+	});
+	await editPastWorkout(page, workout.id);
+	await page.getByLabel('Edit date, time and bodyweight').click();
+
+	await page.getByLabel('Length (min)').fill('75');
+	await page.getByLabel('Length (min)').blur();
+	await expect(page.getByTestId('workout-ended-at')).toContainText('Ended');
+	// Typing the start time that is already there fires a change, and must not drop the seconds
+	await page.getByLabel('Start time').fill(await page.getByLabel('Start time').inputValue());
+	await page.getByLabel('Start time').blur();
+	await page.getByLabel('Length (min)').fill('80');
+	await page.getByLabel('Length (min)').blur();
+	await page.getByRole('button', { name: 'Done' }).click();
+	await expect(page.getByTestId('edit-workout-summary')).toContainText('1 h 20 min');
+
+	await page.getByRole('button', { name: 'Next' }).click();
+	await saveWorkout(page);
+	const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
+	expect(saved.startedAt.getTime()).toEqual(original.getTime());
+	expect(saved.endedAt.getTime()).toEqual(original.getTime() + 80 * 60000);
+});
+
 test('editing a past workout, unchanged: leaving asks nothing (even kg → lb → kg), and no panel; Discard changes asks nothing more', async ({
 	page,
 	userData
@@ -2411,6 +2443,8 @@ test('an “ask each time” routine: no weight set to pick, and the gym picked 
 	await page.getByRole('option', { name: 'Gym DBs' }).click();
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	// The suggestions come once the page is up
+	await expect.poll(async () => (await savedWorkoutState(page))?.workoutExercises?.length ?? 0).toBeGreaterThan(0);
 	await expect
 		.poll(
 			async () =>

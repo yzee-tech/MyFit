@@ -13,7 +13,8 @@
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { trpc } from '$lib/trpc/client';
-	import { formatWeekEffort, isDeloadWeek } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
 	import { mesocycleRunes, type FullMesocycleWithoutIds } from '../../manage/mesocycleRunes.svelte';
@@ -24,6 +25,14 @@
 	let deleteConfirmDrawerOpen = $state(false);
 	let callingDeleteEndpoint = $state(false);
 	let callingPatchEndpoint = $state(false);
+
+	// The week of an active block, in the phone's days; none for a block not started or finished, or past its length
+	const now = useNow();
+	let currentWeek = $derived.by(() => {
+		if (!mesocycle.startDate || mesocycle.endDate || !now.value) return null;
+		const week = getBlockWeekHere(mesocycle.startDate, now.value);
+		return week <= mesocycle.weeklyRIR.length ? week : null;
+	});
 
 	function loadMesocycle(mode: 'edit' | 'clone') {
 		if (mode === 'edit') {
@@ -133,7 +142,11 @@
 			</div>
 			<div class="flex flex-wrap gap-1" data-testid="mesocycle-weekly-effort">
 				{#each mesocycle.weeklyRIR as _, idx}
-					<Badge variant={isDeloadWeek(mesocycle.weeklyRIR, idx + 1) ? 'secondary' : 'outline'}>
+					<Badge
+						variant={currentWeek === idx + 1 ? 'default' : 'outline'}
+						aria-current={currentWeek === idx + 1 ? 'step' : undefined}
+						data-current={currentWeek === idx + 1 ? 'true' : undefined}
+					>
 						W{idx + 1}: {formatWeekEffort(mesocycle.weeklyRIR, idx + 1)}
 					</Badge>
 				{/each}

@@ -1,3 +1,4 @@
+import { browserTimeZone, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -27,6 +28,8 @@ function createWorkoutRunes() {
 	let workoutExercises: WorkoutExerciseInProgress[] | null = $state(null);
 	let editingWorkoutId: string | null = $state(null);
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
+	/** A failed routine load can retry its empty placeholder; null history alone is not a failure. */
+	let suggestionsFailed = $state(false);
 	/** This workout's reps-only exercises by name, with their rep cap (null for none) */
 	let repsOnly: Record<string, number | null> = $state({});
 	/** When a set was last ticked: a new workout ends there, not when it's saved */
@@ -60,6 +63,7 @@ function createWorkoutRunes() {
 					editingWorkoutId = null,
 					editSnapshot = null,
 					previousWorkoutData,
+					suggestionsFailed = false,
 					repsOnly = {},
 					lastActivityAt = null
 				} = saved);
@@ -85,6 +89,7 @@ function createWorkoutRunes() {
 				editingWorkoutId,
 				editSnapshot,
 				previousWorkoutData,
+				suggestionsFailed,
 				repsOnly,
 				lastActivityAt
 			})
@@ -97,6 +102,7 @@ function createWorkoutRunes() {
 		editingWorkoutId = null;
 		editSnapshot = null;
 		previousWorkoutData = null;
+		suggestionsFailed = false;
 		repsOnly = {};
 		lastActivityAt = null;
 		saveStoresToLocalStorage();
@@ -169,6 +175,7 @@ function createWorkoutRunes() {
 			weightUnit,
 			weightSetId
 		});
+		suggestionsFailed = false;
 		saveStoresToLocalStorage();
 		suggestSetsFromLastTime(exercise.name);
 		return true;
@@ -202,7 +209,8 @@ function createWorkoutRunes() {
 				changeAmount: exercise.changeAmount,
 				weightUnit: exercise.weightUnit ?? 'KG',
 				weightSetId: exercise.weightSetId,
-				userBodyweight
+				userBodyweight,
+				timeZone: browserTimeZone()
 			});
 			if (!suggested) return;
 			setRepsOnly(exerciseName, suggested);
@@ -211,7 +219,8 @@ function createWorkoutRunes() {
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
 			if (!suggested.sets || !current || !untouched) return;
-			current.sets = suggested.sets;
+			// The hint starts from these final numbers: none until the weight changes
+			current.sets = withHintBase(suggested.sets);
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);
@@ -237,10 +246,11 @@ function createWorkoutRunes() {
 		const inUnit = (load: number | undefined) =>
 			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = kindChanged
-			? current.sets.map((set) => ({ ...set, load: undefined, completed: false }))
+			? current.sets.map(({ hintBase, ...set }) => ({ ...set, load: undefined, completed: false }))
 			: current.sets.map((set) => ({
 					...set,
 					load: inUnit(set.load),
+					...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
 					miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
 				}));
 		workoutExercises[editingExerciseIndex] = {
@@ -345,7 +355,7 @@ function createWorkoutRunes() {
 		for (let i = 0; i < exerciseToEdit.sets.length; i++) {
 			if (!exerciseFromHistory.sets[i]) break;
 			const { workoutExerciseId, ...historySet } = exerciseFromHistory.sets[i];
-			exerciseToEdit.sets[i] = {
+			const copied: WorkoutExerciseInProgress['sets'][number] = {
 				...historySet,
 				load: sameKindOfLoad ? historySet.load : exerciseToEdit.sets[i].load,
 				completed: false,
@@ -358,9 +368,12 @@ function createWorkoutRunes() {
 					return { ...restOfTheMiniSet, completed: false };
 				})
 			};
+			// A new starting point from the copied numbers (RIR too): no hint until the weight changes
+			exerciseToEdit.sets[i] = editingWorkoutId === null ? { ...copied, hintBase: hintBaseOf(copied) } : copied;
 		}
 
 		exerciseHistorySheetOpen = false;
+		saveStoresToLocalStorage();
 	}
 
 	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {
@@ -450,6 +463,13 @@ function createWorkoutRunes() {
 			saveStoresToLocalStorage();
 		},
 		setRepsOnly,
+		get suggestionsFailed() {
+			return suggestionsFailed;
+		},
+		set suggestionsFailed(value: boolean) {
+			suggestionsFailed = value;
+			saveStoresToLocalStorage();
+		},
 		get previousWorkoutData() {
 			return previousWorkoutData;
 		},

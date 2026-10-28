@@ -14,7 +14,8 @@
 	import { trpc } from '$lib/trpc/client.js';
 	import type { RouterOutputs } from '$lib/trpc/router.js';
 	import { cn, convertCamelCaseToNormal } from '$lib/utils.js';
-	import { formatWeekEffort, isDeloadWeek } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere, isDeloadWeek } from '$lib/utils/workoutUtils';
+	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
@@ -77,6 +78,12 @@
 	let takeItEasy = $state(true);
 
 	let activeBlock = $derived(workoutData === 'loading' ? undefined : workoutData.activeBlock);
+	// The week is counted on the phone (its clock and timezone), so null until the page is up
+	const now = useNow();
+	let weekNumber = $derived(
+		activeBlock?.mesocycle.startDate && now.value ? getBlockWeekHere(activeBlock.mesocycle.startDate, now.value) : null
+	);
+	let blockFinished = $derived(activeBlock !== undefined && weekNumber !== null && weekNumber > activeBlock.totalWeeks);
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
 		workoutData === 'loading' ? [] : (workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [])
@@ -85,7 +92,7 @@
 	let sameAsInProgress = $derived((useRoutine ? selectedRoutineName : null) === inProgressRoutineName);
 	let switchToName = $derived(useRoutine && selectedRoutine ? selectedRoutine.name : 'a blank workout');
 	let deloadWeek = $derived(
-		activeBlock ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, activeBlock.weekNumber) : false
+		activeBlock && weekNumber !== null ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, weekNumber) : false
 	);
 	let welcomeBack = $derived(workoutData === 'loading' ? undefined : workoutData.welcomeBack);
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
@@ -127,7 +134,7 @@
 			routineName: selectedRoutine.name,
 			workoutOfMesocycle: {
 				mesocycle: activeBlock.mesocycle,
-				cycleNumber: activeBlock.weekNumber,
+				cycleNumber: weekNumber ?? getBlockWeekHere(activeBlock.mesocycle.startDate!),
 				splitDayName: selectedRoutine.name
 			}
 		};
@@ -216,7 +223,7 @@
 	<Skeleton class="h-[166px] w-full" />
 	<Skeleton class="mt-auto h-10 w-full" />
 {:else}
-	{#if activeBlock?.blockFinished && workoutRunes.editingWorkoutId === null}
+	{#if activeBlock && blockFinished && workoutRunes.editingWorkoutId === null}
 		<Card.Root class="mb-1">
 			<Card.Header>
 				<Card.Title>Block finished &nbsp;🎉</Card.Title>
@@ -280,11 +287,11 @@
 	{#if (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null}
 		<div class="mb-1 flex items-baseline justify-between px-1">
 			<span class="font-semibold">Pick a routine</span>
-			{#if activeBlock}
+			{#if activeBlock && weekNumber !== null}
 				<span class="text-sm text-muted-foreground">
-					Week {Math.min(activeBlock.weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
+					Week {Math.min(weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
 						activeBlock.mesocycle.weeklyRIR,
-						activeBlock.weekNumber
+						weekNumber
 					)}
 				</span>
 			{/if}
