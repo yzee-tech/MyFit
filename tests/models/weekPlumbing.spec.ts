@@ -451,3 +451,68 @@ test('starting another workout clears the reps-only marks of the one before; Con
 	await switchToBlankWorkout(page);
 	await expect.poll(async () => (await savedState(page)).repsOnly).toEqual({});
 });
+
+for (const [label, time, week, deload] of [
+	['the last minute of week 5', '2026-11-23T15:59:00Z', 5, false],
+	['the first minute of week 6, the deload week', '2026-11-23T16:00:00Z', 6, true]
+] as const) {
+	test(`the week label and the suggestions agree on the phone's clock: ${label}`, async ({ page, userData }) => {
+		await page.goto('/exercise-splits');
+		await createTemplateExerciseSplit(page);
+		await createMesocycle(page, { exerciseSplitCreated: true });
+		const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+		await prisma.mesocycle.update({
+			where: { id: block.id },
+			data: { startDate: STARTED, endDate: null, weeklyRIR: [3, 2, 2, 1, 0, -1] }
+		});
+		// The first exercise of Pull A was done before, so there is a last time to suggest from
+		const day = await prisma.exerciseSplitDay.findFirstOrThrow({
+			where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
+			include: { exercises: { orderBy: { exerciseIndex: 'asc' } } }
+		});
+		const first = day.exercises[0];
+		const exercise = await prisma.exercise.findFirstOrThrow({ where: { userId: userData.userId, name: first.name } });
+		const done = new Date('2026-10-21T02:00:00Z');
+		await prisma.workout.create({
+			data: {
+				userId: userData.userId,
+				userBodyweight: 80,
+				startedAt: done,
+				endedAt: new Date(done.getTime() + 3600000),
+				workoutExercises: {
+					create: [
+						{
+							exerciseIndex: 0,
+							exerciseId: exercise.id,
+							name: first.name,
+							targetMuscleGroup: first.targetMuscleGroup,
+							setType: 'Straight',
+							repRangeStart: first.repRangeStart,
+							repRangeEnd: first.repRangeEnd,
+							sets: {
+								create: [
+									{ setIndex: 0, load: 40, reps: 10, RIR: 1, skipped: false },
+									{ setIndex: 1, load: 40, reps: 10, RIR: 1, skipped: false }
+								]
+							}
+						}
+					]
+				}
+			}
+		});
+		await page.clock.install({ time: new Date(time) });
+		await page.goto('/workouts/manage/start');
+		await expect(page.getByText(new RegExp(`Week ${week} of 6`))).toBeVisible();
+		await page.getByPlaceholder('Type here').fill('80');
+		await pickRoutine(page, 'Pull A');
+		await page.getByRole('button', { name: 'Next', exact: true }).click();
+		await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBeGreaterThan(0);
+		const rirs = (await savedState(page)).workoutExercises[0].sets.map((set: { RIR?: number }) => set.RIR);
+		expect(rirs.length).toBeGreaterThan(0);
+		// The deload week suggests an easy 4 RIR; the week before does not
+		for (const rir of rirs) {
+			if (deload) expect(rir).toBe(4);
+			else expect(rir).not.toBe(4);
+		}
+	});
+}

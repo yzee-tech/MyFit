@@ -97,7 +97,8 @@
 		try {
 			serverData = await trpc().workouts.getWorkoutExercisesWithPreviousData.query({
 				...request,
-				timeZone: browserTimeZone()
+				timeZone: browserTimeZone(),
+				now: new Date().toISOString()
 			});
 		} catch (error) {
 			failure = error;

@@ -205,7 +205,13 @@ function newWorkoutEnd(startedAt: Date, endedAt: Date | string | undefined) {
  * A routine of My routines as the plan the suggestions work from: its exercises, with the active
  * mesocycle's progression settings and week, else steady ones
  */
-async function findMyRoutineForWorkout(userId: string, routineName: string, inBlock = false, timeZone?: string) {
+async function findMyRoutineForWorkout(
+	userId: string,
+	routineName: string,
+	inBlock = false,
+	timeZone?: string,
+	now = new Date()
+) {
 	const [routine, block] = await Promise.all([
 		prisma.exerciseSplitDay.findFirst({
 			where: { exerciseSplit: { userId }, name: routineName },
@@ -226,7 +232,7 @@ async function findMyRoutineForWorkout(userId: string, routineName: string, inBl
 			sets: routineSetCount(sets)
 		}))
 	};
-	const weekNumber = block?.startDate ? getBlockWeek(block.startDate, new Date(), timeZone) : 1;
+	const weekNumber = block?.startDate ? getBlockWeek(block.startDate, now, timeZone) : 1;
 	return { plan, routineWeightUnit: routine.weightUnit, weekNumber, inBlock: block !== null };
 }
 
@@ -495,7 +501,9 @@ export const workouts = t.router({
 				sessionUnit: z.enum(['KG', 'LB']).optional(),
 				/** Weights this gym has, for routines set to "ask each time" */
 				sessionWeightSetId: z.string().cuid2().optional(),
-				timeZone: z.string().optional().catch(undefined)
+				timeZone: z.string().optional().catch(undefined),
+				/** The phone's clock, so the week it shows and the week the suggestions use are the same */
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -515,7 +523,8 @@ export const workouts = t.router({
 				ctx.userId,
 				input.routineName,
 				input.useActiveMesocycle === true,
-				input.timeZone
+				input.timeZone,
+				input.now ? new Date(input.now) : undefined
 			);
 			if (!today) return workoutExercisesWithPreviousData;
 			const { plan, routineWeightUnit, weekNumber, inBlock } = today;
@@ -621,7 +630,8 @@ export const workouts = t.router({
 				weightUnit: z.enum(['KG', 'LB', 'LEVEL']),
 				weightSetId: z.string().nullish(),
 				userBodyweight: z.number().positive(),
-				timeZone: z.string().optional().catch(undefined)
+				timeZone: z.string().optional().catch(undefined),
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -644,7 +654,9 @@ export const workouts = t.router({
 			};
 
 			// The current block's effort and overload settings, else steady defaults
-			const weekNumber = block?.startDate ? getBlockWeek(block.startDate, new Date(), input.timeZone) : 1;
+			const weekNumber = block?.startDate
+				? getBlockWeek(block.startDate, input.now ? new Date(input.now) : new Date(), input.timeZone)
+				: 1;
 			const plan: ProgressionPlan = {
 				settings: {
 					weeklyRIR: block?.weeklyRIR ?? [...NO_BLOCK_PROGRESSION.weeklyRIR],

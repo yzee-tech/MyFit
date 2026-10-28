@@ -212,7 +212,8 @@ function createWorkoutRunes() {
 				weightUnit: exercise.weightUnit ?? 'KG',
 				weightSetId: exercise.weightSetId,
 				userBodyweight,
-				timeZone: browserTimeZone()
+				timeZone: browserTimeZone(),
+				now: new Date().toISOString()
 			});
 			if (!suggested) return;
 			if (workoutData === null || new Date(workoutData.startedAt).getTime() !== startedMs) return;
