@@ -765,6 +765,34 @@ export function hintBaseAfterUnitSwitch(
 }
 
 /**
+ * The weight a set remembers for "emptied" (suggested.load) put through `convert`, e.g. into the other unit.
+ * Reps and RIR have no unit, so they stay; every other field and set is left as it is
+ */
+export function convertSuggestedLoads<T extends { suggested?: Partial<Record<SetField, number>> }>(
+	sets: T[],
+	convert: (load: number) => number
+): T[] {
+	return sets.map((set) =>
+		typeof set.suggested?.load === 'number'
+			? { ...set, suggested: { ...set.suggested, load: convert(set.suggested.load) } }
+			: set
+	);
+}
+
+/**
+ * A set (or mini-set) whose weight means something else now, because the kind of load changed (levels vs
+ * weights): no weight, not done, and no remembered weight or hint start from the old kind
+ */
+export function clearLoads<T extends { load?: number; completed: boolean }>(set: T) {
+	const { suggested, hintBase, ...rest } = set as T & { suggested?: SetInProgress['suggested']; hintBase?: HintBase };
+	const { load, ...remembered } = suggested ?? {};
+	return { ...rest, ...(suggested ? { suggested: remembered } : {}), load: undefined, completed: false } as Omit<
+		T,
+		'load' | 'completed' | 'suggested' | 'hintBase'
+	> & { load: undefined; completed: false; suggested?: SetInProgress['suggested'] };
+}
+
+/**
  * Moves each suggested load (in kg) to the nearest weight on the exercise unit's steps, and
  * recalculates reps so the effort stays the same. Used when the last performance was in the
  * other unit, e.g. 30 lb (13.6 kg) at a kg gym becomes 12.5 kg with a rep or two more.

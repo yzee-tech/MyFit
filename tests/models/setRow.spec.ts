@@ -950,3 +950,89 @@ for (const setType of ['Myorep', 'MyorepMatch'] as const) {
 		await expectBox(box(page, 'Leg press', 2, 'RIR'), '');
 	});
 }
+
+const savedExerciseSets = (page: Page, exercise: string) =>
+	page.evaluate(
+		(name) =>
+			JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises.find(
+				(ex: { name: string }) => ex.name === name
+			).sets,
+		exercise
+	);
+
+test('a typed-over weight comes back in the new unit when its box is emptied after a unit switch', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const load = box(page, 'Barbell rows', 1, 'load');
+	const suggestedKg = Number(await boxNumber(load));
+	await load.fill('70');
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
+	await load.fill('');
+	await expect(load).toHaveAttribute('data-suggested', 'true');
+	// The suggestion in lb (the same effort), never the old kg number
+	await expectBox(load, String(roundWeight(convertWeight(suggestedKg, 'KG', 'LB'))));
+});
+
+test('the remembered weight is converted and saved: a reload between the switch and the empty keeps it', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const load = box(page, 'Barbell rows', 1, 'load');
+	const suggestedKg = Number(await boxNumber(load));
+	await load.fill('70');
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
+	const expected = roundWeight(convertWeight(suggestedKg, 'KG', 'LB'));
+	await expect.poll(async () => (await savedExerciseSets(page, 'Barbell rows'))[0].suggested?.load).toBe(expected);
+	await page.reload();
+	await expect(page.getByTestId('Barbell rows-sets')).toBeVisible();
+	expect((await savedExerciseSets(page, 'Barbell rows'))[0].suggested.load).toBe(expected);
+	await box(page, 'Barbell rows', 1, 'load').fill('');
+	await expectBox(box(page, 'Barbell rows', 1, 'load'), String(expected));
+});
+
+test('kg to lb and back: the remembered weight returns to the original within 0.01 (two roundings)', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const load = box(page, 'Barbell rows', 1, 'load');
+	const suggestedKg = Number(await boxNumber(load));
+	await load.fill('70');
+	const toggle = page.getByTestId('Barbell rows-unit-toggle');
+	await toggle.click();
+	await expect(toggle).toHaveText('LB');
+	await toggle.click();
+	await expect(toggle).toHaveText('KG');
+	await load.fill('');
+	await expect(load).toHaveAttribute('data-suggested', 'true');
+	await expect.poll(async () => Math.abs(Number(await boxNumber(load)) - suggestedKg)).toBeLessThanOrEqual(0.01);
+});
+
+test('all three typed over, then a unit switch: weight comes back converted, reps from the hint start, RIR as suggested', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	await startTestDay(page);
+	const suggestedKg = Number(await boxNumber(box(page, 'Barbell rows', 1, 'load')));
+	const suggestedRIR = await boxNumber(box(page, 'Barbell rows', 1, 'RIR'));
+	await box(page, 'Barbell rows', 1, 'load').fill('70');
+	await box(page, 'Barbell rows', 1, 'reps').fill('12');
+	await box(page, 'Barbell rows', 1, 'RIR').fill('1');
+	await page.getByTestId('Barbell rows-unit-toggle').click();
+	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
+	const afterSwitch = (await savedExerciseSets(page, 'Barbell rows'))[0];
+	for (const field of ['load', 'reps', 'RIR'] as const) await box(page, 'Barbell rows', 1, field).fill('');
+	await expectBox(box(page, 'Barbell rows', 1, 'load'), String(roundWeight(convertWeight(suggestedKg, 'KG', 'LB'))));
+	// What the hint starts from after the switch, not the old suggestion
+	await expectBox(box(page, 'Barbell rows', 1, 'reps'), String(afterSwitch.hintBase.reps));
+	await expectBox(box(page, 'Barbell rows', 1, 'RIR'), suggestedRIR);
+});

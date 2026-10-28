@@ -1,4 +1,4 @@
-import { browserTimeZone, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
+import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -246,13 +246,17 @@ function createWorkoutRunes() {
 		const inUnit = (load: number | undefined) =>
 			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = kindChanged
-			? current.sets.map(({ hintBase, ...set }) => ({ ...set, load: undefined, completed: false }))
-			: current.sets.map((set) => ({
-					...set,
-					load: inUnit(set.load),
-					...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
-					miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
-				}));
+			? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory included
+				current.sets.map((set) => ({ ...clearLoads(set), miniSets: set.miniSets.map(clearLoads) }))
+			: convertSuggestedLoads(
+					current.sets.map((set) => ({
+						...set,
+						load: inUnit(set.load),
+						...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
+						miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
+					})),
+					(load) => inUnit(load)!
+				);
 		workoutExercises[editingExerciseIndex] = {
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit
@@ -295,11 +299,6 @@ function createWorkoutRunes() {
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const levels = Boolean(levelSetOf(exercise.name, weightSets));
 		const kindChanged = levels !== isLevelUnit(current.weightUnit);
-		const unload = <T extends { load?: number; completed: boolean }>(set: T) => ({
-			...set,
-			load: undefined,
-			completed: false
-		});
 		workoutExercises[exerciseIdx] = {
 			...current,
 			// The save links it to its exercise by name
@@ -311,7 +310,7 @@ function createWorkoutRunes() {
 			weightSetId: null,
 			...(kindChanged && {
 				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
-				sets: current.sets.map((set) => ({ ...unload(set), miniSets: set.miniSets.map(unload) }))
+				sets: current.sets.map((set) => ({ ...clearLoads(set), miniSets: set.miniSets.map(clearLoads) }))
 			})
 		};
 		saveStoresToLocalStorage();
