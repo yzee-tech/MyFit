@@ -223,16 +223,49 @@ test('successful empty suggestions are loaded and never refetched', async ({ pag
 	await page.waitForTimeout(100);
 	expect(requests).toBe(0);
 });
-test('failure Continue keeps flag and empty list; discard then restart recovers', async ({ page }) => {
+const suggestionRequests = async (page: import('../fixtures').Page) => {
+	const counter = { count: 0 };
+	await page.route(/getWorkoutExercisesWithPreviousData/, (route) => {
+		counter.count++;
+		return route.continue();
+	});
+	return counter;
+};
+
+test('Continue workout after a failed load loads the suggestions again', async ({ page }) => {
 	await prepareRoutine(page);
 	await failSuggestions(page);
+	const started = (await savedState(page)).workoutData.startedAt;
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	const requests = await suggestionRequests(page);
 	await page.goto('/workouts/manage/start');
 	await page.getByRole('button', { name: 'Continue workout', exact: true }).click();
 	await page.waitForURL(/keepCurrent/);
-	expect((await savedState(page)).workoutExercises).toEqual([]);
-	expect((await savedState(page)).suggestionsFailed).toBe(true);
-	await expect(page.getByText('MyFit was updated, please close and reopen the app')).toHaveCount(0);
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	expect((await savedState(page)).suggestionsFailed).toBe(false);
+	expect((await savedState(page)).workoutData.startedAt).toBe(started);
+	expect(requests.count).toBe(1);
+});
+
+test('the workout panel resumes a failed load too', async ({ page }) => {
+	await prepareRoutine(page);
+	await failSuggestions(page);
+	const started = (await savedState(page)).workoutData.startedAt;
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	const requests = await suggestionRequests(page);
+	await page.goto('/workouts');
+	await page.getByRole('button', { name: 'Back to the workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	expect((await savedState(page)).suggestionsFailed).toBe(false);
+	expect((await savedState(page)).workoutData.startedAt).toBe(started);
+	expect(requests.count).toBe(1);
+});
+
+test('after a failed load, discarding the workout and starting the routine again loads it', async ({ page }) => {
+	await prepareRoutine(page);
+	await failSuggestions(page);
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	await page.getByRole('button', { name: 'Discard workout', exact: true }).click();
 	await page.getByRole('button', { name: 'Yes, discard', exact: true }).click();
 	await page.waitForURL('/workouts');
@@ -242,6 +275,90 @@ test('failure Continue keeps flag and empty list; discard then restart recovers'
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 });
+
+test('a workout whose list was never saved shows Next, not Continue, and no panel; Next loads it fresh', async ({
+	page
+}) => {
+	await prepareRoutine(page);
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	await page.evaluate(() => {
+		const s = JSON.parse(localStorage.getItem('workoutRunes')!);
+		s.workoutExercises = null;
+		localStorage.setItem('workoutRunes', JSON.stringify(s));
+	});
+	await page.goto('/workouts');
+	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('button', { name: 'Continue workout', exact: true })).toHaveCount(0);
+	await page.getByPlaceholder('Type here').fill('80');
+	await pickRoutine(page, 'Pull A');
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+});
+
+test('resuming a loaded workout, from the start page or the panel, sends no suggestions request', async ({ page }) => {
+	await prepareRoutine(page);
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	const before = (await savedState(page)).workoutExercises;
+	const requests = await suggestionRequests(page);
+	await page.goto('/workouts/manage/start');
+	await page.getByRole('button', { name: 'Continue workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	await expect(page.getByTestId('workout-routine-name')).toBeVisible();
+	await page.goto('/workouts');
+	await page.getByRole('button', { name: 'Back to the workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	await expect(page.getByTestId('workout-routine-name')).toBeVisible();
+	expect(requests.count).toBe(0);
+	expect((await savedState(page)).workoutExercises).toEqual(before);
+});
+
+test('an old resume link without a bodyweight is no error and asks for nothing', async ({ page }) => {
+	await prepareRoutine(page);
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
+	const requests = await suggestionRequests(page);
+	for (const link of [
+		'/workouts/manage/exercises?routine=Pull%20A&keepCurrent',
+		'/workouts/manage/exercises?routine=Pull%20A&keepCurrent&userBodyweight=abc'
+	]) {
+		await page.goto(link);
+		await expect(page.getByTestId('workout-routine-name')).toBeVisible();
+		await expect(page.getByText('Invalid bodyweight')).toHaveCount(0);
+	}
+	expect(requests.count).toBe(0);
+	expect((await savedState(page)).workoutExercises).toHaveLength(4);
+});
+
+test('resuming after the routine was deleted ends with an empty list, one request and no loop', async ({
+	page,
+	userData
+}) => {
+	await prepareRoutine(page);
+	await failSuggestions(page);
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	await prisma.exerciseSplitDay.deleteMany({ where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } });
+	const requests = await suggestionRequests(page);
+	await page.goto('/workouts');
+	await page.getByRole('button', { name: 'Back to the workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	await expect.poll(() => requests.count).toBe(1);
+	await expect.poll(async () => (await savedState(page)).suggestionsFailed).toBe(false);
+	await page.waitForTimeout(500);
+	expect(requests.count).toBe(1);
+	expect((await savedState(page)).workoutExercises).toEqual([]);
+});
+
+test('a fresh start from the start page opens the same link as before', async ({ page }) => {
+	await prepareRoutine(page);
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	const url = new URL(page.url());
+	expect(url.pathname + url.search).toBe('/workouts/manage/exercises?userBodyweight=80&routine=Pull%20A');
+});
+
 test('delayed old response after discard cannot write into a new routine', async ({ page }) => {
 	await prepareRoutine(page);
 	let release!: () => void;

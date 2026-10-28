@@ -19,6 +19,7 @@
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
+	import { exercisesLink } from '../exercisesLink';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
@@ -176,21 +177,13 @@
 		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
 		workoutRunes.saveStoresToLocalStorage();
 
-		const { workoutOfMesocycle, routineName } = workoutRunes.workoutData;
-		const fromRoutine = workoutOfMesocycle !== undefined || Boolean(routineName);
-		let exercisesLink = `./exercises?userBodyweight=${userBodyweightKg}`;
-		// A routine of My routines, done in the active block (its settings and week) or not
-		if (routineName) exercisesLink += `&routine=${encodeURIComponent(routineName)}`;
-		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
-		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
-		if (fromRoutine && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
-		if (fromRoutine && workoutRunes.workoutData.sessionWeightUnit) {
-			exercisesLink += `&sessionUnit=${workoutRunes.workoutData.sessionWeightUnit}`;
-		}
-		if (fromRoutine && workoutRunes.workoutData.sessionWeightSetId) {
-			exercisesLink += `&sessionWeightSetId=${workoutRunes.workoutData.sessionWeightSetId}`;
-		}
-		goto(exercisesLink);
+		goto(
+			exercisesLink(workoutRunes.workoutData, {
+				userBodyweightKg,
+				keepCurrent: mode === 'keepCurrent',
+				welcomeBack: Boolean(welcomeBack && takeItEasy && !deloadWeek)
+			})
+		);
 	}
 
 	async function finishBlock() {

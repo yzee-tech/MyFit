@@ -9,6 +9,7 @@
 	import ChevronUpIcon from 'virtual:icons/lucide/chevron-up';
 	import TrashIcon from 'virtual:icons/lucide/trash-2';
 	import { workoutRunes } from '../../../routes/workouts/manage/workoutRunes.svelte';
+	import { exercisesLink } from '../../../routes/workouts/manage/exercisesLink';
 	import { blankWorkoutName } from '$lib/utils/workoutNames';
 
 	/** After this long, a workout most likely wasn't finished: ask to finish or discard it */
@@ -62,7 +63,12 @@
 	let discardOpen = $state(false);
 
 	function resume() {
-		goto('/workouts/manage/exercises?keepCurrent');
+		// With the workout's routine and bodyweight, so a list that failed to load can load now
+		goto(
+			workoutRunes.workoutData
+				? exercisesLink(workoutRunes.workoutData, { keepCurrent: true })
+				: '/workouts/manage/exercises?keepCurrent'
+		);
 	}
 
 	function discard() {
