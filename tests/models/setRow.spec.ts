@@ -1082,6 +1082,52 @@ test('a suggestions answer that arrives after the workout was discarded cannot w
 	expect(after.workoutData.userBodyweight).toBe(90);
 });
 
+test('a reps-only answer that arrives after a past workout was discarded cannot write into the next workout', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	// The answer will say Barbell rows is reps only (the server reads this when the request is made)
+	await prisma.exercise.update({
+		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } },
+		data: { repsOnly: true, maxReps: 30 }
+	});
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	let requested!: () => void;
+	const seen = new Promise<void>((resolve) => (requested = resolve));
+	let first = true;
+	await page.route(/forPicker/, async (route) => {
+		if (!first) return route.continue();
+		first = false;
+		const response = await route.fetch();
+		requested();
+		await held;
+		await route.fulfill({ response });
+	});
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await seen;
+	// Workout A (the edit) is thrown away while its answer is still on the way; workout B starts without reloading
+	await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+	await page.getByRole('button', { name: 'Yes, discard', exact: true }).click();
+	await page.waitForURL('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('90');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	const before = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(before.repsOnly).toEqual({});
+	release();
+	await page.waitForTimeout(500);
+	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(after.repsOnly).toEqual({});
+	expect(after.workoutData.userBodyweight).toBe(90);
+});
+
 /** An exercise done 5 days ago (created if it is not there yet), so adding it to a workout brings suggestions */
 async function addExerciseHistory(userId: string, name: string, targetMuscleGroup: MuscleGroup) {
 	const exercise = await prisma.exercise.upsert({

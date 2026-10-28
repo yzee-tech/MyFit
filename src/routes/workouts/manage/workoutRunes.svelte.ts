@@ -132,8 +132,11 @@ function createWorkoutRunes() {
 
 	/** Looks up which of these exercises are reps only (e.g. when editing a past workout) */
 	async function loadRepsOnly(exerciseNames: string[]) {
+		// The answer belongs to this edit: if the workout was discarded or replaced meanwhile, it is dropped
+		const askedFor = editingWorkoutId;
 		try {
 			const exercises = await trpc().exercises.forPicker.query();
+			if (editingWorkoutId !== askedFor) return;
 			for (const exercise of exercises) {
 				if (exerciseNames.includes(exercise.name)) setRepsOnly(exercise.name, exercise);
 			}
