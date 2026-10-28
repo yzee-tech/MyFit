@@ -222,8 +222,9 @@ function createWorkoutRunes() {
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
 			if (!suggested.sets || !current || !untouched) return;
-			// The hint starts from these final numbers: none until the weight changes
-			current.sets = withHintBase(suggested.sets);
+			// The hint starts from these final numbers: none until the weight changes (and none at all in a past
+			// workout, where the hint is off)
+			current.sets = editingWorkoutId === null ? withHintBase(suggested.sets) : suggested.sets;
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);

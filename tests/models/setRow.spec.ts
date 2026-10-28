@@ -1081,3 +1081,106 @@ test('a suggestions answer that arrives after the workout was discarded cannot w
 	expect(after.workoutExercises).toEqual(before.workoutExercises);
 	expect(after.workoutData.userBodyweight).toBe(90);
 });
+
+/** An exercise done 5 days ago (created if it is not there yet), so adding it to a workout brings suggestions */
+async function addExerciseHistory(userId: string, name: string, targetMuscleGroup: MuscleGroup) {
+	const exercise = await prisma.exercise.upsert({
+		where: { userId_name: { userId, name } },
+		create: { userId, name, targetMuscleGroup },
+		update: {}
+	});
+	const fiveDaysAgo = new Date(Date.now() - 5 * 86400000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 100,
+			startedAt: fiveDaysAgo,
+			endedAt: new Date(fiveDaysAgo.getTime() + 3600000),
+			workoutExercises: {
+				create: [
+					{
+						exerciseIndex: 0,
+						exerciseId: exercise.id,
+						name,
+						targetMuscleGroup,
+						setType: 'Straight',
+						repRangeStart: 10,
+						repRangeEnd: 20,
+						sets: {
+							create: [
+								{ setIndex: 0, load: 10, reps: 15, RIR: 2, skipped: false },
+								{ setIndex: 1, load: 10, reps: 14, RIR: 2, skipped: false }
+							]
+						}
+					}
+				]
+			}
+		}
+	});
+}
+
+const savedWorkoutExercises = (page: Page) =>
+	page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!).workoutExercises);
+
+test('an exercise added to a past workout gets suggestions but no hint start; in a live workout it does', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	await addExerciseHistory(userData.userId, 'Lateral raises', 'SideDelts');
+	await addExerciseHistory(userData.userId, 'Cable curls', 'Biceps');
+
+	// A past workout being edited: the hint is off there, so nothing is captured for it
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await quickAdd(page, ['Lateral raises']);
+	await expect
+		.poll(async () => {
+			const raises = (await savedWorkoutExercises(page)).find((ex: { name: string }) => ex.name === 'Lateral raises');
+			return typeof raises?.sets[0].load;
+		})
+		.toBe('number');
+	for (const ex of await savedWorkoutExercises(page)) for (const set of ex.sets) expect(set.hintBase).toBeUndefined();
+
+	// Control: during a live workout an added exercise starts with hint starts, as before
+	await page.goto('/workouts/manage/start');
+	await page.evaluate(() => localStorage.removeItem('workoutRunes'));
+	await startTestDay(page);
+	await quickAdd(page, ['Cable curls']);
+	await expect
+		.poll(async () => {
+			const curls = (await savedWorkoutExercises(page)).find((ex: { name: string }) => ex.name === 'Cable curls');
+			return curls?.sets.some((set: { hintBase?: unknown }) => set.hintBase !== undefined);
+		})
+		.toBe(true);
+});
+
+test('emptying a box in a past workout never brings back a hint start or a remembered suggestion', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await expectBox(box(page, 'Barbell rows', 1, 'reps'), '10');
+	// Left-over state from before (seeded: nothing in edit mode writes it any more)
+	await page.evaluate(() => {
+		const saved = JSON.parse(localStorage.getItem('workoutRunes')!);
+		const set = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Barbell rows').sets[0];
+		set.hintBase = { load: 61, reps: 12, RIR: 2 };
+		set.suggested = { load: 99, reps: 13, RIR: 3 };
+		localStorage.setItem('workoutRunes', JSON.stringify(saved));
+	});
+	await page.reload();
+	await expectBox(box(page, 'Barbell rows', 1, 'reps'), '10');
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	for (const field of ['reps', 'load', 'RIR'] as const) {
+		await box(page, 'Barbell rows', 1, field).fill('');
+		// The past number is gone and nothing takes its place: it has to be filled in again
+		await expect(box(page, 'Barbell rows', 1, field)).toHaveValue('');
+	}
+});

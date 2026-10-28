@@ -355,12 +355,15 @@
 	function emptied(set: WorkoutExerciseSet, idx: number, field: SetField) {
 		const set1Value = exercise.sets[0]?.[field];
 		const wasCopy = idx > 0 && typedOverCopy.get(set)?.has(field) && typeof set1Value === 'number';
-		// The reps box goes back to where the hint starts from, else to its suggestion
+		// The reps box goes back to where the hint starts from, else to its suggestion; a past workout's numbers
+		// are the record, so an emptied box there stays empty
 		const restored = wasCopy
 			? set1Value
-			: field === 'reps' && set.hintBase
-				? set.hintBase.reps
-				: set.suggested?.[field];
+			: editing
+				? undefined
+				: field === 'reps' && set.hintBase
+					? set.hintBase.reps
+					: set.suggested?.[field];
 		if (typeof restored !== 'number') {
 			set[field] = undefined;
 			workoutRunes.workoutExercises = workoutRunes.workoutExercises;
