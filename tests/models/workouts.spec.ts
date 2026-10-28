@@ -2041,8 +2041,12 @@ async function facePullsWithCopies(page: Page) {
 	return box;
 }
 const switchFacePullsToLb = async (page: Page) => {
+	const set1 = page.locator('[id="Face\\ pulls-set-1-load"]');
+	const before = await boxNumber(set1);
 	await page.getByTestId('Face pulls-unit-toggle').click();
 	await expect(page.getByTestId('Face pulls-unit-toggle')).toHaveText('LB');
+	// The converted numbers are on screen before the next edit: the boxes' handlers then hold the new sets
+	await expect.poll(() => boxNumber(set1)).not.toBe(before);
 };
 
 test('sets that follow set 1 keep following it after a kg/lb switch', async ({ page }) => {
