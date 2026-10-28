@@ -1082,6 +1082,58 @@ test('a suggestions answer that arrives after the workout was discarded cannot w
 	expect(after.workoutData.userBodyweight).toBe(90);
 });
 
+test('a late suggestions answer cannot overwrite the next workout when it has the same exercise', async ({
+	page,
+	userData
+}) => {
+	await setUpLastTime(userData.userId);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	let requested!: () => void;
+	const seen = new Promise<void>((resolve) => (requested = resolve));
+	let first = true;
+	await page.route(/suggestSets/, async (route) => {
+		if (!first) return route.continue();
+		first = false;
+		// Workout A's answer: Barbell rows is not reps only
+		const response = await route.fetch();
+		requested();
+		await held;
+		await route.fulfill({ response });
+	});
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await quickAdd(page, ['Barbell rows']);
+	await seen;
+	await page.getByRole('button', { name: 'Discard workout', exact: true }).click();
+	await page.getByRole('button', { name: 'Yes, discard', exact: true }).click();
+	await page.waitForURL('/workouts');
+	// By the time workout B asks for the same exercise it is reps only, so B's own answer differs from A's
+	await prisma.exercise.update({
+		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } },
+		data: { repsOnly: true, maxReps: 30 }
+	});
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('90');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await quickAdd(page, ['Barbell rows']);
+	const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	await expect.poll(async () => (await saved()).repsOnly).toEqual({ 'Barbell rows': 30 });
+	const before = await saved();
+	release();
+	await page.waitForTimeout(500);
+	const after = await saved();
+	expect(after.repsOnly).toEqual({ 'Barbell rows': 30 });
+	expect(after.previousWorkoutData).toEqual(before.previousWorkoutData);
+	expect(after.workoutExercises).toEqual(before.workoutExercises);
+});
+
 test('a reps-only answer that arrives after a past workout was discarded cannot write into the next workout', async ({
 	page,
 	userData
@@ -1126,6 +1178,76 @@ test('a reps-only answer that arrives after a past workout was discarded cannot 
 	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
 	expect(after.repsOnly).toEqual({});
 	expect(after.workoutData.userBodyweight).toBe(90);
+});
+
+test('Replace in a past workout: a plain swap keeps the logged numbers, a swap to machine levels clears them', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	await prisma.exercise.create({
+		data: {
+			userId: userData.userId,
+			name: 'Pec deck',
+			targetMuscleGroup: 'Chest',
+			levelsFrom: 1,
+			levelsTo: 10,
+			levelStep: 1
+		}
+	});
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await expect(box(page, 'Barbell rows', 1, 'load')).toBeVisible();
+
+	const replace = async (from: string, to: string) => {
+		await page.getByTestId(`${from}-menu-button`).click();
+		await page.getByRole('menuitem', { name: 'Replace' }).click();
+		await page
+			.getByRole('dialog')
+			.filter({ hasText: `Replace ${from}` })
+			.getByRole('button', { name: to, exact: true })
+			.click();
+		await expect(page.getByTestId(`${to}-menu-button`)).toBeVisible();
+	};
+	const saved = async (name: string) =>
+		(await savedWorkoutExercises(page)).find((ex: { name: string }) => ex.name === name);
+
+	// Weights to weights: same numbers, still ticked
+	await replace('Barbell rows', 'Lateral raises');
+	const swapped = await saved('Lateral raises');
+	expect(swapped.sets.slice(0, 2).map((set: { load: number }) => set.load)).toEqual([60, 60]);
+	expect(swapped.sets.slice(0, 2).every((set: { completed: boolean }) => set.completed)).toBe(true);
+
+	// Weights to levels: the loads mean something else now, so they go, with everything remembered about them
+	await replace('Leg press', 'Pec deck');
+	const levels = await saved('Pec deck');
+	expect(levels.weightUnit).toBe('LEVEL');
+	for (const set of levels.sets) {
+		expect(set.load).toBeUndefined();
+		expect(set.completed).toBe(false);
+		expect(set.hintBase).toBeUndefined();
+		expect(set.suggested?.load).toBeUndefined();
+	}
+});
+
+test('visiting the start page during a past-workout edit sends you back to it and leaves the edit alone', async ({
+	page,
+	userData
+}) => {
+	const workout = await setUpLastTime(userData.userId);
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	const before = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	await page.goto('/workouts/manage/start');
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(after.editingWorkoutId).toBe(workout.id);
+	expect(after.workoutData.startedAt).toBe(before.workoutData.startedAt);
+	expect(after.workoutExercises).toEqual(before.workoutExercises);
 });
 
 /** An exercise done 5 days ago (created if it is not there yet), so adding it to a workout brings suggestions */

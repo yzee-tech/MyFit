@@ -247,6 +247,26 @@ test('Continue workout after a failed load loads the suggestions again', async (
 	expect(requests.count).toBe(1);
 });
 
+test('Continue after a failed load uses the routine as it is now, not as it was when the workout started', async ({
+	page,
+	userData
+}) => {
+	await prepareRoutine(page);
+	await failSuggestions(page);
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	// Meanwhile one exercise is taken out of the routine
+	const removed = await prisma.exerciseTemplate.findFirstOrThrow({
+		where: { exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } },
+		orderBy: { exerciseIndex: 'desc' }
+	});
+	await prisma.exerciseTemplate.delete({ where: { id: removed.id } });
+	await page.goto('/workouts/manage/start');
+	await page.getByRole('button', { name: 'Continue workout', exact: true }).click();
+	await page.waitForURL(/keepCurrent/);
+	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(3);
+	expect((await savedState(page)).workoutExercises.map((ex: { name: string }) => ex.name)).not.toContain(removed.name);
+});
+
 test('the workout panel resumes a failed load too', async ({ page }) => {
 	await prepareRoutine(page);
 	await failSuggestions(page);
