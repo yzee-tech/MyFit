@@ -294,6 +294,28 @@
 	// Set 1's value before the current edit: the value the last copies hold
 	const set1Before: Partial<Record<SetField, number>> = {};
 
+	/**
+	 * A unit switch replaces the exercise's set objects: the marks of who follows set 1 move to the new
+	 * ones, and set 1's value before the next edit is the converted one the copies were switched along with
+	 */
+	export function carryFollowOver(oldSets: WorkoutExerciseSet[], newSets: WorkoutExerciseSet[]) {
+		newSets.forEach((set, i) => {
+			const old = oldSets[i];
+			if (!old) return;
+			const copied = copies.get(old);
+			if (copied) copies.set(set, new Set(copied));
+			const typedOver = typedOverCopy.get(old);
+			if (typedOver) typedOverCopy.set(set, new Set(typedOver));
+		});
+		const first = newSets[0];
+		if (!first) return;
+		for (const field of Object.keys(set1Before) as SetField[]) {
+			const value = first[field];
+			if (typeof value === 'number') set1Before[field] = value;
+			else delete set1Before[field];
+		}
+	}
+
 	function copyDown(field: SetField) {
 		const [first, ...later] = exercise.sets;
 		// A past workout's sets are the record: each keeps its own numbers. Only sets meant to repeat set 1
@@ -355,12 +377,15 @@
 	function emptied(set: WorkoutExerciseSet, idx: number, field: SetField) {
 		const set1Value = exercise.sets[0]?.[field];
 		const wasCopy = idx > 0 && typedOverCopy.get(set)?.has(field) && typeof set1Value === 'number';
-		// The reps box goes back to where the hint starts from, else to its suggestion
+		// The reps box goes back to where the hint starts from, else to its suggestion; a past workout's numbers
+		// are the record, so an emptied box there stays empty
 		const restored = wasCopy
 			? set1Value
-			: field === 'reps' && set.hintBase
-				? set.hintBase.reps
-				: set.suggested?.[field];
+			: editing
+				? undefined
+				: field === 'reps' && set.hintBase
+					? set.hintBase.reps
+					: set.suggested?.[field];
 		if (typeof restored !== 'number') {
 			set[field] = undefined;
 			workoutRunes.workoutExercises = workoutRunes.workoutExercises;

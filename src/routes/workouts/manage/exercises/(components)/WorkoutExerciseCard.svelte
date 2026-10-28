@@ -10,10 +10,11 @@
 		getNextWeightHint,
 		switchExerciseUnit,
 		type WorkoutExerciseInProgress,
-		hintBaseAfterUnitSwitch
+		hintBaseAfterUnitSwitch,
+		convertSuggestedLoads
 	} from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
-	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { convertWeight, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { canWarmUp } from '$lib/utils/oneRepMax';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
@@ -71,10 +72,14 @@
 				)
 	);
 
+	let setsComponent: SetsComponent | undefined = $state();
+
 	function toggleUnit() {
+		const oldSets = [...exercise.sets];
 		const hadHintBase = exercise.sets.map((set) => set.hintBase !== undefined);
 		const snapshot = $state.snapshot(exercise);
-		const to = (exercise.weightUnit ?? 'KG') === 'KG' ? 'LB' : 'KG';
+		const from = exercise.weightUnit ?? 'KG';
+		const to = from === 'KG' ? 'LB' : 'KG';
 		const switchUnit = (source: WorkoutExerciseInProgress) =>
 			switchExerciseUnit(source, to, workoutRunes.workoutData?.userBodyweight ?? 0, weightSets, isRepsOnly);
 		// Keep the visible conversion unchanged, including empty boxes.
@@ -83,6 +88,13 @@
 			if (hadHintBase[i])
 				set.hintBase = hintBaseAfterUnitSwitch(snapshot, i, set, to, workoutRunes.workoutData?.userBodyweight ?? 0);
 		});
+		// What a typed-over box brings back when it is emptied: the same weight in the new unit, as exact as the
+		// other weights are shown
+		exercise.sets = convertSuggestedLoads($state.snapshot(exercise.sets), (load) =>
+			roundWeight(convertWeight(load, from, to))
+		);
+		// The switch made new set objects: who follows set 1 stays the same
+		setsComponent?.carryFollowOver(oldSets, exercise.sets);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -258,7 +270,7 @@
 		{#if comparing}
 			<CompareComponent {exercise} />
 		{:else}
-			<SetsComponent repsOnly={isRepsOnly} bind:exercise />
+			<SetsComponent bind:this={setsComponent} repsOnly={isRepsOnly} bind:exercise />
 		{/if}
 	{/if}
 </div>

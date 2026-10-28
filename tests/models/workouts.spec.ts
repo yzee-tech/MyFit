@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import {
+	boxNumber,
 	createExercises,
 	createMesocycle,
 	createTemplateExerciseSplit,
@@ -1643,6 +1644,46 @@ test('editing a past workout: a length-only edit, or the same start time typed a
 	expect(saved.endedAt.getTime()).toEqual(original.getTime() + 80 * 60000);
 });
 
+// The clocks went back in New York on 2025-11-02 at 02:00: 01:30 happened twice, first on summer time, then on
+// standard time. The edit screen shows only "01:30", so a length-only edit must keep the exact instant
+test.describe('the repeated hour when the clocks go back', () => {
+	test.use({ timezoneId: 'America/New_York' });
+	for (const [which, startedAtIso] of [
+		['first', '2025-11-02T05:30:12.345Z'],
+		['second', '2025-11-02T06:30:12.345Z']
+	] as const) {
+		test(`a length-only edit, or the same start time typed again, keeps a workout started in the ${which} 01:30`, async ({
+			page,
+			userData
+		}) => {
+			const workout = await createPastWorkout(userData.userId);
+			const original = new Date(startedAtIso);
+			await prisma.workout.update({
+				where: { id: workout.id },
+				data: { startedAt: original, endedAt: new Date(original.getTime() + 3600000) }
+			});
+			await editPastWorkout(page, workout.id);
+			await page.getByLabel('Edit date, time and bodyweight').click();
+			await expect(page.getByLabel('Start time')).toHaveValue('01:30');
+
+			await page.getByLabel('Length (min)').fill('75');
+			await page.getByLabel('Length (min)').blur();
+			await page.getByLabel('Start time').fill('01:30');
+			await page.getByLabel('Start time').blur();
+			await page.getByLabel('Length (min)').fill('80');
+			await page.getByLabel('Length (min)').blur();
+			await page.getByRole('button', { name: 'Done' }).click();
+			await expect(page.getByTestId('edit-workout-summary')).toContainText('1 h 20 min');
+
+			await page.getByRole('button', { name: 'Next' }).click();
+			await saveWorkout(page);
+			const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
+			expect(saved.startedAt.toISOString()).toEqual(startedAtIso);
+			expect(saved.endedAt.getTime()).toEqual(original.getTime() + 80 * 60000);
+		});
+	}
+});
+
 test('editing a past workout, unchanged: leaving asks nothing (even kg → lb → kg), and no panel; Discard changes asks nothing more', async ({
 	page,
 	userData
@@ -1975,6 +2016,95 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	await box(1, 'load').fill('30');
 	await expectBox(box(2, 'load'), '30');
 	await expectBox(box(3, 'load'), '30');
+});
+
+/** A workout with Face pulls at 3 sets, set 1 typed (15 kg × 12 @ 2 RIR) so sets 2 and 3 hold copies of it */
+async function facePullsWithCopies(page: Page) {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await page.getByTestId('add-exercise-big').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await sheet.getByRole('checkbox', { name: 'Face pulls', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Add 1 exercise' }).click();
+	await expect(page.getByTestId('Face pulls-sets')).toBeVisible();
+	await page.getByTestId('Face pulls-add-set').click();
+	await page.getByTestId('Face pulls-add-set').click();
+	const box = (set: number, field: 'load' | 'reps' | 'RIR') => page.locator(`[id="Face\\ pulls-set-${set}-${field}"]`);
+	await box(1, 'load').fill('15');
+	await box(1, 'reps').fill('12');
+	await box(1, 'RIR').fill('2');
+	for (const set of [2, 3]) await expect(box(set, 'load')).toHaveAttribute('data-suggested', 'true');
+	return box;
+}
+const switchFacePullsToLb = async (page: Page) => {
+	const set1 = page.locator('[id="Face\\ pulls-set-1-load"]');
+	const before = await boxNumber(set1);
+	await page.getByTestId('Face pulls-unit-toggle').click();
+	await expect(page.getByTestId('Face pulls-unit-toggle')).toHaveText('LB');
+	// The converted numbers are on screen before the next edit: the boxes' handlers then hold the new sets
+	await expect.poll(() => boxNumber(set1)).not.toBe(before);
+};
+
+test('sets that follow set 1 keep following it after a kg/lb switch', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await switchFacePullsToLb(page);
+	// The switch itself changed nothing about who follows: still lighter (copies), and set 1 reaches them
+	await expect(box(2, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), '40');
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+});
+
+test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 again', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await box(3, 'load').fill('20');
+	await switchFacePullsToLb(page);
+	await box(3, 'load').fill('');
+	// Set 1's number as it is now, and it follows set 1 from here on
+	const set1 = await boxNumber(box(1, 'load'));
+	await expectBox(box(3, 'load'), String(set1));
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), '40');
+});
+
+test('after a kg/lb switch a box the person typed still does not follow set 1', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await box(3, 'load').fill('20');
+	await switchFacePullsToLb(page);
+	const typedLb = await boxNumber(box(3, 'load'));
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), String(typedLb));
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
+});
+
+test('a kg/lb switch with nothing following set 1 changes nothing about who follows', async ({ page }) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await page.getByTestId('add-exercise-big').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await sheet.getByRole('checkbox', { name: 'Face pulls', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Add 1 exercise' }).click();
+	await page.getByTestId('Face pulls-add-set').click();
+	const box = (set: number) => page.locator(`[id="Face\\ pulls-set-${set}-load"]`);
+	// Both sets typed by hand: neither is a copy
+	await box(2).fill('20');
+	await box(1).fill('15');
+	await switchFacePullsToLb(page);
+	const second = await boxNumber(box(2));
+	await box(1).fill('40');
+	await expectBox(box(2), String(second));
 });
 
 test('Quick add: several at once in the order ticked, 1 set each, from the last time or Independent 8–15', async ({

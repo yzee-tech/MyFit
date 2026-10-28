@@ -408,6 +408,23 @@ function localDayNumber(date: Date, timeZone: string): number {
 }
 
 /**
+ * Whole calendar days from one instant to another, in the timezone (the phone's): Monday evening to
+ * the next Monday morning is 7, whatever the hours between. A missing, invalid or over-long timezone
+ * counts the days in UTC. It never throws
+ */
+export function localDaysBetween(from: Date | string, to: Date, timeZone?: string | null): number {
+	const start = new Date(from);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(to.getTime())) return 0;
+	const days = (zone: string) => localDayNumber(to, zone) - localDayNumber(start, zone);
+	try {
+		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
+		return days(timeZone);
+	} catch {
+		return days('UTC');
+	}
+}
+
+/**
  * 1-based week of a block, counted in calendar days of the timezone (the phone's): the 8th day
  * since the start day is in Week 2, whatever time the block was started at. A missing, empty, invalid
  * or over-long timezone counts the days in UTC. It never throws
@@ -762,6 +779,34 @@ export function hintBaseAfterUnitSwitch(
 	const moved = set.completed ? inKg.sets[0] : moveSetToLoad(inKg, inKg.sets[0], targetKg, userBodyweight, (kg) => kg);
 	// The finite-value guard may keep the original reps; the target still is exactly the visible load.
 	return { load: visible.load, reps: moved.reps!, RIR: moved.RIR! };
+}
+
+/**
+ * The weight a set remembers for "emptied" (suggested.load) put through `convert`, e.g. into the other unit.
+ * Reps and RIR have no unit, so they stay; every other field and set is left as it is
+ */
+export function convertSuggestedLoads<T extends { suggested?: Partial<Record<SetField, number>> }>(
+	sets: T[],
+	convert: (load: number) => number
+): T[] {
+	return sets.map((set) =>
+		typeof set.suggested?.load === 'number'
+			? { ...set, suggested: { ...set.suggested, load: convert(set.suggested.load) } }
+			: set
+	);
+}
+
+/**
+ * A set (or mini-set) whose weight means something else now, because the kind of load changed (levels vs
+ * weights): no weight, not done, and no remembered weight or hint start from the old kind
+ */
+export function clearLoads<T extends { load?: number; completed: boolean }>(set: T) {
+	const { suggested, hintBase, ...rest } = set as T & { suggested?: SetInProgress['suggested']; hintBase?: HintBase };
+	const { load, ...remembered } = suggested ?? {};
+	return { ...rest, ...(suggested ? { suggested: remembered } : {}), load: undefined, completed: false } as Omit<
+		T,
+		'load' | 'completed' | 'suggested' | 'hintBase'
+	> & { load: undefined; completed: false; suggested?: SetInProgress['suggested'] };
 }
 
 /**

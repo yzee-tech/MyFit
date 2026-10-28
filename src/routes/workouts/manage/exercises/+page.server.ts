@@ -11,10 +11,14 @@ export const load = async (event) => {
 		redirect(303, '/workouts/manage/start');
 	}
 	// Nothing to fetch (the page starts with no exercises)
-	if (!routineName || editing || keepCurrent) return { suggestionsRequest: null };
+	if (!routineName || editing) return { suggestionsRequest: null };
 
 	const userBodyweight = parseFloat(event.url.searchParams.get('userBodyweight') ?? '');
-	if (isNaN(userBodyweight) || userBodyweight <= 0) error(400, 'Invalid bodyweight');
+	if (isNaN(userBodyweight) || userBodyweight <= 0) {
+		// An old resume link has no bodyweight: nothing to ask for, and nothing to refuse
+		if (keepCurrent) return { suggestionsRequest: null };
+		error(400, 'Invalid bodyweight');
+	}
 
 	const sessionUnit = event.url.searchParams.get('sessionUnit');
 	const sessionWeightSetId = event.url.searchParams.get('sessionWeightSetId') ?? undefined;

@@ -60,8 +60,11 @@ type TodaysWorkoutData = {
 	myRoutines?: RoutineOption[];
 	/** The routine this workout is done from (block or My routines); none for a blank workout */
 	routineName?: string | null;
-	/** Set when it has been long enough since the last workout for an easier first session back */
-	welcomeBack?: { daysSinceLastWorkout: number };
+	/**
+	 * Set when the welcome-back card is on and there is an earlier workout: the phone counts the days since
+	 * on its own calendar and shows the card from `afterDays`
+	 */
+	welcomeBackCheck?: { lastWorkoutStartedAt: Date; afterDays: number };
 	/** Unit for bodyweight and a starting choice for routines set to "ask each time" */
 	homeWeightUnit: WeightUnitType;
 	/** Unit picked at the start of this workout, for routines set to "ask each time" */
@@ -205,7 +208,13 @@ function newWorkoutEnd(startedAt: Date, endedAt: Date | string | undefined) {
  * A routine of My routines as the plan the suggestions work from: its exercises, with the active
  * mesocycle's progression settings and week, else steady ones
  */
-async function findMyRoutineForWorkout(userId: string, routineName: string, inBlock = false, timeZone?: string) {
+async function findMyRoutineForWorkout(
+	userId: string,
+	routineName: string,
+	inBlock = false,
+	timeZone?: string,
+	now = new Date()
+) {
 	const [routine, block] = await Promise.all([
 		prisma.exerciseSplitDay.findFirst({
 			where: { exerciseSplit: { userId }, name: routineName },
@@ -226,7 +235,7 @@ async function findMyRoutineForWorkout(userId: string, routineName: string, inBl
 			sets: routineSetCount(sets)
 		}))
 	};
-	const weekNumber = block?.startDate ? getBlockWeek(block.startDate, new Date(), timeZone) : 1;
+	const weekNumber = block?.startDate ? getBlockWeek(block.startDate, now, timeZone) : 1;
 	return { plan, routineWeightUnit: routine.weightUnit, weekNumber, inBlock: block !== null };
 }
 
@@ -428,8 +437,10 @@ export const workouts = t.router({
 		const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
 		const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
 		if (lastWorkout && welcomeBackEnabled) {
-			const daysSinceLastWorkout = Math.floor((Date.now() - lastWorkout.startedAt.getTime()) / (24 * 60 * 60 * 1000));
-			if (daysSinceLastWorkout >= welcomeBackAfterDays) todaysWorkoutData.welcomeBack = { daysSinceLastWorkout };
+			todaysWorkoutData.welcomeBackCheck = {
+				lastWorkoutStartedAt: lastWorkout.startedAt,
+				afterDays: welcomeBackAfterDays
+			};
 		}
 
 		// Routines to pick from are My routines, in a block or not
@@ -495,7 +506,9 @@ export const workouts = t.router({
 				sessionUnit: z.enum(['KG', 'LB']).optional(),
 				/** Weights this gym has, for routines set to "ask each time" */
 				sessionWeightSetId: z.string().cuid2().optional(),
-				timeZone: z.string().optional().catch(undefined)
+				timeZone: z.string().optional().catch(undefined),
+				/** The phone's clock, so the week it shows and the week the suggestions use are the same */
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -515,7 +528,8 @@ export const workouts = t.router({
 				ctx.userId,
 				input.routineName,
 				input.useActiveMesocycle === true,
-				input.timeZone
+				input.timeZone,
+				input.now ? new Date(input.now) : undefined
 			);
 			if (!today) return workoutExercisesWithPreviousData;
 			const { plan, routineWeightUnit, weekNumber, inBlock } = today;
@@ -621,7 +635,8 @@ export const workouts = t.router({
 				weightUnit: z.enum(['KG', 'LB', 'LEVEL']),
 				weightSetId: z.string().nullish(),
 				userBodyweight: z.number().positive(),
-				timeZone: z.string().optional().catch(undefined)
+				timeZone: z.string().optional().catch(undefined),
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -644,7 +659,9 @@ export const workouts = t.router({
 			};
 
 			// The current block's effort and overload settings, else steady defaults
-			const weekNumber = block?.startDate ? getBlockWeek(block.startDate, new Date(), input.timeZone) : 1;
+			const weekNumber = block?.startDate
+				? getBlockWeek(block.startDate, input.now ? new Date(input.now) : new Date(), input.timeZone)
+				: 1;
 			const plan: ProgressionPlan = {
 				settings: {
 					weeklyRIR: block?.weeklyRIR ?? [...NO_BLOCK_PROGRESSION.weeklyRIR],

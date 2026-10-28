@@ -156,3 +156,66 @@ test('suggestions and the todays-workout data take a missing, empty or over-long
 	expect(today.activeBlock).not.toHaveProperty('weekNumber');
 	expect(today.activeBlock).not.toHaveProperty('blockFinished');
 });
+
+test('the suggestions count the week at the time the phone sends: deload from the first minute of week 6, normal a minute before', async () => {
+	const { caller, block } = await seedPerson();
+	// Something done before, so there is a last time to suggest from
+	await caller.workouts.create(workoutOf(block!.id, WEEK_ONE, SHANGHAI));
+	const routineRIRs = async (now?: string) =>
+		(
+			await caller.workouts.getWorkoutExercisesWithPreviousData({
+				userBodyweight: 80,
+				routineName: 'Pull A',
+				useActiveMesocycle: true,
+				timeZone: SHANGHAI,
+				now
+			})
+		).todaysWorkoutExercises[0].sets.map((set) => set.RIR);
+	const oneExerciseRIRs = async (now?: string) =>
+		(
+			await caller.workouts.suggestSets({
+				exerciseName: rows.name,
+				sets: 3,
+				setType: rows.setType,
+				repRangeStart: rows.repRangeStart,
+				repRangeEnd: rows.repRangeEnd,
+				weightUnit: 'KG',
+				userBodyweight: 80,
+				timeZone: SHANGHAI,
+				now
+			})
+		)?.sets?.map((set) => set.RIR) ?? [];
+	// Shanghai midnight Nov 24 is 2026-11-23T16:00Z: day 36 (counting from 1) of the block, the first day of week 6 (the deload)
+	for (const ask of [routineRIRs, oneExerciseRIRs]) {
+		const deload = await ask('2026-11-23T16:00:00.000Z');
+		expect(deload.length).toBeGreaterThan(0);
+		for (const rir of deload) expect(rir).toBe(4);
+		const before = await ask('2026-11-23T15:59:00.000Z');
+		expect(before.length).toBeGreaterThan(0);
+		for (const rir of before) expect(rir).not.toBe(4);
+	}
+});
+
+test('a missing, empty or invalid time from the phone falls back to the server clock without an error', async () => {
+	const { caller } = await seedPerson();
+	for (const now of [undefined, '', 'not a date', '2026-13-45T99:99:99Z']) {
+		const exercises = await caller.workouts.getWorkoutExercisesWithPreviousData({
+			userBodyweight: 80,
+			routineName: 'Pull A',
+			timeZone: SHANGHAI,
+			now
+		});
+		expect(exercises.todaysWorkoutExercises).toHaveLength(1);
+		await caller.workouts.suggestSets({
+			exerciseName: rows.name,
+			sets: 3,
+			setType: rows.setType,
+			repRangeStart: rows.repRangeStart,
+			repRangeEnd: rows.repRangeEnd,
+			weightUnit: 'KG',
+			userBodyweight: 80,
+			timeZone: SHANGHAI,
+			now
+		});
+	}
+});

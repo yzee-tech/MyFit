@@ -14,11 +14,18 @@
 	import { trpc } from '$lib/trpc/client.js';
 	import type { RouterOutputs } from '$lib/trpc/router.js';
 	import { cn, convertCamelCaseToNormal } from '$lib/utils.js';
-	import { formatWeekEffort, getBlockWeekHere, isDeloadWeek } from '$lib/utils/workoutUtils';
+	import {
+		browserTimeZone,
+		formatWeekEffort,
+		getBlockWeekHere,
+		isDeloadWeek,
+		localDaysBetween
+	} from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
+	import { exercisesLink } from '../exercisesLink';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
@@ -94,7 +101,13 @@
 	let deloadWeek = $derived(
 		activeBlock && weekNumber !== null ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, weekNumber) : false
 	);
-	let welcomeBack = $derived(workoutData === 'loading' ? undefined : workoutData.welcomeBack);
+	// Days since the last workout are counted on the phone, like the week; null until the page is up
+	let welcomeBackDays = $derived.by(() => {
+		if (workoutData === 'loading' || !workoutData.welcomeBackCheck || !now.value) return null;
+		const { lastWorkoutStartedAt, afterDays } = workoutData.welcomeBackCheck;
+		const days = localDaysBetween(lastWorkoutStartedAt, now.value, browserTimeZone());
+		return days >= afterDays ? days : null;
+	});
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
 	$effect(() => {
@@ -146,6 +159,8 @@
 	});
 
 	async function startWorkout(fromDialog = false, mode: 'keepCurrent' | 'overwrite' = 'overwrite') {
+		// A past workout being edited is not replaced from here (the redirect to it may not have run yet)
+		if (workoutRunes.editingWorkoutId !== null) return;
 		// A workout in progress carries on; only picking a different routine starts over (after asking)
 		if (inProgress && !fromDialog) {
 			if (!sameAsInProgress) {
@@ -168,28 +183,19 @@
 		if (mode === 'overwrite') {
 			// A new workout starts now. Resuming one (keepCurrent) never moves its start
 			newWorkoutData.startedAt = new Date();
+			// All of the old workout's saved state goes (a failed load, reps-only marks...), not only some of it
+			workoutRunes.resetStores();
 			workoutRunes.workoutData = newWorkoutData;
-			workoutRunes.workoutExercises = null;
-			workoutRunes.previousWorkoutData = null;
-			workoutRunes.lastActivityAt = null;
 		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
 		workoutRunes.saveStoresToLocalStorage();
 
-		const { workoutOfMesocycle, routineName } = workoutRunes.workoutData;
-		const fromRoutine = workoutOfMesocycle !== undefined || Boolean(routineName);
-		let exercisesLink = `./exercises?userBodyweight=${userBodyweightKg}`;
-		// A routine of My routines, done in the active block (its settings and week) or not
-		if (routineName) exercisesLink += `&routine=${encodeURIComponent(routineName)}`;
-		if (workoutOfMesocycle) exercisesLink += '&useActiveMesocycle';
-		if (mode === 'keepCurrent') exercisesLink += '&keepCurrent';
-		if (fromRoutine && welcomeBack && takeItEasy && !deloadWeek) exercisesLink += '&welcomeBack';
-		if (fromRoutine && workoutRunes.workoutData.sessionWeightUnit) {
-			exercisesLink += `&sessionUnit=${workoutRunes.workoutData.sessionWeightUnit}`;
-		}
-		if (fromRoutine && workoutRunes.workoutData.sessionWeightSetId) {
-			exercisesLink += `&sessionWeightSetId=${workoutRunes.workoutData.sessionWeightSetId}`;
-		}
-		goto(exercisesLink);
+		goto(
+			exercisesLink(workoutRunes.workoutData, {
+				userBodyweightKg,
+				keepCurrent: mode === 'keepCurrent',
+				welcomeBack: Boolean(welcomeBackDays !== null && takeItEasy && !deloadWeek)
+			})
+		);
 	}
 
 	async function finishBlock() {
@@ -273,12 +279,12 @@
 				</Card.Description>
 			</Card.Header>
 		</Card.Root>
-	{:else if useRoutine && (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null && welcomeBack}
+	{:else if useRoutine && (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null && welcomeBackDays !== null}
 		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
 			<div class="flex flex-col gap-1">
 				<Label for="take-it-easy">Welcome back: take it easy today</Label>
 				<p class="text-sm text-muted-foreground">
-					It's been {welcomeBack.daysSinceLastWorkout} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
+					It's been {welcomeBackDays} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
 				</p>
 			</div>
 			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />

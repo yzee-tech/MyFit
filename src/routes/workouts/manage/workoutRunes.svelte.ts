@@ -1,4 +1,4 @@
-import { browserTimeZone, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
+import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -132,8 +132,11 @@ function createWorkoutRunes() {
 
 	/** Looks up which of these exercises are reps only (e.g. when editing a past workout) */
 	async function loadRepsOnly(exerciseNames: string[]) {
+		// The answer belongs to this edit: if the workout was discarded or replaced meanwhile, it is dropped
+		const askedFor = editingWorkoutId;
 		try {
 			const exercises = await trpc().exercises.forPicker.query();
+			if (editingWorkoutId !== askedFor) return;
 			for (const exercise of exercises) {
 				if (exerciseNames.includes(exercise.name)) setRepsOnly(exercise.name, exercise);
 			}
@@ -196,6 +199,8 @@ function createWorkoutRunes() {
 		const exercise = workoutExercises?.find((ex) => ex.name === exerciseName);
 		const userBodyweight = workoutData?.userBodyweight;
 		if (!exercise || typeof userBodyweight !== 'number' || exercise.sets.length === 0) return;
+		// The answer belongs to this workout: if it was discarded or replaced meanwhile, it is dropped
+		const startedMs = new Date(workoutData?.startedAt ?? NaN).getTime();
 		try {
 			const suggested = await trpc().workouts.suggestSets.query({
 				exerciseName,
@@ -210,17 +215,20 @@ function createWorkoutRunes() {
 				weightUnit: exercise.weightUnit ?? 'KG',
 				weightSetId: exercise.weightSetId,
 				userBodyweight,
-				timeZone: browserTimeZone()
+				timeZone: browserTimeZone(),
+				now: new Date().toISOString()
 			});
 			if (!suggested) return;
+			if (workoutData === null || new Date(workoutData.startedAt).getTime() !== startedMs) return;
 			setRepsOnly(exerciseName, suggested);
 			if (suggested.previous) addPreviousExercise(suggested.previous.exercise, suggested.previous.userBodyweight);
 			// Only if it's still there and nothing has been entered yet
 			const current = workoutExercises?.find((ex) => ex.name === exerciseName);
 			const untouched = current?.sets.every((set) => set.reps === undefined && set.load === undefined);
 			if (!suggested.sets || !current || !untouched) return;
-			// The hint starts from these final numbers: none until the weight changes
-			current.sets = withHintBase(suggested.sets);
+			// The hint starts from these final numbers: none until the weight changes (and none at all in a past
+			// workout, where the hint is off)
+			current.sets = editingWorkoutId === null ? withHintBase(suggested.sets) : suggested.sets;
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);
@@ -246,13 +254,17 @@ function createWorkoutRunes() {
 		const inUnit = (load: number | undefined) =>
 			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = kindChanged
-			? current.sets.map(({ hintBase, ...set }) => ({ ...set, load: undefined, completed: false }))
-			: current.sets.map((set) => ({
-					...set,
-					load: inUnit(set.load),
-					...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
-					miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
-				}));
+			? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory included
+				current.sets.map((set) => ({ ...clearLoads(set), miniSets: set.miniSets.map(clearLoads) }))
+			: convertSuggestedLoads(
+					current.sets.map((set) => ({
+						...set,
+						load: inUnit(set.load),
+						...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
+						miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
+					})),
+					(load) => inUnit(load)!
+				);
 		workoutExercises[editingExerciseIndex] = {
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit
@@ -295,11 +307,6 @@ function createWorkoutRunes() {
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const levels = Boolean(levelSetOf(exercise.name, weightSets));
 		const kindChanged = levels !== isLevelUnit(current.weightUnit);
-		const unload = <T extends { load?: number; completed: boolean }>(set: T) => ({
-			...set,
-			load: undefined,
-			completed: false
-		});
 		workoutExercises[exerciseIdx] = {
 			...current,
 			// The save links it to its exercise by name
@@ -311,7 +318,7 @@ function createWorkoutRunes() {
 			weightSetId: null,
 			...(kindChanged && {
 				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
-				sets: current.sets.map((set) => ({ ...unload(set), miniSets: set.miniSets.map(unload) }))
+				sets: current.sets.map((set) => ({ ...clearLoads(set), miniSets: set.miniSets.map(clearLoads) }))
 			})
 		};
 		saveStoresToLocalStorage();

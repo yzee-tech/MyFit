@@ -2,6 +2,30 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-28: clean-up after the weeks and hints work (PR #58)
+
+### Fixed
+
+- Switching an exercise between kg and lb now converts the number a cleared weight box would
+  restore, so emptying the box brings back the right weight in the new unit.
+- Continuing or resuming a workout whose suggestions failed to load, from the start page or the
+  workout panel, tries the load again instead of leaving an empty workout.
+- The suggestions and the welcome-back card now use the phone's clock for the week and the days
+  since the last workout, so they agree with the week label around midnight and week changes.
+  A missing or invalid time falls back to the server's clock.
+- Starting a new workout clears a failed-load flag or reps-only settings left by the one before;
+  a late answer from an earlier workout, including the reps-only lookup of a past workout that was
+  discarded, no longer lands in the new one.
+- Sets that follow set 1 (copies of its numbers) keep following it after switching an exercise between kg
+  and lb.
+- Editing a past workout no longer creates a reps hint, and emptying a reps box there leaves it empty.
+- Editing a workout started in the repeated hour when clocks go back keeps its start time exactly.
+
+### Changed
+
+- The welcome-back card counts calendar days on the phone: Monday evening to the next Monday
+  morning is 7 days.
+
 ## 2026-10-27: workout weeks and reps hints (PR #57)
 
 ### Fixed
