@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import {
+	boxNumber,
 	createExercises,
 	createMesocycle,
 	createTemplateExerciseSplit,
@@ -2015,6 +2016,91 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	await box(1, 'load').fill('30');
 	await expectBox(box(2, 'load'), '30');
 	await expectBox(box(3, 'load'), '30');
+});
+
+/** A workout with Face pulls at 3 sets, set 1 typed (15 kg × 12 @ 2 RIR) so sets 2 and 3 hold copies of it */
+async function facePullsWithCopies(page: Page) {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await page.getByTestId('add-exercise-big').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await sheet.getByRole('checkbox', { name: 'Face pulls', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Add 1 exercise' }).click();
+	await expect(page.getByTestId('Face pulls-sets')).toBeVisible();
+	await page.getByTestId('Face pulls-add-set').click();
+	await page.getByTestId('Face pulls-add-set').click();
+	const box = (set: number, field: 'load' | 'reps' | 'RIR') => page.locator(`[id="Face\\ pulls-set-${set}-${field}"]`);
+	await box(1, 'load').fill('15');
+	await box(1, 'reps').fill('12');
+	await box(1, 'RIR').fill('2');
+	for (const set of [2, 3]) await expect(box(set, 'load')).toHaveAttribute('data-suggested', 'true');
+	return box;
+}
+const switchFacePullsToLb = async (page: Page) => {
+	await page.getByTestId('Face pulls-unit-toggle').click();
+	await expect(page.getByTestId('Face pulls-unit-toggle')).toHaveText('LB');
+};
+
+test('sets that follow set 1 keep following it after a kg/lb switch', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await switchFacePullsToLb(page);
+	// The switch itself changed nothing about who follows: still lighter (copies), and set 1 reaches them
+	await expect(box(2, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), '40');
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+});
+
+test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 again', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await box(3, 'load').fill('20');
+	await switchFacePullsToLb(page);
+	await box(3, 'load').fill('');
+	// Set 1's number as it is now, and it follows set 1 from here on
+	const set1 = await boxNumber(box(1, 'load'));
+	await expectBox(box(3, 'load'), String(set1));
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), '40');
+});
+
+test('after a kg/lb switch a box the person typed still does not follow set 1', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	await box(3, 'load').fill('20');
+	await switchFacePullsToLb(page);
+	const typedLb = await boxNumber(box(3, 'load'));
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), String(typedLb));
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
+});
+
+test('a kg/lb switch with nothing following set 1 changes nothing about who follows', async ({ page }) => {
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await page.getByTestId('add-exercise-big').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await sheet.getByRole('checkbox', { name: 'Face pulls', exact: true }).click();
+	await sheet.getByRole('button', { name: 'Add 1 exercise' }).click();
+	await page.getByTestId('Face pulls-add-set').click();
+	const box = (set: number) => page.locator(`[id="Face\\ pulls-set-${set}-load"]`);
+	// Both sets typed by hand: neither is a copy
+	await box(2).fill('20');
+	await box(1).fill('15');
+	await switchFacePullsToLb(page);
+	const second = await boxNumber(box(2));
+	await box(1).fill('40');
+	await expectBox(box(2), String(second));
 });
 
 test('Quick add: several at once in the order ticked, 1 set each, from the last time or Independent 8–15', async ({

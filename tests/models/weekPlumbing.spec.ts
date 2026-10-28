@@ -163,6 +163,10 @@ async function failSuggestions(page: import('../fixtures').Page) {
 	);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect(page.getByText('MyFit was updated, please close and reopen the app')).toBeVisible();
+	// The failure is on the device before a test leaves the page (a reload reads it from there)
+	await expect
+		.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!).suggestionsFailed))
+		.toBe(true);
 }
 const savedState = (page: import('../fixtures').Page) =>
 	page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));

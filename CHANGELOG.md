@@ -16,6 +16,8 @@ What changed in MyFit, newest first.
 - Starting a new workout clears a failed-load flag or reps-only settings left by the one before;
   a late answer from an earlier workout, including the reps-only lookup of a past workout that was
   discarded, no longer lands in the new one.
+- Sets that follow set 1 (copies of its numbers) keep following it after switching an exercise between kg
+  and lb.
 - Editing a past workout no longer creates a reps hint, and emptying a reps box there leaves it empty.
 - Editing a workout started in the repeated hour when clocks go back keeps its start time exactly.
 

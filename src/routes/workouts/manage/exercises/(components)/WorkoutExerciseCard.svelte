@@ -72,7 +72,10 @@
 				)
 	);
 
+	let setsComponent: SetsComponent | undefined = $state();
+
 	function toggleUnit() {
+		const oldSets = [...exercise.sets];
 		const hadHintBase = exercise.sets.map((set) => set.hintBase !== undefined);
 		const snapshot = $state.snapshot(exercise);
 		const from = exercise.weightUnit ?? 'KG';
@@ -90,6 +93,8 @@
 		exercise.sets = convertSuggestedLoads($state.snapshot(exercise.sets), (load) =>
 			roundWeight(convertWeight(load, from, to))
 		);
+		// The switch made new set objects: who follows set 1 stays the same
+		setsComponent?.carryFollowOver(oldSets, exercise.sets);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -265,7 +270,7 @@
 		{#if comparing}
 			<CompareComponent {exercise} />
 		{:else}
-			<SetsComponent repsOnly={isRepsOnly} bind:exercise />
+			<SetsComponent bind:this={setsComponent} repsOnly={isRepsOnly} bind:exercise />
 		{/if}
 	{/if}
 </div>
