@@ -1643,6 +1643,46 @@ test('editing a past workout: a length-only edit, or the same start time typed a
 	expect(saved.endedAt.getTime()).toEqual(original.getTime() + 80 * 60000);
 });
 
+// The clocks went back in New York on 2025-11-02 at 02:00: 01:30 happened twice, first on summer time, then on
+// standard time. The edit screen shows only "01:30", so a length-only edit must keep the exact instant
+test.describe('the repeated hour when the clocks go back', () => {
+	test.use({ timezoneId: 'America/New_York' });
+	for (const [which, startedAtIso] of [
+		['first', '2025-11-02T05:30:12.345Z'],
+		['second', '2025-11-02T06:30:12.345Z']
+	] as const) {
+		test(`a length-only edit, or the same start time typed again, keeps a workout started in the ${which} 01:30`, async ({
+			page,
+			userData
+		}) => {
+			const workout = await createPastWorkout(userData.userId);
+			const original = new Date(startedAtIso);
+			await prisma.workout.update({
+				where: { id: workout.id },
+				data: { startedAt: original, endedAt: new Date(original.getTime() + 3600000) }
+			});
+			await editPastWorkout(page, workout.id);
+			await page.getByLabel('Edit date, time and bodyweight').click();
+			await expect(page.getByLabel('Start time')).toHaveValue('01:30');
+
+			await page.getByLabel('Length (min)').fill('75');
+			await page.getByLabel('Length (min)').blur();
+			await page.getByLabel('Start time').fill('01:30');
+			await page.getByLabel('Start time').blur();
+			await page.getByLabel('Length (min)').fill('80');
+			await page.getByLabel('Length (min)').blur();
+			await page.getByRole('button', { name: 'Done' }).click();
+			await expect(page.getByTestId('edit-workout-summary')).toContainText('1 h 20 min');
+
+			await page.getByRole('button', { name: 'Next' }).click();
+			await saveWorkout(page);
+			const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workout.id } });
+			expect(saved.startedAt.toISOString()).toEqual(startedAtIso);
+			expect(saved.endedAt.getTime()).toEqual(original.getTime() + 80 * 60000);
+		});
+	}
+});
+
 test('editing a past workout, unchanged: leaving asks nothing (even kg → lb → kg), and no panel; Discard changes asks nothing more', async ({
 	page,
 	userData
