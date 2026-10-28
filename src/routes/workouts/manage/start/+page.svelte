@@ -14,7 +14,13 @@
 	import { trpc } from '$lib/trpc/client.js';
 	import type { RouterOutputs } from '$lib/trpc/router.js';
 	import { cn, convertCamelCaseToNormal } from '$lib/utils.js';
-	import { formatWeekEffort, getBlockWeekHere, isDeloadWeek } from '$lib/utils/workoutUtils';
+	import {
+		browserTimeZone,
+		formatWeekEffort,
+		getBlockWeekHere,
+		isDeloadWeek,
+		localDaysBetween
+	} from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
@@ -95,7 +101,13 @@
 	let deloadWeek = $derived(
 		activeBlock && weekNumber !== null ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, weekNumber) : false
 	);
-	let welcomeBack = $derived(workoutData === 'loading' ? undefined : workoutData.welcomeBack);
+	// Days since the last workout are counted on the phone, like the week; null until the page is up
+	let welcomeBackDays = $derived.by(() => {
+		if (workoutData === 'loading' || !workoutData.welcomeBackCheck || !now.value) return null;
+		const { lastWorkoutStartedAt, afterDays } = workoutData.welcomeBackCheck;
+		const days = localDaysBetween(lastWorkoutStartedAt, now.value, browserTimeZone());
+		return days >= afterDays ? days : null;
+	});
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
 	$effect(() => {
@@ -181,7 +193,7 @@
 			exercisesLink(workoutRunes.workoutData, {
 				userBodyweightKg,
 				keepCurrent: mode === 'keepCurrent',
-				welcomeBack: Boolean(welcomeBack && takeItEasy && !deloadWeek)
+				welcomeBack: Boolean(welcomeBackDays !== null && takeItEasy && !deloadWeek)
 			})
 		);
 	}
@@ -267,12 +279,12 @@
 				</Card.Description>
 			</Card.Header>
 		</Card.Root>
-	{:else if useRoutine && (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null && welcomeBack}
+	{:else if useRoutine && (activeBlock || routines.length > 0) && workoutRunes.editingWorkoutId === null && welcomeBackDays !== null}
 		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
 			<div class="flex flex-col gap-1">
 				<Label for="take-it-easy">Welcome back: take it easy today</Label>
 				<p class="text-sm text-muted-foreground">
-					It's been {welcomeBack.daysSinceLastWorkout} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
+					It's been {welcomeBackDays} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
 				</p>
 			</div>
 			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />

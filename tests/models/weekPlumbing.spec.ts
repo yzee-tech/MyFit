@@ -1,4 +1,4 @@
-import { expect, test } from '../fixtures';
+import { expect, test, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createMesocycle, createTemplateExerciseSplit, pickRoutine, quickAdd } from './commonFunctions';
 
@@ -516,3 +516,96 @@ for (const [label, time, week, deload] of [
 		}
 	});
 }
+
+// The welcome-back card counts the phone's calendar days, like the week label
+async function setUpForWelcomeBack(page: Page, userId: string, lastWorkoutAt: Date) {
+	await page.goto('/exercise-splits');
+	await createTemplateExerciseSplit(page);
+	await createMesocycle(page, { exerciseSplitCreated: true });
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+	// A long block that started the same day as the last workout, so no deload week gets in the way
+	await prisma.mesocycle.update({
+		where: { id: block.id },
+		data: { startDate: lastWorkoutAt, endDate: null, weeklyRIR: [3, 3, 3, 3, 3, 3, 3, 3] }
+	});
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: lastWorkoutAt,
+			endedAt: new Date(lastWorkoutAt.getTime() + 3600000)
+		}
+	});
+}
+
+// Monday Oct 19 at 18:00 in Shanghai
+const LAST_WORKOUT = new Date('2026-10-19T10:00:00Z');
+
+test('welcome back counts the phone calendar days: 7 days on Monday morning, though it is under 168 hours', async ({
+	page,
+	userData
+}) => {
+	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	// Mon Oct 26 at 09:00 in Shanghai: 6 days and 15 hours after the workout, the 7th calendar day since
+	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText("Welcome back: take it easy today It's been 7 days");
+});
+
+test('welcome back appears at the first minute of the 7th calendar day, not before', async ({ page, userData }) => {
+	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	// Sun Oct 25 at 23:59 in Shanghai is 6 days since; Mon at 00:00 is 7
+	await page.clock.install({ time: new Date('2026-10-25T15:59:00Z') });
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText('Pick a routine');
+	await expect(page.getByRole('main')).not.toContainText('Welcome back');
+	await page.clock.setFixedTime(new Date('2026-10-25T16:00:00Z'));
+	await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+	await expect(page.getByRole('main')).toContainText("It's been 7 days");
+});
+
+test('welcome back: switched off on the card, the link does not carry the flag', async ({ page, userData }) => {
+	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText("It's been 7 days");
+	await page.getByPlaceholder('Type here').fill('80');
+	await pickRoutine(page, 'Pull A');
+	await page.getByLabel('Welcome back: take it easy today').click();
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await page.waitForURL(/exercises\?userBodyweight/);
+	expect(page.url()).not.toContain('welcomeBack');
+});
+
+test('welcome back: on by default so the link carries the flag; and the setting off or no earlier workout shows no card', async ({
+	page,
+	userData
+}) => {
+	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText("It's been 7 days");
+	await page.getByPlaceholder('Type here').fill('80');
+	await pickRoutine(page, 'Pull A');
+	// On by default: the link carries the flag
+	await page.getByRole('button', { name: 'Next', exact: true }).click();
+	await page.waitForURL(/welcomeBack/);
+
+	// Turned off in the settings
+	await prisma.userSettings.upsert({
+		where: { userId: userData.userId },
+		create: { userId: userData.userId, welcomeBackEnabled: false },
+		update: { welcomeBackEnabled: false }
+	});
+	await page.evaluate(() => localStorage.clear());
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText('Pick a routine');
+	await expect(page.getByRole('main')).not.toContainText('Welcome back');
+
+	// On, but nothing done before
+	await prisma.userSettings.update({ where: { userId: userData.userId }, data: { welcomeBackEnabled: true } });
+	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
+	await page.goto('/workouts/manage/start');
+	await expect(page.getByRole('main')).toContainText('Pick a routine');
+	await expect(page.getByRole('main')).not.toContainText('Welcome back');
+});

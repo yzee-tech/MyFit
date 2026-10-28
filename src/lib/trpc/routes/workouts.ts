@@ -60,8 +60,11 @@ type TodaysWorkoutData = {
 	myRoutines?: RoutineOption[];
 	/** The routine this workout is done from (block or My routines); none for a blank workout */
 	routineName?: string | null;
-	/** Set when it has been long enough since the last workout for an easier first session back */
-	welcomeBack?: { daysSinceLastWorkout: number };
+	/**
+	 * Set when the welcome-back card is on and there is an earlier workout: the phone counts the days since
+	 * on its own calendar and shows the card from `afterDays`
+	 */
+	welcomeBackCheck?: { lastWorkoutStartedAt: Date; afterDays: number };
 	/** Unit for bodyweight and a starting choice for routines set to "ask each time" */
 	homeWeightUnit: WeightUnitType;
 	/** Unit picked at the start of this workout, for routines set to "ask each time" */
@@ -434,8 +437,10 @@ export const workouts = t.router({
 		const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
 		const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
 		if (lastWorkout && welcomeBackEnabled) {
-			const daysSinceLastWorkout = Math.floor((Date.now() - lastWorkout.startedAt.getTime()) / (24 * 60 * 60 * 1000));
-			if (daysSinceLastWorkout >= welcomeBackAfterDays) todaysWorkoutData.welcomeBack = { daysSinceLastWorkout };
+			todaysWorkoutData.welcomeBackCheck = {
+				lastWorkoutStartedAt: lastWorkout.startedAt,
+				afterDays: welcomeBackAfterDays
+			};
 		}
 
 		// Routines to pick from are My routines, in a block or not
