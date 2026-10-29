@@ -193,9 +193,7 @@ test('failed suggestions Retry brings back cardio intervals and measures', async
 					repRangeStart: 8,
 					repRangeEnd: 15,
 					sets: {
-						create: [
-							{ setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false, timeSeconds: 1560, distanceMeters: 5000 }
-						]
+						create: [{ setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false, timeSeconds: 1560, distanceMeters: 5000 }]
 					}
 				}
 			}

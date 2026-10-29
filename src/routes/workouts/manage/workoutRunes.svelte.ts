@@ -303,7 +303,8 @@ function createWorkoutRunes() {
 		// A typed-over distance is restored from its backup: it follows the unit switch too
 		const inDistanceUnit = <T extends { distance?: number; suggested?: { distance?: number } }>(set: T): T => {
 			if (fromUnit === toUnit) return set;
-			const out = set.distance === undefined ? set : { ...set, distance: convertDistance(set.distance, fromUnit, toUnit) };
+			const out =
+				set.distance === undefined ? set : { ...set, distance: convertDistance(set.distance, fromUnit, toUnit) };
 			const remembered = out.suggested?.distance;
 			return typeof remembered === 'number'
 				? { ...out, suggested: { ...out.suggested, distance: convertDistance(remembered, fromUnit, toUnit) } }
@@ -326,10 +327,19 @@ function createWorkoutRunes() {
 		const sets = measureChanged
 			? // A different measure: the old numbers mean something else, and a suggestion or hint baseline
 				// from the old measure must not show on the new measure's boxes
-				current.sets.map((set) => {
-					const { reps, load, RIR, timeSeconds, distance, suggested, hintBase, ...rest } = set;
-					return { ...rest, chosen: [], completed: false, miniSets: [] };
-				})
+				current.sets.map((set) => ({
+					...set,
+					reps: undefined,
+					load: undefined,
+					RIR: undefined,
+					timeSeconds: undefined,
+					distance: undefined,
+					suggested: undefined,
+					hintBase: undefined,
+					chosen: [],
+					completed: false,
+					miniSets: []
+				}))
 			: kindChanged
 				? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory
 					// included; time and distance survive in the new unit

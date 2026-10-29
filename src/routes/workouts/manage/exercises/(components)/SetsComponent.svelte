@@ -366,8 +366,7 @@
 				const copied = copies.get(old);
 				if (copied) copies.set(set, drop === 'loads' ? withoutLoads(copied) : new Set(copied));
 				const typedOver = typedOverCopy.get(old);
-				if (typedOver)
-					typedOverCopy.set(set, drop === 'loads' ? withoutLoads(typedOver) : new Set(typedOver));
+				if (typedOver) typedOverCopy.set(set, drop === 'loads' ? withoutLoads(typedOver) : new Set(typedOver));
 			});
 		}
 		const first = newSets[0];
