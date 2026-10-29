@@ -296,6 +296,118 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 	await expect(page.getByTestId('Trail run-missing')).toContainText('Set 2: enter a distance under 1,000 km');
 });
 
+test('a typed-over distance suggestion is remembered in the new unit after a distance-unit switch', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	// Typed over last time's 5 km: the suggestion is remembered behind the typed 7
+	await box(page, 'Run', 1, 'distance').fill('7');
+	// Swapped for a run in miles: the typed distance converts, and so does the remembered suggestion
+	await prisma.exercise.create({
+		data: { userId, name: 'Trail run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'MI' }
+	});
+	await editWorkoutExercise(page, 'Run');
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByPlaceholder('Search your exercises').fill('Trail run');
+	await page.getByRole('option', { name: 'Trail run', exact: true }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
+	await expect(box(page, 'Trail run', 1, 'distance')).toHaveValue('4.35');
+	// Emptied, the box shows the suggestion in miles, not the old 5 km
+	await box(page, 'Trail run', 1, 'distance').fill('');
+	await expect(box(page, 'Trail run', 1, 'distance')).toHaveAttribute('placeholder', '3.107');
+	await expect(box(page, 'Trail run', 1, 'distance')).toHaveAttribute('data-suggested', 'true');
+});
+
+test("swapping a cardio exercise for a strength one drops the old measure's numbers and suggestion", async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Push-up', targetMuscleGroup: 'Chest' }
+	]);
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
+	await editWorkoutExercise(page, 'Run');
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByPlaceholder('Search your exercises').fill('Push-up');
+	await page.getByRole('option', { name: 'Push-up', exact: true }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
+	// Reps & weight now: empty, and nothing of the run's suggestion shows or lingers
+	await expectBox(page.locator('[id="Push-up-set-1-reps"]'), '');
+	await expectBox(page.locator('[id="Push-up-set-1-load"]'), '');
+	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const set = saved.workoutExercises[0].sets[0];
+	expect(set.suggested).toBeUndefined();
+	expect(set.hintBase).toBeUndefined();
+	expect(set.timeSeconds).toBeUndefined();
+	expect(set.distance).toBeUndefined();
+});
+
+test('a cardio suggestion carries no hint baseline, on screen or on the phone', async ({ page, userData }) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
+	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const set = saved.workoutExercises[0].sets[0];
+	expect(set.suggested).toBeDefined();
+	expect(set.hintBase).toBeUndefined();
+});
+
+test('a late suggestions answer for a discarded workout writes no cardio numbers or measure', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await logPastCardio(userId);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => (release = resolve));
+	let requested!: () => void;
+	const seen = new Promise<void>((resolve) => (requested = resolve));
+	let first = true;
+	await page.route(/suggestSets/, async (route) => {
+		if (!first) return route.continue();
+		first = false;
+		const response = await route.fetch();
+		requested();
+		await held;
+		await route.fulfill({ response });
+	});
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	await seen;
+	// Thrown away while the answer is on the way; the next workout starts clean
+	await page.getByRole('button', { name: 'Discard workout', exact: true }).click();
+	await page.getByRole('button', { name: 'Yes, discard', exact: true }).click();
+	await page.waitForURL('/workouts');
+	await startBlankWorkout(page);
+	const before = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	release();
+	await page.waitForTimeout(500);
+	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(after.previousWorkoutData).toBeNull();
+	expect(after.workoutExercises).toEqual(before.workoutExercises);
+	expect(after.measures ?? {}).toEqual(before.measures ?? {});
+});
+
 test('a History copy of cardio intervals survives a reload', async ({ page, userData }) => {
 	const userId = userData.userId;
 	await createExercises(userId, [
