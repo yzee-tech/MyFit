@@ -33,6 +33,11 @@ What changed in MyFit, newest first.
 - The CSV export has two new columns at the end, `timeSeconds` and `distanceMeters`, filled for cardio sets (the
   JSON export carries them on every set).
 
+### Fixed
+
+- Sets that follow set 1 (copies of its numbers) keep following it after the exercise is edited in its
+  drawer (a note, a picked weight set, the routine settings), not only after a kg/lb switch.
+
 ## 2026-10-28: clean-up after the weeks and hints work (PR #58)
 
 ### Fixed
