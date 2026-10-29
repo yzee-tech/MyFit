@@ -327,19 +327,20 @@ function createWorkoutRunes() {
 		const sets = measureChanged
 			? // A different measure: the old numbers mean something else, and a suggestion or hint baseline
 				// from the old measure must not show on the new measure's boxes
-				current.sets.map((set) => ({
-					...set,
-					reps: undefined,
-					load: undefined,
-					RIR: undefined,
-					timeSeconds: undefined,
-					distance: undefined,
-					suggested: undefined,
-					hintBase: undefined,
-					chosen: [],
-					completed: false,
-					miniSets: []
-				}))
+				current.sets.map((set) => {
+					// The old measure's optional fields are dropped, not undefined-emptied: a stale
+					// suggestion, hint baseline, time or distance must be absent, in memory and persisted
+					const { timeSeconds, distance, suggested, hintBase, ...rest } = set;
+					return {
+						...rest,
+						reps: undefined,
+						load: undefined,
+						RIR: undefined,
+						chosen: [],
+						completed: false,
+						miniSets: []
+					};
+				})
 			: kindChanged
 				? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory
 					// included; time and distance survive in the new unit
