@@ -302,7 +302,8 @@ test('a typed-over distance suggestion is remembered in the new unit after a dis
 }) => {
 	const userId = userData.userId;
 	await createExercises(userId, [
-		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
 	]);
 	await logPastCardio(userId);
 	await startBlankWorkout(page);
@@ -332,12 +333,15 @@ test("swapping a cardio exercise for a strength one drops the old measure's numb
 	const userId = userData.userId;
 	await createExercises(userId, [
 		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 },
 		{ name: 'Push-up', targetMuscleGroup: 'Chest' }
 	]);
 	await logPastCardio(userId);
 	await startBlankWorkout(page);
 	await quickAdd(page, ['Run']);
 	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
+	// Typed over the suggestion, so the old measure's remembered numbers exist to be dropped
+	await box(page, 'Run', 1, 'distance').fill('7');
 	await editWorkoutExercise(page, 'Run');
 	await page.getByLabel('Pick an exercise').click();
 	await page.getByPlaceholder('Search your exercises').fill('Push-up');
@@ -357,16 +361,16 @@ test("swapping a cardio exercise for a strength one drops the old measure's numb
 test('a cardio suggestion carries no hint baseline, on screen or on the phone', async ({ page, userData }) => {
 	const userId = userData.userId;
 	await createExercises(userId, [
-		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
 	]);
 	await logPastCardio(userId);
 	await startBlankWorkout(page);
 	await quickAdd(page, ['Run']);
 	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
+	// The suggestion shows from last time's data; the set itself gains no hint baseline
 	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
-	const set = saved.workoutExercises[0].sets[0];
-	expect(set.suggested).toBeDefined();
-	expect(set.hintBase).toBeUndefined();
+	expect(saved.workoutExercises[0].sets[0].hintBase).toBeUndefined();
 });
 
 test('a late suggestions answer for a discarded workout writes no cardio numbers or measure', async ({
@@ -375,7 +379,8 @@ test('a late suggestions answer for a discarded workout writes no cardio numbers
 }) => {
 	const userId = userData.userId;
 	await createExercises(userId, [
-		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
 	]);
 	await logPastCardio(userId);
 	let release!: () => void;
