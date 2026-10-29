@@ -296,6 +296,39 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 	await expect(page.getByTestId('Trail run-missing')).toContainText('Set 2: enter a distance under 1,000 km');
 });
 
+test('a History copy of cardio intervals survives a reload', async ({ page, userData }) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run', 'Bike']);
+	// A typed distance is saved locally as it is entered
+	await box(page, 'Run', 1, 'distance').fill('3');
+	// Two intervals in progress, so the copy below fills both
+	await page.getByRole('button', { name: 'Add an interval to Bike' }).click();
+	// Copying last time's intervals over it saves too: a reload keeps the copy, not the old '3'
+	await page.getByTestId('Run-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	const runHistory = page.getByRole('dialog').filter({ hasText: 'History' });
+	await runHistory.getByLabel('Copy these sets').first().click();
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('5');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
+	await page.getByTestId('Bike-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	const bikeHistory = page.getByRole('dialog').filter({ hasText: 'History' });
+	await bikeHistory.getByLabel('Copy these sets').first().click();
+	await expectBox(box(page, 'Bike', 1, 'load'), '8');
+	await expectBox(box(page, 'Bike', 2, 'time'), '0:30');
+	await page.reload();
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('5');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
+	await expectBox(box(page, 'Bike', 1, 'load'), '8');
+	await expectBox(box(page, 'Bike', 2, 'time'), '0:30');
+});
+
 test('once a cardio exercise has workouts its measure is fixed; the stats chart has cardio charts; merge and replace respect measures', async ({
 	page,
 	userData
