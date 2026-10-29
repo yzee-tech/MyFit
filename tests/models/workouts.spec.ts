@@ -2060,6 +2060,22 @@ test('sets that follow set 1 keep following it after a kg/lb switch', async ({ p
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
 });
 
+test('sets that follow set 1 keep following it after a drawer Edit of the exercise', async ({ page }) => {
+	const box = await facePullsWithCopies(page);
+	// Same exercise, same measure: only a routine note changes. The edit rebuilds the set records, and
+	// who follows set 1 carries to them
+	await page.getByTestId('Face pulls-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.locator('#exercise-note').fill('slow negatives');
+	await page.getByRole('dialog').getByRole('button', { name: 'Update', exact: true }).click();
+	// The rebuilt records are on screen before the next edit: the boxes' handlers then hold the new sets
+	await expectBox(box(2, 'load'), '15');
+	await box(1, 'load').fill('40');
+	await expectBox(box(2, 'load'), '40');
+	await expectBox(box(3, 'load'), '40');
+	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
+});
+
 test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 again', async ({ page }) => {
 	const box = await facePullsWithCopies(page);
 	await box(3, 'load').fill('20');
