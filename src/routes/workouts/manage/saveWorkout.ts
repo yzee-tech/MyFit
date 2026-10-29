@@ -5,6 +5,7 @@
 import { trpc } from '$lib/trpc/client';
 import type { RouterInputs } from '$lib/trpc/router';
 import {
+	browserTimeZone,
 	convertExerciseDistances,
 	convertExerciseLoads,
 	type WorkoutExerciseInProgress
@@ -33,7 +34,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 		const cardio = isCardioMeasure(measure);
 		return ex.sets.map((_set, idx) => {
 			// Ticks and which boxes were typed are for the workout screen only: the set schema is strict
-			const { completed, chosen, suggested, timeSeconds, distance, ...set } = _set;
+			const { completed, chosen, suggested, hintBase, timeSeconds, distance, ...set } = _set;
 			if (set.skipped) [set.reps, set.load, set.RIR] = [0, 0, 0];
 			if (cardio && !set.skipped) {
 				set.reps = 0;
@@ -59,6 +60,7 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 	const userBodyweight = workoutRunes.workoutData.userBodyweight;
 
 	return {
+		timeZone: browserTimeZone(),
 		workoutData: {
 			startedAt: workoutRunes.workoutData.startedAt,
 			// A new workout ends at its last ticked set (none: when it's saved). An edit sends its own

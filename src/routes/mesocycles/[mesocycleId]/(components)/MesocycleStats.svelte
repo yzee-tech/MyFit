@@ -8,7 +8,8 @@
 	} from '$lib/utils/mesocycleUtils';
 	import CircleCheck from 'virtual:icons/lucide/circle-check';
 	import CalendarCheck from 'virtual:icons/lucide/calendar-check';
-	import { getBlockWeek } from '$lib/utils/workoutUtils';
+	import { getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { useNow } from '$lib/utils/useNow.svelte';
 	import BicepsFlexed from 'virtual:icons/lucide/biceps-flexed';
 	import Frown from 'virtual:icons/lucide/frown';
 	import CalendarHeart from 'virtual:icons/lucide/calendar-heart';
@@ -21,10 +22,12 @@
 
 	const performedWorkouts = $derived(mesocycle.workoutsOfMesocycle);
 	const plannedWeeks = $derived(mesocycle.weeklyRIR.length);
+	// Weeks in the phone's days, up to the day the block ended, or today
+	const now = useNow();
 	const weeksDone = $derived.by(() => {
 		if (!mesocycle.startDate) return 0;
-		const lastDay = mesocycle.endDate ?? new Date();
-		return Math.min(getBlockWeek(mesocycle.startDate, new Date(lastDay)), plannedWeeks);
+		const lastDay = mesocycle.endDate ?? now.value ?? new Date();
+		return Math.min(getBlockWeekHere(mesocycle.startDate, new Date(lastDay)), plannedWeeks);
 	});
 	const workoutsPerWeek = $derived(weeksDone > 0 ? performedWorkouts.length / weeksDone : 0);
 

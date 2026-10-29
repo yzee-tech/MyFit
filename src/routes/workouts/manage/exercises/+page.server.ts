@@ -1,5 +1,3 @@
-import { createContext } from '$lib/trpc/context';
-import { createCaller } from '$lib/trpc/router';
 import { error, redirect } from '@sveltejs/kit';
 
 export const load = async (event) => {
@@ -12,22 +10,28 @@ export const load = async (event) => {
 	if (!routineName && event.url.searchParams.has('splitDayIndex') && !editing && !keepCurrent) {
 		redirect(303, '/workouts/manage/start');
 	}
-	if (!routineName || editing || keepCurrent) return { workoutExercises: [] };
+	// Nothing to fetch (the page starts with no exercises)
+	if (!routineName || editing) return { suggestionsRequest: null };
 
 	const userBodyweight = parseFloat(event.url.searchParams.get('userBodyweight') ?? '');
-	if (isNaN(userBodyweight) || userBodyweight <= 0) error(400, 'Invalid bodyweight');
+	if (isNaN(userBodyweight) || userBodyweight <= 0) {
+		// An old resume link has no bodyweight: nothing to ask for, and nothing to refuse
+		if (keepCurrent) return { suggestionsRequest: null };
+		error(400, 'Invalid bodyweight');
+	}
 
 	const sessionUnit = event.url.searchParams.get('sessionUnit');
 	const sessionWeightSetId = event.url.searchParams.get('sessionWeightSetId') ?? undefined;
 
-	const trpc = createCaller(await createContext(event));
-	const serverData = trpc.workouts.getWorkoutExercisesWithPreviousData({
-		userBodyweight,
-		routineName,
-		useActiveMesocycle,
-		welcomeBack: event.url.searchParams.has('welcomeBack'),
-		sessionUnit: sessionUnit === 'KG' || sessionUnit === 'LB' ? sessionUnit : undefined,
-		sessionWeightSetId
-	});
-	return { serverData };
+	// The page asks for the suggestions itself, with the phone's timezone (the week is counted in its days)
+	return {
+		suggestionsRequest: {
+			userBodyweight,
+			routineName,
+			useActiveMesocycle,
+			welcomeBack: event.url.searchParams.has('welcomeBack'),
+			sessionUnit: sessionUnit === 'KG' ? ('KG' as const) : sessionUnit === 'LB' ? ('LB' as const) : undefined,
+			sessionWeightSetId
+		}
+	};
 };

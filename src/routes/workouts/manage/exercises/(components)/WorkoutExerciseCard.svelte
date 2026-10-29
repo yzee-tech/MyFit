@@ -9,10 +9,12 @@
 		allSetsAtMaxReps,
 		getNextWeightHint,
 		switchExerciseUnit,
-		type WorkoutExerciseInProgress
+		type WorkoutExerciseInProgress,
+		hintBaseAfterUnitSwitch,
+		convertSuggestedLoads
 	} from '$lib/utils/workoutUtils';
 	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
-	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
+	import { convertWeight, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { canWarmUp } from '$lib/utils/oneRepMax';
 	import { intervalsLabel, isCardioMeasure } from '$lib/utils/measure';
 	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
@@ -38,7 +40,6 @@
 
 	let { readOnly, idx, reordering = false, comparing = false, exercise = $bindable() }: PropsType = $props();
 
-	let originalSetLoads = $state(exercise.sets.map((set) => set.load));
 	let isContextMenuOpen = $state(false);
 
 	// Reps only: suggestions add reps, never weight, up to an optional cap
@@ -76,16 +77,29 @@
 				)
 	);
 
+	let setsComponent: SetsComponent | undefined = $state();
+
 	function toggleUnit() {
-		const to = (exercise.weightUnit ?? 'KG') === 'KG' ? 'LB' : 'KG';
-		exercise = switchExerciseUnit(
-			$state.snapshot(exercise),
-			to,
-			workoutRunes.workoutData?.userBodyweight ?? 0,
-			weightSets,
-			isRepsOnly
+		const oldSets = [...exercise.sets];
+		const hadHintBase = exercise.sets.map((set) => set.hintBase !== undefined);
+		const snapshot = $state.snapshot(exercise);
+		const from = exercise.weightUnit ?? 'KG';
+		const to = from === 'KG' ? 'LB' : 'KG';
+		const switchUnit = (source: WorkoutExerciseInProgress) =>
+			switchExerciseUnit(source, to, workoutRunes.workoutData?.userBodyweight ?? 0, weightSets, isRepsOnly);
+		// Keep the visible conversion unchanged, including empty boxes.
+		exercise = switchUnit(snapshot);
+		exercise.sets.forEach((set, i) => {
+			if (hadHintBase[i])
+				set.hintBase = hintBaseAfterUnitSwitch(snapshot, i, set, to, workoutRunes.workoutData?.userBodyweight ?? 0);
+		});
+		// What a typed-over box brings back when it is emptied: the same weight in the new unit, as exact as the
+		// other weights are shown
+		exercise.sets = convertSuggestedLoads($state.snapshot(exercise.sets), (load) =>
+			roundWeight(convertWeight(load, from, to))
 		);
-		originalSetLoads = exercise.sets.map((set) => set.load);
+		// The switch made new set objects: who follows set 1 stays the same
+		setsComponent?.carryFollowOver(oldSets, exercise.sets);
 		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
@@ -274,7 +288,7 @@
 		{#if comparing && !isCardio}
 			<CompareComponent {exercise} />
 		{:else}
-			<SetsComponent repsOnly={isRepsOnly} bind:originalSetLoads bind:exercise />
+			<SetsComponent bind:this={setsComponent} repsOnly={isRepsOnly} bind:exercise />
 		{/if}
 	{/if}
 </div>

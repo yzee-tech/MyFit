@@ -238,6 +238,47 @@ test('block weeks follow the calendar', () => {
 	expect(getBlockWeek(start, new Date('2026-09-29T09:00:00Z'))).toEqual(5);
 });
 
+test('block weeks count local calendar days in the phone timezone', () => {
+	const shanghai = 'Asia/Shanghai';
+	// Started Oct 20 at 18:00 Shanghai, now Oct 27 at 09:00 Shanghai: the 8th local day, Week 2 (168 hours have not passed)
+	const evening = new Date('2026-10-20T10:00:00Z');
+	expect(getBlockWeek(evening, new Date('2026-10-27T01:00:00Z'), shanghai)).toEqual(2);
+	// The same day, the day before the 8th, the 8th at midnight
+	expect(getBlockWeek(evening, new Date('2026-10-20T15:00:00Z'), shanghai)).toEqual(1);
+	expect(getBlockWeek(evening, new Date('2026-10-26T15:59:00Z'), shanghai)).toEqual(1);
+	expect(getBlockWeek(evening, new Date('2026-10-26T16:00:00Z'), shanghai)).toEqual(2);
+	expect(getBlockWeek(evening, new Date('2026-11-03T01:00:00Z'), shanghai)).toEqual(3);
+	// An instant whose UTC date is another day than its Shanghai date: 2026-10-20T17:00Z is Oct 21 01:00 there
+	const lateUtc = new Date('2026-10-20T17:00:00Z');
+	expect(getBlockWeek(lateUtc, new Date('2026-10-27T10:00:00Z'), shanghai)).toEqual(1);
+	expect(getBlockWeek(lateUtc, new Date('2026-10-27T10:00:00Z'), 'UTC')).toEqual(2);
+	// A start in the future or a backdated now: Week 1
+	expect(getBlockWeek(evening, new Date('2026-10-01T00:00:00Z'), shanghai)).toEqual(1);
+	// A clock change inside the interval: Oct 28 22:00 to Nov 4 00:30 in New York is 7 local days (and 167.5 hours)
+	const newYork = 'America/New_York';
+	expect(getBlockWeek(new Date('2026-10-29T02:00:00Z'), new Date('2026-11-04T05:30:00Z'), newYork)).toEqual(2);
+	expect(getBlockWeek(new Date('2026-10-29T02:00:00Z'), new Date('2026-11-04T04:30:00Z'), newYork)).toEqual(1);
+	// Strings are fine as the start
+	expect(getBlockWeek('2026-10-20T10:00:00.000Z', new Date('2026-10-27T01:00:00Z'), shanghai)).toEqual(2);
+});
+
+test('a missing, empty, invalid or over-long timezone counts UTC days and never throws', () => {
+	const start = new Date('2026-10-20T17:00:00Z');
+	const now = new Date('2026-10-27T10:00:00Z');
+	const utc = getBlockWeek(start, now, 'UTC');
+	expect(utc).toEqual(2);
+	expect(getBlockWeek(start, now)).toEqual(utc);
+	expect(getBlockWeek(start, now, undefined)).toEqual(utc);
+	expect(getBlockWeek(start, now, null)).toEqual(utc);
+	expect(getBlockWeek(start, now, '')).toEqual(utc);
+	expect(getBlockWeek(start, now, 'Not/A_Zone')).toEqual(utc);
+	// 65 characters: invalid even though shaped like a zone name
+	expect(getBlockWeek(start, now, `America/${'A'.repeat(57)}`)).toEqual(utc);
+	expect(() => getBlockWeek(start, now, 'x'.repeat(10000))).not.toThrow();
+	// 64 characters is not too long by itself, only a real zone is accepted
+	expect(getBlockWeek(start, now, `America/${'A'.repeat(56)}`)).toEqual(utc);
+});
+
 test('RIR stays at the last week once a block runs past its length', () => {
 	// 3 weeks at 3 RIR, 3 at 2, 3 at 1, 1 at 0 = 10 weeks
 	expect(getRIRForWeek(testSettings.weeklyRIR, 1)).toEqual(3);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import ExerciseTemplateCard from '$lib/components/mesocycleAndExerciseSplit/ExerciseTemplateCard.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -10,7 +11,7 @@
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
 	import { TRPCClientError } from '@trpc/client';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ChevronDownIcon from 'virtual:icons/lucide/chevron-down';
 	import ChevronUpIcon from 'virtual:icons/lucide/chevron-up';
@@ -34,6 +35,26 @@
 		myRoutines = await trpc().exerciseSplits.mine.query();
 	}
 	onMount(refresh);
+
+	/**
+	 * A link from a workout (?routine=name) opens that routine, scrolls it into view and focuses its
+	 * title. Each target is handled once: a refresh after duplicate/move/delete does not scroll again
+	 */
+	let handledTarget: string | null = null;
+	$effect(() => {
+		const target = $page.url.searchParams.get('routine');
+		if (target === null || target === handledTarget || myRoutines === 'loading') return;
+		handledTarget = target;
+		const routine = routines.find((other) => other.name === target);
+		if (!routine) return;
+		if (!shown.includes(routine.name)) shown = [...shown, routine.name];
+		tick().then(() => {
+			const card = document.getElementById(`routine-${routine.id}`);
+			const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			card?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+			card?.querySelector<HTMLElement>('button[aria-expanded]')?.focus({ preventScroll: true });
+		});
+	});
 
 	function editLink(name: string) {
 		return `/exercise-splits/edit?routine=${encodeURIComponent(name)}`;
@@ -151,7 +172,7 @@
 		<div class="flex flex-col gap-2 overflow-y-auto pb-2">
 			{#each routines as routine, idx (routine.id)}
 				{@const isShown = shown.includes(routine.name)}
-				<div class="rounded-lg border bg-card p-3" data-testid="routine-card">
+				<div class="rounded-lg border bg-card p-3" data-testid="routine-card" id="routine-{routine.id}">
 					<div class="flex items-start gap-2">
 						<!-- The title opens and closes the card; the menu beside it stays its own button -->
 						<button

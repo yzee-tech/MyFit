@@ -1,3 +1,4 @@
+import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
@@ -27,11 +28,34 @@ export type PreviousWorkoutData =
 /** How a cardio exercise is measured, and the unit its distances show in */
 export type MeasureInfo = { measure: ExerciseMeasure; distanceUnit: DistanceUnit | null };
 
+/** How much of the follow marks a drawer edit keeps: everything, only the load follows dropped, or none */
+type FollowDrop = 'none' | 'loads' | 'all';
+type FollowCarrier = (
+	oldSets: WorkoutExerciseInProgress['sets'],
+	newSets: WorkoutExerciseInProgress['sets'],
+	drop: FollowDrop
+) => void;
+/**
+ * The follow marks (who still follows set 1) live in each exercise card's SetsComponent, keyed by the
+ * set objects and registered under the exercise name. A drawer edit that keeps the same exercise
+ * rebuilds the set records; the card's marks are carried over through here, so following survives the
+ * edits that leave the copied values valid.
+ */
+const followCarriers = new Map<string, FollowCarrier>();
+export function registerFollowCarrier(name: string, carry: FollowCarrier) {
+	followCarriers.set(name, carry);
+	return () => {
+		if (followCarriers.get(name) === carry) followCarriers.delete(name);
+	};
+}
+
 function createWorkoutRunes() {
 	let workoutData: RouterOutputs['workouts']['getTodaysWorkoutData'] | null = $state(null);
 	let workoutExercises: WorkoutExerciseInProgress[] | null = $state(null);
 	let editingWorkoutId: string | null = $state(null);
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
+	/** A failed routine load can retry its empty placeholder; null history alone is not a failure. */
+	let suggestionsFailed = $state(false);
 	/** This workout's reps-only exercises by name, with their rep cap (null for none) */
 	let repsOnly: Record<string, number | null> = $state({});
 	/** This workout's cardio exercises by name (missing means reps): their measure and distance unit */
@@ -67,6 +91,7 @@ function createWorkoutRunes() {
 					editingWorkoutId = null,
 					editSnapshot = null,
 					previousWorkoutData,
+					suggestionsFailed = false,
 					repsOnly = {},
 					measures = {},
 					lastActivityAt = null
@@ -93,6 +118,7 @@ function createWorkoutRunes() {
 				editingWorkoutId,
 				editSnapshot,
 				previousWorkoutData,
+				suggestionsFailed,
 				repsOnly,
 				measures,
 				lastActivityAt
@@ -106,6 +132,7 @@ function createWorkoutRunes() {
 		editingWorkoutId = null;
 		editSnapshot = null;
 		previousWorkoutData = null;
+		suggestionsFailed = false;
 		repsOnly = {};
 		measures = {};
 		lastActivityAt = null;
@@ -136,8 +163,11 @@ function createWorkoutRunes() {
 
 	/** Looks up which of these exercises are reps only (e.g. when editing a past workout) */
 	async function loadRepsOnly(exerciseNames: string[]) {
+		// The answer belongs to this edit: if the workout was discarded or replaced meanwhile, it is dropped
+		const askedFor = editingWorkoutId;
 		try {
 			const exercises = await trpc().exercises.forPicker.query();
+			if (editingWorkoutId !== askedFor) return;
 			for (const exercise of exercises) {
 				if (exerciseNames.includes(exercise.name)) setRepsOnly(exercise.name, exercise);
 			}
@@ -193,6 +223,7 @@ function createWorkoutRunes() {
 			weightUnit,
 			weightSetId
 		});
+		suggestionsFailed = false;
 		saveStoresToLocalStorage();
 		suggestSetsFromLastTime(exercise.name);
 		return true;
@@ -213,6 +244,8 @@ function createWorkoutRunes() {
 		const exercise = workoutExercises?.find((ex) => ex.name === exerciseName);
 		const userBodyweight = workoutData?.userBodyweight;
 		if (!exercise || typeof userBodyweight !== 'number' || exercise.sets.length === 0) return;
+		// The answer belongs to this workout: if it was discarded or replaced meanwhile, it is dropped
+		const startedMs = new Date(workoutData?.startedAt ?? NaN).getTime();
 		try {
 			const suggested = await trpc().workouts.suggestSets.query({
 				exerciseName,
@@ -226,9 +259,12 @@ function createWorkoutRunes() {
 				changeAmount: exercise.changeAmount,
 				weightUnit: exercise.weightUnit ?? 'KG',
 				weightSetId: exercise.weightSetId,
-				userBodyweight
+				userBodyweight,
+				timeZone: browserTimeZone(),
+				now: new Date().toISOString()
 			});
 			if (!suggested) return;
+			if (workoutData === null || new Date(workoutData.startedAt).getTime() !== startedMs) return;
 			setRepsOnly(exerciseName, suggested);
 			setMeasure(exerciseName, { measure: suggested.measure, distanceUnit: suggested.distanceUnit });
 			if (suggested.previous) addPreviousExercise(suggested.previous.exercise, suggested.previous.userBodyweight);
@@ -242,7 +278,9 @@ function createWorkoutRunes() {
 					set.distance === undefined
 			);
 			if (!suggested.sets || !current || !untouched) return;
-			current.sets = suggested.sets;
+			// The hint starts from these final numbers: none until the weight changes (and none at all in a past
+			// workout, where the hint is off)
+			current.sets = editingWorkoutId === null ? withHintBase(suggested.sets) : suggested.sets;
 			saveStoresToLocalStorage();
 		} catch (error) {
 			console.error('Failed to suggest sets:', error);
@@ -262,10 +300,15 @@ function createWorkoutRunes() {
 		}
 		const measureChanged = measureOf(exercise.name).measure !== measureBefore;
 		const [fromUnit, toUnit] = [unitBefore ?? 'KM', measureOf(exercise.name).distanceUnit ?? 'KM'];
-		const inDistanceUnit = <T extends { distance?: number }>(set: T): T =>
-			set.distance === undefined || fromUnit === toUnit
-				? set
-				: { ...set, distance: convertDistance(set.distance, fromUnit, toUnit) };
+		// A typed-over distance is restored from its backup: it follows the unit switch too
+		const inDistanceUnit = <T extends { distance?: number; suggested?: { distance?: number } }>(set: T): T => {
+			if (fromUnit === toUnit) return set;
+			const out = set.distance === undefined ? set : { ...set, distance: convertDistance(set.distance, fromUnit, toUnit) };
+			const remembered = out.suggested?.distance;
+			return typeof remembered === 'number'
+				? { ...out, suggested: { ...out.suggested, distance: convertDistance(remembered, fromUnit, toUnit) } }
+				: out;
+		};
 		// Switching between a machine's levels and weights: the loads so far mean something else
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const machine = machineSetOf(exercise.name, weightSets);
@@ -281,28 +324,37 @@ function createWorkoutRunes() {
 		const inUnit = (load: number | undefined) =>
 			load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', weightUnit ?? 'KG');
 		const sets = measureChanged
-			? current.sets.map((set) => ({
-					...set,
-					reps: undefined,
-					load: undefined,
-					RIR: undefined,
-					timeSeconds: undefined,
-					distance: undefined,
-					chosen: [],
-					completed: false,
-					miniSets: []
-				}))
+			? // A different measure: the old numbers mean something else, and a suggestion or hint baseline
+				// from the old measure must not show on the new measure's boxes
+				current.sets.map((set) => {
+					const { reps, load, RIR, timeSeconds, distance, suggested, hintBase, ...rest } = set;
+					return { ...rest, chosen: [], completed: false, miniSets: [] };
+				})
 			: kindChanged
-				? current.sets.map((set) => ({ ...inDistanceUnit(set), load: undefined, completed: false }))
-				: current.sets.map((set) => ({
-						...inDistanceUnit(set),
-						load: inUnit(set.load),
-						miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
-					}));
+				? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory
+					// included; time and distance survive in the new unit
+					current.sets.map((set) => ({ ...clearLoads(inDistanceUnit(set)), miniSets: set.miniSets.map(clearLoads) }))
+				: convertSuggestedLoads(
+						current.sets.map((set) => ({
+							...inDistanceUnit(set),
+							load: inUnit(set.load),
+							...(set.hintBase ? { hintBase: { ...set.hintBase, load: inUnit(set.hintBase.load)! } } : {}),
+							miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inUnit(miniSet.load) }))
+						})),
+						(load) => inUnit(load)!
+					);
 		workoutExercises[editingExerciseIndex] = {
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit
 		};
+		// Same exercise, same card: who follows set 1 survives edits that leave the copied values valid -
+		// a measure change drops every follow, a levels/weights switch only the load follows
+		if (exercise.name === current.name)
+			followCarriers.get(current.name)?.(
+				current.sets,
+				workoutExercises[editingExerciseIndex].sets,
+				measureChanged ? 'all' : kindChanged ? 'loads' : 'none'
+			);
 		saveStoresToLocalStorage();
 		return true;
 	}
@@ -349,16 +401,17 @@ function createWorkoutRunes() {
 		}
 		// Its distances are shown in the new exercise's unit
 		const [from, to] = [unitBefore ?? 'KM', exercise.distanceUnit ?? 'KM'];
-		const inNewUnit = <T extends { distance?: number }>(set: T): T =>
-			set.distance === undefined || from === to ? set : { ...set, distance: convertDistance(set.distance, from, to) };
+		const inNewUnit = <T extends { distance?: number; suggested?: { distance?: number } }>(set: T): T => {
+			if (from === to) return set;
+			const out = set.distance === undefined ? set : { ...set, distance: convertDistance(set.distance, from, to) };
+			const remembered = out.suggested?.distance;
+			return typeof remembered === 'number'
+				? { ...out, suggested: { ...out.suggested, distance: convertDistance(remembered, from, to) } }
+				: out;
+		};
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const levels = Boolean(levelSetOf(exercise.name, weightSets));
 		const kindChanged = levels !== isLevelUnit(current.weightUnit);
-		const unload = <T extends { load?: number; completed: boolean }>(set: T) => ({
-			...set,
-			load: undefined,
-			completed: false
-		});
 		workoutExercises[exerciseIdx] = {
 			...current,
 			// The save links it to its exercise by name
@@ -371,7 +424,7 @@ function createWorkoutRunes() {
 			sets: current.sets.map(inNewUnit),
 			...(kindChanged && {
 				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
-				sets: current.sets.map((set) => ({ ...unload(inNewUnit(set)), miniSets: set.miniSets.map(unload) }))
+				sets: current.sets.map((set) => ({ ...clearLoads(inNewUnit(set)), miniSets: set.miniSets.map(clearLoads) }))
 			})
 		};
 		saveStoresToLocalStorage();
@@ -438,13 +491,15 @@ function createWorkoutRunes() {
 				};
 			}
 			exerciseHistorySheetOpen = false;
+			// The strength path below saves after copying; the cardio copy needs it too, or a reload loses it
+			saveStoresToLocalStorage();
 			return;
 		}
 
 		for (let i = 0; i < exerciseToEdit.sets.length; i++) {
 			if (!exerciseFromHistory.sets[i]) break;
 			const { workoutExerciseId, timeSeconds, distanceMeters, ...historySet } = exerciseFromHistory.sets[i];
-			exerciseToEdit.sets[i] = {
+			const copied: WorkoutExerciseInProgress['sets'][number] = {
 				...historySet,
 				load: sameKindOfLoad ? historySet.load : exerciseToEdit.sets[i].load,
 				completed: false,
@@ -457,9 +512,12 @@ function createWorkoutRunes() {
 					return { ...restOfTheMiniSet, completed: false };
 				})
 			};
+			// A new starting point from the copied numbers (RIR too): no hint until the weight changes
+			exerciseToEdit.sets[i] = editingWorkoutId === null ? { ...copied, hintBase: hintBaseOf(copied) } : copied;
 		}
 
 		exerciseHistorySheetOpen = false;
+		saveStoresToLocalStorage();
 	}
 
 	function loadWorkout(workout: FullWorkoutWithMesoData, homeWeightUnit: WeightUnit) {
@@ -574,6 +632,13 @@ function createWorkoutRunes() {
 		},
 		setMeasure,
 		measureOf,
+		get suggestionsFailed() {
+			return suggestionsFailed;
+		},
+		set suggestionsFailed(value: boolean) {
+			suggestionsFailed = value;
+			saveStoresToLocalStorage();
+		},
 		get previousWorkoutData() {
 			return previousWorkoutData;
 		},

@@ -66,8 +66,11 @@ type TodaysWorkoutData = {
 	myRoutines?: RoutineOption[];
 	/** The routine this workout is done from (block or My routines); none for a blank workout */
 	routineName?: string | null;
-	/** Set when it has been long enough since the last workout for an easier first session back */
-	welcomeBack?: { daysSinceLastWorkout: number };
+	/**
+	 * Set when the welcome-back card is on and there is an earlier workout: the phone counts the days since
+	 * on its own calendar and shows the card from `afterDays`
+	 */
+	welcomeBackCheck?: { lastWorkoutStartedAt: Date; afterDays: number };
 	/** Unit for bodyweight and a starting choice for routines set to "ask each time" */
 	homeWeightUnit: WeightUnitType;
 	/** Unit picked at the start of this workout, for routines set to "ask each time" */
@@ -85,9 +88,7 @@ export type RoutineOption = {
 
 type ActiveBlockData = {
 	mesocycle: Mesocycle;
-	weekNumber: number;
 	totalWeeks: number;
-	blockFinished: boolean;
 	routines: RoutineOption[];
 };
 
@@ -183,13 +184,18 @@ type WorkoutExercisesWithPreviousData = {
 };
 
 /** Whether a workout on this date falls in a deload week of the block */
-async function isInDeloadWeek(userId: string, mesocycleId: string, workoutDate: Date | string) {
+async function isInDeloadWeek(
+	userId: string,
+	mesocycleId: string,
+	workoutDate: Date | string,
+	timeZone: string | undefined
+) {
 	const mesocycle = await prisma.mesocycle.findFirst({
 		where: { id: mesocycleId, userId },
 		select: { startDate: true, weeklyRIR: true }
 	});
 	if (!mesocycle?.startDate) return false;
-	return isDeloadWeek(mesocycle.weeklyRIR, getBlockWeek(mesocycle.startDate, new Date(workoutDate)));
+	return isDeloadWeek(mesocycle.weeklyRIR, getBlockWeek(mesocycle.startDate, new Date(workoutDate), timeZone));
 }
 
 /** How many past performances of an exercise feed its progression */
@@ -259,6 +265,7 @@ const workoutInputDataSchema = z.object({
 });
 
 const createWorkoutSchema = z.strictObject({
+	timeZone: z.string().optional().catch(undefined),
 	workoutData: workoutInputDataSchema,
 	workoutExercises: z.array(ignoreExerciseLink(WorkoutExerciseCreateWithoutWorkoutInputSchema)),
 	workoutExercisesSets: z.array(z.array(WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema)),
@@ -286,7 +293,13 @@ function newWorkoutEnd(startedAt: Date, endedAt: Date | string | undefined) {
  * A routine of My routines as the plan the suggestions work from: its exercises, with the active
  * mesocycle's progression settings and week, else steady ones
  */
-async function findMyRoutineForWorkout(userId: string, routineName: string, inBlock = false) {
+async function findMyRoutineForWorkout(
+	userId: string,
+	routineName: string,
+	inBlock = false,
+	timeZone?: string,
+	now = new Date()
+) {
 	const [routine, block] = await Promise.all([
 		prisma.exerciseSplitDay.findFirst({
 			where: { exerciseSplit: { userId }, name: routineName },
@@ -307,7 +320,7 @@ async function findMyRoutineForWorkout(userId: string, routineName: string, inBl
 			sets: routineSetCount(sets)
 		}))
 	};
-	const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
+	const weekNumber = block?.startDate ? getBlockWeek(block.startDate, now, timeZone) : 1;
 	return { plan, routineWeightUnit: routine.weightUnit, weekNumber, inBlock: block !== null };
 }
 
@@ -453,8 +466,8 @@ export const workouts = t.router({
 		return { firstWorkoutDate, lastWorkoutDate, allMesocycles };
 	}),
 
-	findById: t.procedure.input(z.string().cuid2()).query(({ input, ctx }) =>
-		prisma.workout.findUnique({
+	findById: t.procedure.input(z.string().cuid2()).query(async ({ input, ctx }) => {
+		const workout = await prisma.workout.findUnique({
 			where: { id: input, userId: ctx.userId },
 			include: {
 				workoutOfMesocycle: { include: { mesocycle: true } },
@@ -467,8 +480,18 @@ export const workouts = t.router({
 					}
 				}
 			}
-		})
-	),
+		});
+		if (!workout) return null;
+		// Whether My routines still has the routine this workout was done from (it may be renamed or deleted)
+		const routineExists =
+			workout.routineName === null
+				? false
+				: (await prisma.exerciseSplitDay.findFirst({
+						where: { name: workout.routineName, exerciseSplit: { userId: ctx.userId } },
+						select: { id: true }
+					})) !== null;
+		return { ...workout, routineExists };
+	}),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
 		await prisma.workout.delete({ where: { id: input, userId: ctx.userId } });
@@ -501,8 +524,10 @@ export const workouts = t.router({
 		const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
 		const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
 		if (lastWorkout && welcomeBackEnabled) {
-			const daysSinceLastWorkout = Math.floor((Date.now() - lastWorkout.startedAt.getTime()) / (24 * 60 * 60 * 1000));
-			if (daysSinceLastWorkout >= welcomeBackAfterDays) todaysWorkoutData.welcomeBack = { daysSinceLastWorkout };
+			todaysWorkoutData.welcomeBackCheck = {
+				lastWorkoutStartedAt: lastWorkout.startedAt,
+				afterDays: welcomeBackAfterDays
+			};
 		}
 
 		// Routines to pick from are My routines, in a block or not
@@ -543,14 +568,11 @@ export const workouts = t.router({
 		}
 
 		const mesocycle = data;
-		const weekNumber = getBlockWeek(mesocycle.startDate!);
 		const totalWeeks = mesocycle.weeklyRIR.length;
 
 		todaysWorkoutData.activeBlock = {
 			mesocycle,
-			weekNumber,
 			totalWeeks,
-			blockFinished: weekNumber > totalWeeks,
 			routines
 		};
 		return todaysWorkoutData;
@@ -570,7 +592,10 @@ export const workouts = t.router({
 				/** Unit chosen at the start of the workout, for routines set to "ask each time" */
 				sessionUnit: z.enum(['KG', 'LB']).optional(),
 				/** Weights this gym has, for routines set to "ask each time" */
-				sessionWeightSetId: z.string().cuid2().optional()
+				sessionWeightSetId: z.string().cuid2().optional(),
+				timeZone: z.string().optional().catch(undefined),
+				/** The phone's clock, so the week it shows and the week the suggestions use are the same */
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -587,7 +612,13 @@ export const workouts = t.router({
 				measures: {},
 				previousWorkoutData: null
 			};
-			const today = await findMyRoutineForWorkout(ctx.userId, input.routineName, input.useActiveMesocycle === true);
+			const today = await findMyRoutineForWorkout(
+				ctx.userId,
+				input.routineName,
+				input.useActiveMesocycle === true,
+				input.timeZone,
+				input.now ? new Date(input.now) : undefined
+			);
 			if (!today) return workoutExercisesWithPreviousData;
 			const { plan, routineWeightUnit, weekNumber, inBlock } = today;
 
@@ -704,7 +735,9 @@ export const workouts = t.router({
 				changeAmount: z.number().nullish(),
 				weightUnit: z.enum(['KG', 'LB', 'LEVEL']),
 				weightSetId: z.string().nullish(),
-				userBodyweight: z.number().positive()
+				userBodyweight: z.number().positive(),
+				timeZone: z.string().optional().catch(undefined),
+				now: z.string().datetime().optional().catch(undefined)
 			})
 		)
 		.query(async ({ ctx, input }) => {
@@ -737,7 +770,9 @@ export const workouts = t.router({
 			};
 
 			// The current block's effort and overload settings, else steady defaults
-			const weekNumber = block?.startDate ? getBlockWeek(block.startDate) : 1;
+			const weekNumber = block?.startDate
+				? getBlockWeek(block.startDate, input.now ? new Date(input.now) : new Date(), input.timeZone)
+				: 1;
 			const plan: ProgressionPlan = {
 				settings: {
 					weeklyRIR: block?.weeklyRIR ?? [...NO_BLOCK_PROGRESSION.weeklyRIR],
@@ -811,7 +846,12 @@ export const workouts = t.router({
 				select: { id: true }
 			});
 			if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
-			workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycle.id, workout.startedAt);
+			workout.isDeload = await isInDeloadWeek(
+				ctx.userId,
+				workoutOfMesocycle.mesocycle.id,
+				workout.startedAt,
+				input.timeZone
+			);
 			workout.workoutOfMesocycle = {
 				create: { mesocycleId: workoutOfMesocycle.mesocycle.id }
 			};
@@ -873,7 +913,7 @@ export const workouts = t.router({
 			// Times are the user's to correct, as given; the routine it was done from stays as saved
 			const existing = await prisma.workout.findFirst({
 				where: { id: input.id, userId: ctx.userId },
-				select: { routineName: true }
+				select: { routineName: true, isDeload: true, startedAt: true }
 			});
 			if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workout not found' });
 			await assertSetsMatchMeasures(ctx.userId, input.data);
@@ -890,9 +930,13 @@ export const workouts = t.router({
 			const workoutOfMesocycle = await prisma.workoutOfMesocycle.findFirst({
 				where: { workoutId: input.id, workout: { userId: ctx.userId } }
 			});
-			if (workoutOfMesocycle) {
-				workout.isDeload = await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt);
-			}
+			// The week is worked out again only when the start moved (a length-only edit keeps the saved
+			// value); a workout outside a block keeps what it had
+			const startMoved = new Date(input.data.workoutData.startedAt!).getTime() !== existing.startedAt.getTime();
+			workout.isDeload =
+				workoutOfMesocycle && startMoved
+					? await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt, input.data.timeZone)
+					: existing.isDeload;
 
 			const { byName, syncQueries } = await resolveExercises(ctx.userId, withMeasureHints(input.data), {
 				restore: false

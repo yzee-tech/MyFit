@@ -33,6 +33,52 @@ What changed in MyFit, newest first.
 - The CSV export has two new columns at the end, `timeSeconds` and `distanceMeters`, filled for cardio sets (the
   JSON export carries them on every set).
 
+## 2026-10-28: clean-up after the weeks and hints work (PR #58)
+
+### Fixed
+
+- Switching an exercise between kg and lb now converts the number a cleared weight box would
+  restore, so emptying the box brings back the right weight in the new unit.
+- Continuing or resuming a workout whose suggestions failed to load, from the start page or the
+  workout panel, tries the load again instead of leaving an empty workout.
+- The suggestions and the welcome-back card now use the phone's clock for the week and the days
+  since the last workout, so they agree with the week label around midnight and week changes.
+  A missing or invalid time falls back to the server's clock.
+- Starting a new workout clears a failed-load flag or reps-only settings left by the one before;
+  a late answer from an earlier workout, including the reps-only lookup of a past workout that was
+  discarded, no longer lands in the new one.
+- Sets that follow set 1 (copies of its numbers) keep following it after switching an exercise between kg
+  and lb.
+- Editing a past workout no longer creates a reps hint, and emptying a reps box there leaves it empty.
+- Editing a workout started in the repeated hour when clocks go back keeps its start time exactly.
+
+### Changed
+
+- The welcome-back card counts calendar days on the phone: Monday evening to the next Monday
+  morning is 7 days.
+
+## 2026-10-27: workout weeks and reps hints (PR #57)
+
+### Fixed
+
+- Weeks are now counted by local calendar day in the phone's timezone: day 8 is Week 2,
+  even when fewer than 168 hours have passed. This applies to week labels and deload suggestions.
+  A missing or invalid timezone falls back to UTC. Saved deload flags are not rewritten; editing
+  a workout keeps its flag unless its start changes. A displayed week can differ from the
+  week an earlier in-progress label showed; a workout already in progress keeps its starting week.
+- The reps hint stays put while reps or RIR are typed or cleared. Use and Previous start a new
+  baseline. The hint now says "1 rep".
+- Editing only a workout's length keeps the original start time, including seconds and milliseconds.
+- A failed request for workout suggestions shows a message with a Retry button; reloading the page loads them.
+
+### Changed
+
+- A block's weekly effort marks its current week. The deload badge is no longer filled by default.
+- A past workout shows its block week under the block name, without capping it: Week 9 can appear
+  in a 6-week block when that workout was done after the planned end.
+- The routine chip opens that routine in My routines when it still exists. The block name stays
+  a link without an underline.
+
 ## 2026-10-26: export follow-ups (PR #55)
 
 ### Changed

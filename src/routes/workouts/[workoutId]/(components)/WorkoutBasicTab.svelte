@@ -23,6 +23,7 @@
 	import { TRPCClientError } from '@trpc/client';
 	import { workoutRunes } from '../../manage/workoutRunes.svelte';
 	import { workoutName } from '$lib/utils/workoutNames';
+	import { getBlockWeekHere } from '$lib/utils/workoutUtils';
 
 	type PropsType = { workout: FullWorkoutWithMesoData };
 	let { workout }: PropsType = $props();
@@ -136,18 +137,39 @@
 	<Card.Content class="space-y-3">
 		<div class="flex flex-col">
 			<span class="text-sm text-muted-foreground">Mesocycle</span>
+			{#snippet routineBadge(label: string)}
+				{#if workout.routineName !== null && workout.routineExists}
+					<!-- Padding makes a bigger tap target without changing how the chip looks -->
+					<a
+						class="-m-2 shrink-0 p-2"
+						data-testid="workout-routine-link"
+						href="/exercise-splits?routine={encodeURIComponent(workout.routineName)}"
+					>
+						<Badge class="whitespace-nowrap" variant="secondary">{label}</Badge>
+					</a>
+				{:else}
+					<Badge class="whitespace-nowrap" data-testid="workout-routine-badge" variant="secondary">{label}</Badge>
+				{/if}
+			{/snippet}
 			{#if workout.workoutOfMesocycle}
 				{@const wm = workout.workoutOfMesocycle}
 				<div class="flex items-center justify-between">
-					<a class="font-semibold underline" href="/mesocycles/{wm.mesocycle.id}">
-						{wm.mesocycle.name}
-					</a>
-					<Badge class="whitespace-nowrap" variant="secondary">{workout.routineName ?? ''}</Badge>
+					<div class="flex min-w-0 flex-col">
+						<a class="font-semibold" href="/mesocycles/{wm.mesocycle.id}">
+							{wm.mesocycle.name}
+						</a>
+						{#if wm.mesocycle.startDate}
+							<span class="text-sm text-muted-foreground" data-testid="workout-mesocycle-week">
+								Week {getBlockWeekHere(wm.mesocycle.startDate, workout.startedAt)}
+							</span>
+						{/if}
+					</div>
+					{@render routineBadge(workout.routineName ?? '')}
 				</div>
 			{:else}
 				<div class="flex items-center justify-between">
 					<span class="font-semibold">No mesocycle</span>
-					<Badge class="whitespace-nowrap" variant="secondary">{workoutName(workout)}</Badge>
+					{@render routineBadge(workoutName(workout))}
 				</div>
 			{/if}
 		</div>
