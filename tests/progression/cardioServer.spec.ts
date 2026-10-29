@@ -488,6 +488,26 @@ test('cardio repeats the latest deload session while strength ignores it', async
 	).toMatchObject({ timeSeconds: 1800, distance: 6 });
 });
 
+test('a welcome-back week repeats the cardio intervals unchanged while strength eases back in', async () => {
+	const { caller } = await seedPerson();
+	const today = await caller.workouts.getWorkoutExercisesWithPreviousData({
+		userBodyweight: 80,
+		routineName: 'Cardio day',
+		welcomeBack: true
+	});
+	const [runToday, bikeToday, rowsToday] = today.todaysWorkoutExercises;
+	// Cardio: last time's intervals exactly, no easing (distance shown in the exercise's km)
+	expect(runToday.sets[0]).toMatchObject({ timeSeconds: 1560, distance: 5 });
+	expect(bikeToday.sets).toHaveLength(2);
+	expect(bikeToday.sets[0]).toMatchObject({ timeSeconds: 30, load: 8 });
+	// Strength in the same routine: last time's weights, one rep fewer, one RIR easier
+	expect(rowsToday.sets.map((set) => [set.load, set.reps, set.RIR])).toEqual([
+		[40, 11, 3],
+		[40, 11, 3],
+		[40, 11, 3]
+	]);
+});
+
 test('create and edit both reject cardio mini-sets while accepting plain intervals', async () => {
 	const { caller, runExercise } = await seedPerson();
 	const data = {
