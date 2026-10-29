@@ -2,7 +2,7 @@
 
 What changed in MyFit, newest first.
 
-## 2026-10-26: cardio exercises (PR #56)
+## 2026-10-30: cardio exercises (PR #56)
 
 ### Added
 
