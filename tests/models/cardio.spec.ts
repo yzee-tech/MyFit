@@ -367,19 +367,47 @@ test("swapping a strength exercise for a cardio one drops the old measure's numb
 		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
 		{ name: 'Bench press', targetMuscleGroup: 'Chest' }
 	]);
+	// Last time's bench press, so the quick-added sets carry a suggestion and a hint baseline
+	const benchPress = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId, name: 'Bench press' } }
+	});
+	const yesterday = new Date(Date.now() - 86400000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: yesterday,
+			endedAt: new Date(yesterday.getTime() + 3600000),
+			workoutExercises: {
+				create: [
+					{
+						setType: 'V2',
+						repRangeStart: 8,
+						repRangeEnd: 15,
+						exerciseIndex: 0,
+						exerciseId: benchPress.id,
+						name: 'Bench press',
+						targetMuscleGroup: 'Chest',
+						sets: { create: [{ setIndex: 0, reps: 12, load: 40, RIR: 2, skipped: false }] }
+					}
+				]
+			}
+		}
+	});
 	await startBlankWorkout(page);
 	await quickAdd(page, ['Bench press']);
-	await page.getByTestId('Bench press-add-set').click();
-	await box(page, 'Bench press', 1, 'load').fill('40');
-	await box(page, 'Bench press', 1, 'reps').fill('12');
-	// Set 2 shows set 1's numbers as suggestions: a remembered suggestion exists to drop
-	await expect(box(page, 'Bench press', 2, 'load')).toHaveAttribute('data-suggested', 'true');
+	// Set 1 suggests last time; typed over, the suggestion is remembered as the box's backup
+	await expect(box(page, 'Bench press', 1, 'load')).toHaveAttribute('data-suggested', 'true');
+	await box(page, 'Bench press', 1, 'load').fill('45');
+	const beforeSwap = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	expect(beforeSwap.workoutExercises[0].sets[0].suggested).toBeDefined();
+	expect(beforeSwap.workoutExercises[0].sets[0].hintBase).toBeDefined();
 	await editWorkoutExercise(page, 'Bench press');
 	await page.getByLabel('Pick an exercise').click();
 	await page.getByPlaceholder('Search your exercises').fill('Run');
 	await page.getByRole('option', { name: 'Run', exact: true }).click();
 	await page.getByRole('button', { name: 'Update' }).click();
-	// Distance and time now: empty, and nothing of the lift's numbers or suggestion shows or lingers
+	// Distance and time now: empty, and nothing of the lift's numbers, suggestion or hint lingers
 	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');
 	await expect(box(page, 'Run', 1, 'time')).toHaveValue('');
 	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
@@ -479,6 +507,38 @@ test('after a History copy of cardio intervals, an emptied box stays empty: the 
 	await box(page, 'Run', 1, 'distance').fill('');
 	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');
 	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('data-suggested', 'false');
+});
+
+test('removing a cardio machine’s levels clears the level but keeps the time', async ({ page, userData }) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Bike']);
+	await box(page, 'Bike', 1, 'load').fill('8');
+	await box(page, 'Bike', 1, 'time').fill('0:30');
+	await box(page, 'Bike', 1, 'time').blur();
+	// The machine is removed on the Exercises page: no levels any more
+	const bike = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Bike' } } });
+	await page.goto(`/exercises/${bike.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('dialog').locator('#exercise-form-machine').click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByRole('dialog')).toBeHidden();
+	// A drawer Update picks the change up: the level is cleared, the time survives
+	await page.goto('/workouts/manage/exercises');
+	await editWorkoutExercise(page, 'Bike');
+	await page.getByRole('button', { name: 'Update' }).click();
+	await expect(box(page, 'Bike', 1, 'load')).toHaveCount(0);
+	await expect(box(page, 'Bike', 1, 'time')).toHaveValue('0:30');
+	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const bikeSet = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Bike').sets[0];
+	expect(bikeSet.load).toBeUndefined();
+	expect(bikeSet.timeSeconds).toBe(30);
 });
 
 test('a cardio suggestion carries no hint baseline, on screen or on the phone', async ({ page, userData }) => {

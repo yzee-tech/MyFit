@@ -2092,14 +2092,14 @@ test('a measure change on the Exercises page drops every follow to set 1', async
 	await page.getByPlaceholder('Search your exercises').fill('Sled push');
 	await page.getByRole('option', { name: 'Sled push', exact: true }).click();
 	await page.getByRole('button', { name: 'Update' }).click();
-	// The old measure's numbers, suggestion and hint baseline are gone, persisted included
+	// The old measure's numbers are gone, persisted included. No suggestion or hint can exist here
+	// to drop: the Exercises page only allows the change while the exercise has no workouts, so
+	// there is no last time to suggest from; the suggestion/hint strip is pinned by the swap tests
 	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
 	const sled = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Sled push');
 	for (const set of sled.sets) {
 		expect(set.reps).toBeUndefined();
 		expect(set.load).toBeUndefined();
-		expect(set.suggested).toBeUndefined();
-		expect(set.hintBase).toBeUndefined();
 	}
 	// Time boxes now, all numbers cleared: no stale suggestion or follow tag survives the change
 	await expect(box(2, 'time')).toHaveValue('');
