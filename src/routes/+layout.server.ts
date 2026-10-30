@@ -1,7 +1,8 @@
 import { prisma } from '$lib/prisma';
 import type { WeightUnit } from '@prisma/client';
 import { type WeightSetLike } from '$lib/utils/weightSets';
-import { userWeightSets } from '$lib/server/weightSets';
+import { userExerciseResources } from '$lib/server/weightSets';
+import type { CardioExercises } from '$lib/utils/measure';
 
 export const load = async ({ locals, depends }) => {
 	depends('settings:userSettings');
@@ -11,13 +12,17 @@ export const load = async ({ locals, depends }) => {
 	let homeWeightUnit: WeightUnit = 'KG';
 	// Weights each gym has, for suggestions and the exercise editors, and each machine's levels or weights
 	let weightSets: WeightSetLike[] = [];
+	// The cardio exercises by name: how each is measured and the unit its distances show in (like a
+	// machine's levels, known wherever an exercise is shown by name)
+	let cardioExercises: CardioExercises = {};
 	if (session?.user?.id) {
-		const [userSettings, allWeightSets] = await Promise.all([
+		const [userSettings, resources] = await Promise.all([
 			prisma.userSettings.findUnique({ where: { userId: session.user.id }, select: { homeWeightUnit: true } }),
-			userWeightSets(session.user.id)
+			userExerciseResources(session.user.id)
 		]);
 		homeWeightUnit = userSettings?.homeWeightUnit ?? 'KG';
-		weightSets = allWeightSets;
+		weightSets = resources.weightSets;
+		cardioExercises = resources.cardioExercises;
 	}
-	return { session, homeWeightUnit, weightSets };
+	return { session, homeWeightUnit, weightSets, cardioExercises };
 };

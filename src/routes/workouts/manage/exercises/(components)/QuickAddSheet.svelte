@@ -58,6 +58,12 @@
 			toast.error(`${exercise.name} is in this workout already`);
 			return;
 		}
+		if (result === 'measureDiffers') {
+			toast.error(`${exercise.name} is measured differently`, {
+				description: 'Pick an exercise measured the same way as the one logged (reps, time, or distance and time)'
+			});
+			return;
+		}
 		if (result === 'loadsCleared') {
 			toast.warning(`Replaced with ${exercise.name}`, {
 				description: "Levels and weights don't match: enter the loads and tick the sets again"
@@ -137,7 +143,7 @@
 				lastSetToFailure: null,
 				minimumWeightChange: null
 			};
-			workoutRunes.addExercise(template);
+			workoutRunes.addExercise(template, { measure: exercise.measure, distanceUnit: exercise.distanceUnit });
 		}
 		ticked = [];
 		open = false;

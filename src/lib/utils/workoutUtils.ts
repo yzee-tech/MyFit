@@ -12,7 +12,9 @@ import {
 	toKg,
 	type MassUnit
 } from './weightUnits';
-import type { WeightUnit } from './prismaEnums';
+import type { DistanceUnit, ExerciseMeasure, WeightUnit } from './prismaEnums';
+import { fromMeters, roundDistance, toMeters } from './distanceUnits';
+import { isCardioMeasure, measureOfSets } from './measure';
 import {
 	availableWeightsFor,
 	levelSetOf,
@@ -183,13 +185,17 @@ export function getWorkoutVolume(workout: Workout) {
 	return arraySum(workout.workoutExercises.map((exercise) => getExerciseVolume(exercise, workout.userBodyweight)));
 }
 
-/** A set's boxes that can hold a suggestion */
-export type SetField = 'reps' | 'load' | 'RIR';
+/** A set's boxes that can hold a suggestion (time and distance: a cardio set's) */
+export type SetField = 'reps' | 'load' | 'RIR' | 'timeSeconds' | 'distance';
 
 type SetInProgress = {
 	reps: number | undefined;
 	load: number | undefined;
 	RIR: number | undefined;
+	/** A cardio set's time, in seconds (the box shows and takes m:ss) */
+	timeSeconds?: number;
+	/** A DistanceTime set's distance, in the exercise's distance unit; saved in metres */
+	distance?: number;
 	completed: boolean;
 	/**
 	 * Boxes the person made theirs (typed in, or copied from last time, a reps hint or History). The
@@ -245,6 +251,9 @@ export type ExerciseHistory = Record<string, PreviousPerformance[]>;
 /** Reps-only exercises by name, with their rep cap (null for none) */
 export type RepsOnlySettings = Map<string, number | null>;
 
+/** How each exercise is measured, by name; missing means reps */
+export type MeasureSettings = Map<string, ExerciseMeasure>;
+
 /** Whether every suggested set of a reps-only exercise is at its rep cap */
 export function allSetsAtMaxReps(
 	ex: { sets: { reps?: number; skipped?: boolean | null }[] },
@@ -256,15 +265,21 @@ export function allSetsAtMaxReps(
 }
 
 /**
- * The performances that compare with an exercise in `unit`: levels only with levels, and kg or lb
- * only with kg or lb (a level isn't a weight)
+ * The performances that compare with an exercise in `unit` and measured as `measure`: levels only
+ * with levels, and kg or lb only with kg or lb (a level isn't a weight); and runs only with runs,
+ * going by what each past row logged (a reps history never drives a cardio suggestion, or the reverse)
  */
-export function comparablePerformances<T extends { exercise: { weightUnit?: WeightUnit | null } }>(
-	performances: T[],
-	unit: WeightUnit | null | undefined
-): T[] {
-	return performances.filter((performance) => isLevelUnit(performance.exercise.weightUnit) === isLevelUnit(unit));
+export function comparablePerformances<
+	T extends { exercise: { weightUnit?: WeightUnit | null; sets: MeasuredSetLike[] } }
+>(performances: T[], unit: WeightUnit | null | undefined, measure: ExerciseMeasure = 'Reps'): T[] {
+	return performances.filter(
+		(performance) =>
+			isLevelUnit(performance.exercise.weightUnit) === isLevelUnit(unit) &&
+			measureOfSets(performance.exercise.sets) === measure
+	);
 }
+
+type MeasuredSetLike = { skipped: boolean; timeSeconds?: number | null; distanceMeters?: number | null };
 
 export type WorkoutExerciseInProgress = Omit<
 	Prisma.WorkoutExerciseCreateWithoutWorkoutInput,
@@ -272,7 +287,7 @@ export type WorkoutExerciseInProgress = Omit<
 > & {
 	sets: (Omit<
 		Prisma.WorkoutExerciseSetCreateWithoutWorkoutExerciseInput,
-		'reps' | 'load' | 'RIR' | 'miniSets' | 'setIndex'
+		'reps' | 'load' | 'RIR' | 'miniSets' | 'setIndex' | 'timeSeconds' | 'distanceMeters'
 	> &
 		SetInProgress & {
 			miniSets: (Omit<
@@ -501,7 +516,8 @@ function getMaxIndexes(arr: number[]) {
 }
 
 function addExtraSetProperties(exerciseSet: WorkoutExercise['sets'][number]) {
-	const { workoutExerciseId, ...rest } = exerciseSet;
+	// A reps set's cardio fields are null: not carried into the suggestion
+	const { workoutExerciseId, timeSeconds, distanceMeters, ...rest } = exerciseSet;
 	const exerciseSetWithoutIds = {
 		...rest,
 		miniSets: rest.miniSets.map(({ workoutExerciseSetId, ...rest }) => rest)
@@ -965,17 +981,57 @@ export function convertExerciseLoads<T extends { weightUnit?: WeightUnit | null;
 	};
 }
 
+/** Whether a set holds a suggestion: reps, or for a cardio set a time */
+const hasSuggestion = (set: WorkoutExerciseInProgress['sets'][number]) =>
+	set.reps !== undefined || set.timeSeconds !== undefined;
+
 /**
  * The routine decides how many sets: drop extra sets from the last time, and fill missing ones
  * with a copy of the last suggested set
  */
 function fitSetsToRoutine(ex: WorkoutExerciseInProgress, routineSetCount: number) {
 	ex.sets = ex.sets.slice(0, routineSetCount);
-	const lastSuggestedSet = ex.sets.findLast((set) => set.reps !== undefined);
+	const lastSuggestedSet = ex.sets.findLast(hasSuggestion);
 	if (!lastSuggestedSet) return;
 	const copyOfLastSet = () => ({ ...lastSuggestedSet, miniSets: structuredClone(lastSuggestedSet.miniSets) });
 	while (ex.sets.length < routineSetCount) ex.sets.push(copyOfLastSet());
-	ex.sets = ex.sets.map((set) => (set.reps === undefined ? copyOfLastSet() : set));
+	ex.sets = ex.sets.map((set) => (hasSuggestion(set) ? set : copyOfLastSet()));
+}
+
+/**
+ * Last time's cardio sets as today's suggestion: the time, distance (in metres here; shown in the
+ * exercise's unit later) and, on a machine with levels, the level. Reps, weight and RIR are never
+ * suggested for cardio: they're zero-filled when the set is ticked
+ */
+function repeatCardioSets(oldSets: WorkoutExercise['sets'], keepLevel: boolean): WorkoutExerciseInProgress['sets'] {
+	return oldSets.map((oldSet) => ({
+		skipped: oldSet.skipped,
+		completed: false,
+		reps: undefined,
+		load: keepLevel ? oldSet.load : undefined,
+		RIR: undefined,
+		timeSeconds: oldSet.timeSeconds ?? undefined,
+		distance: oldSet.distanceMeters ?? undefined,
+		miniSets: []
+	}));
+}
+
+/**
+ * Converts an exercise's distances between metres (as saved and compared) and the unit they're shown in.
+ * Only DistanceTime sets have one; everything else passes through unchanged
+ */
+export function convertExerciseDistances<T extends { sets: { distance?: number }[] }>(
+	ex: T,
+	direction: 'toDisplay' | 'toMeters',
+	unit: DistanceUnit | null | undefined
+): T {
+	const distanceUnit = unit ?? 'KM';
+	const convert = (distance: number) =>
+		direction === 'toDisplay' ? roundDistance(fromMeters(distance, distanceUnit)) : toMeters(distance, distanceUnit);
+	return {
+		...ex,
+		sets: ex.sets.map((set) => (set.distance === undefined ? set : { ...set, distance: convert(set.distance) }))
+	};
 }
 
 /**
@@ -1055,9 +1111,13 @@ export function progressiveOverloadMagic(
 	mode: ProgressionMode = 'normal',
 	weightSets: WeightSetLike[] = [],
 	/** Reps-only exercises by name, with their rep cap (null for none) */
-	repsOnly: RepsOnlySettings = new Map()
+	repsOnly: RepsOnlySettings = new Map(),
+	/** How each exercise is measured, by name; missing means reps */
+	measures: MeasureSettings = new Map()
 ) {
 	const mesocycle = plan.settings;
+	// Cardio repeats last time's numbers and is never progressed, deloaded or adjusted for effort
+	const isCardio = (ex: WorkoutExerciseInProgress) => isCardioMeasure(measures.get(ex.name));
 	// Done with no weight last time, or helped without counting bodyweight: progressed as reps only too
 	// (found per exercise below)
 	const noWeight = new Set<string>();
@@ -1076,14 +1136,25 @@ export function progressiveOverloadMagic(
 
 	workoutExercises.forEach((ex) => {
 		// Progressive overload from the last times this exercise was done, in any routine, with the
-		// same kind of load (levels or weights)
-		const allPreviousPerformances = comparablePerformances(exerciseHistory[ex.name] ?? [], ex.weightUnit);
+		// same kind of load (levels or weights) and measured the same way
+		const allPreviousPerformances = comparablePerformances(
+			exerciseHistory[ex.name] ?? [],
+			ex.weightUnit,
+			measures.get(ex.name) ?? 'Reps'
+		);
 		const lastPerformance = allPreviousPerformances.at(-1);
 		if (!lastPerformance?.exercise) return;
-		if (doneWithNoWeight(ex, lastPerformance)) noWeight.add(ex.name);
-		if (assistedWithoutShare(ex, lastPerformance, weightSets)) noWeight.add(ex.name);
 
 		const routineSetCount = ex.sets.length;
+
+		// Cardio: the same intervals as last time (time, distance and level), nothing more
+		if (isCardio(ex)) {
+			ex.sets = repeatCardioSets(lastPerformance.exercise.sets, isLevelUnit(ex.weightUnit));
+			fitSetsToRoutine(ex, routineSetCount);
+			return;
+		}
+		if (doneWithNoWeight(ex, lastPerformance)) noWeight.add(ex.name);
+		if (assistedWithoutShare(ex, lastPerformance, weightSets)) noWeight.add(ex.name);
 
 		// Only weights this gym has (from the exercise's weight set), else steps of the exercise's unit
 		const weights = availableWeightsFor(ex, weightSets);
@@ -1179,13 +1250,16 @@ export function progressiveOverloadMagic(
 		snapToRealWeights();
 	});
 
-	// Deload: half the sets
+	// Deload: half the sets (a deload week doesn't cut a run short)
 	if (mode === 'deload') {
-		workoutExercises.forEach((ex) => (ex.sets = ex.sets.slice(0, Math.ceil(ex.sets.length / 2))));
+		workoutExercises.forEach((ex) => {
+			if (!isCardio(ex)) ex.sets = ex.sets.slice(0, Math.ceil(ex.sets.length / 2));
+		});
 	}
 
-	// RIR adjustment
+	// RIR adjustment (cardio has no effort to adjust)
 	workoutExercises.forEach((ex) => {
+		if (isCardio(ex)) return;
 		ex.sets.forEach((set, idx) => {
 			const oldRIR = set.RIR ?? currentCycleRIR;
 			set.RIR = currentCycleRIR;
@@ -1253,7 +1327,9 @@ export function progressiveOverloadMagic(
 				set.skipped = false;
 				set.reps = undefined;
 				set.load = undefined;
-				set.RIR = currentCycleRIR;
+				set.RIR = isCardio(ex) ? undefined : currentCycleRIR;
+				set.timeSeconds = undefined;
+				set.distance = undefined;
 			});
 	});
 

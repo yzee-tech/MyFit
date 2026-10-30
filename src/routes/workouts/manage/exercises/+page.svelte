@@ -114,6 +114,7 @@
 			}));
 			workoutRunes.previousWorkoutData = serverData.previousWorkoutData ?? null;
 			if (serverData.repsOnly) workoutRunes.repsOnly = { ...workoutRunes.repsOnly, ...serverData.repsOnly };
+			if (serverData.measures) workoutRunes.measures = { ...workoutRunes.measures, ...serverData.measures };
 			workoutRunes.suggestionsFailed = false;
 		} else {
 			toast.error(

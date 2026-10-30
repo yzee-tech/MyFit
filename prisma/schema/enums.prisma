@@ -16,6 +16,8 @@ enum MuscleGroup {
   Neck
   Adductors
   Abductors
+  /// Cardio exercises: counted as intervals, left out of the sets-per-muscle charts
+  Cardio
   Custom
 }
 
@@ -54,4 +56,19 @@ enum RoutineWeightUnit {
   KG
   LB
   ASK
+}
+
+/// How an exercise is measured: reps with a weight (default), time only, or distance and time
+enum ExerciseMeasure {
+  Reps
+  Time
+  DistanceTime
+}
+
+/// The unit a DistanceTime exercise's distances are shown in; stored in metres, like loads in kg
+enum DistanceUnit {
+  KM
+  MI
+  M
+  FT
 }

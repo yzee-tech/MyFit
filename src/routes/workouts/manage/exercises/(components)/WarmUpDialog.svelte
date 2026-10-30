@@ -18,7 +18,10 @@
 
 	let exercise = $derived(workoutRunes.exerciseWarmUpDialogExercise);
 	let unit = $derived(exercise?.weightUnit ?? 'KG');
-	let shown = $derived(exercise !== undefined && canWarmUp(exercise, exercise.name in workoutRunes.repsOnly));
+	let shown = $derived(
+		exercise !== undefined &&
+			canWarmUp(exercise, exercise.name in workoutRunes.repsOnly, workoutRunes.measureOf(exercise.name).measure)
+	);
 	let oneRepMax = $state<number>();
 	/** Where the one rep max came from, e.g. "Best of your last 3 times: Oct 20, 80 kg × 8, RIR 2" */
 	let oneRepMaxSource = $state<string>();
@@ -51,7 +54,8 @@
 				oneRepMax = undefined;
 				oneRepMaxSource = undefined;
 				calculateOneRepMax();
-				if (!canWarmUp(opened, opened.name in workoutRunes.repsOnly)) return;
+				if (!canWarmUp(opened, opened.name in workoutRunes.repsOnly, workoutRunes.measureOf(opened.name).measure))
+					return;
 				prefillFromHistory(opened.name, opened.weightUnit ?? 'KG', request);
 			});
 		}

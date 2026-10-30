@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
+	import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
 	import type { MassUnit } from '$lib/utils/weightUnits';
 
 	/** What belongs to the exercise itself, the same in every routine and workout */
@@ -19,16 +19,25 @@
 		machine: { weights: number[]; unit: MassUnit } | null;
 		/** A machine whose weights are help, or whose higher levels are more help */
 		assisted: boolean;
+		/** How it's measured: reps and weight, time, or distance and time. Fixed once it has workouts */
+		measure: ExerciseMeasure;
+		/** The unit a DistanceTime exercise's distances are shown in; null for the others */
+		distanceUnit: DistanceUnit | null;
 	};
 
 	/** An exercise as saved: its levels as three fields, its machine's weights and unit as two */
-	export type ExerciseFormInitial = Omit<ExerciseFormDetails, 'levels' | 'machine' | 'assisted'> & {
+	export type ExerciseFormInitial = Omit<
+		ExerciseFormDetails,
+		'levels' | 'machine' | 'assisted' | 'measure' | 'distanceUnit'
+	> & {
 		levelsFrom?: number | null;
 		levelsTo?: number | null;
 		levelStep?: number | null;
 		machineWeights?: number[];
 		machineUnit?: WeightUnit | null;
 		assisted?: boolean;
+		measure?: ExerciseMeasure;
+		distanceUnit?: DistanceUnit | null;
 	};
 
 	/** One of the user's exercises, for "Already on your list" */
@@ -49,6 +58,8 @@
 	import { page } from '$app/stores';
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { expandRange, formatWeightList, normalizeWeights, pickableWeightSets } from '$lib/utils/weightSets';
+	import { DISTANCE_UNITS, distanceUnitLabel } from '$lib/utils/distanceUnits';
+	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import AddIcon from 'virtual:icons/lucide/plus';
 
 	type PropsType = {
@@ -58,10 +69,19 @@
 		existingExercises?: ExistingExercise[];
 		/** Tapping one of your exercises instead of making a new one */
 		onPickExisting?: (exercise: ExistingExercise) => void;
+		/** The exercise has workouts: how it's measured can't change (its history has to keep meaning what it says) */
+		measureLocked?: boolean;
 		submitLabel: string;
 		onSubmit: (details: ExerciseFormDetails) => Promise<unknown>;
 	};
-	let { initial, existingExercises = [], onPickExisting, submitLabel, onSubmit }: PropsType = $props();
+	let {
+		initial,
+		existingExercises = [],
+		onPickExisting,
+		measureLocked = false,
+		submitLabel,
+		onSubmit
+	}: PropsType = $props();
 
 	let name = $state(initial?.name ?? '');
 	let targetMuscleGroup: MuscleGroup | undefined = $state(initial?.targetMuscleGroup);
@@ -71,13 +91,18 @@
 		initial?.bodyweightFraction ? Math.round(initial.bodyweightFraction * 100) : 100
 	);
 	let note = $state(initial?.note ?? '');
+	// How it's measured: reps and weight (everything until cardio), time, or distance and time
+	let measure: ExerciseMeasure = $state(initial?.measure ?? 'Reps');
+	let distanceUnit: DistanceUnit = $state(initial?.distanceUnit ?? 'KM');
+	let isCardio = $derived(isCardioMeasure(measure));
 	let repsOnly = $state(initial?.repsOnly ?? false);
 	let maxReps: number | undefined = $state(initial?.maxReps ?? undefined);
 	// A machine: its own levels, or its own weights (both off: dumbbells, a barbell, push-ups…)
 	let isMachine = $state(typeof initial?.levelsFrom === 'number' || (initial?.machineWeights?.length ?? 0) > 0);
 	let machineKind: 'weights' | 'levels' = $state(typeof initial?.levelsFrom === 'number' ? 'levels' : 'weights');
-	let hasLevels = $derived(isMachine && machineKind === 'levels');
-	let hasMachineWeights = $derived(isMachine && machineKind === 'weights');
+	// Cardio on a machine logs its levels (bike resistance, treadmill incline), never weights
+	let hasLevels = $derived(isMachine && (machineKind === 'levels' || isCardio));
+	let hasMachineWeights = $derived(isMachine && machineKind === 'weights' && !isCardio);
 	const homeUnit: WeightUnit = $page.data.homeWeightUnit ?? 'KG';
 	let machineUnit: MassUnit = $state(
 		initial?.machineUnit === 'LB' || initial?.machineUnit === 'KG'
@@ -126,6 +151,10 @@
 		countsBodyweight = typeof suggestion.bodyweightFraction === 'number';
 		bodyweightPercentage = suggestion.bodyweightFraction ? Math.round(suggestion.bodyweightFraction * 100) : 100;
 		note = suggestion.note ?? '';
+		if (!measureLocked) {
+			measure = suggestion.measure ?? 'Reps';
+			distanceUnit = suggestion.distanceUnit ?? distanceUnit;
+		}
 	}
 
 	function addRange() {
@@ -172,6 +201,8 @@
 			triedNoMachineWeights = true;
 			return;
 		}
+		// Reps only, a machine's weights and a bodyweight share are all about weight: cardio has none
+		const weighted = !isCardio;
 		saving = true;
 		try {
 			await onSubmit({
@@ -179,17 +210,19 @@
 				targetMuscleGroup,
 				customMuscleGroup: targetMuscleGroup === 'Custom' ? customMuscleGroup.trim() || null : null,
 				// Reps only can count bodyweight too (e.g. push-ups): only reps suggested, the share still in volume
-				bodyweightFraction: countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
+				bodyweightFraction: weighted && countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
 				note: note.trim() || null,
-				repsOnly,
-				maxReps: repsOnly && maxReps ? maxReps : null,
+				repsOnly: weighted && repsOnly,
+				maxReps: weighted && repsOnly && maxReps ? maxReps : null,
 				// Reps only and levels are one or the other
 				levels:
-					!repsOnly && hasLevels && levelsFrom !== undefined && levelsTo !== undefined
+					!(weighted && repsOnly) && hasLevels && levelsFrom !== undefined && levelsTo !== undefined
 						? { from: levelsFrom, to: levelsTo, step: halfLevels ? 0.5 : 1 }
 						: null,
-				machine: !repsOnly && hasMachineWeights ? { weights: machineWeights, unit: machineUnit } : null,
-				assisted: !repsOnly && isMachine && assisted
+				machine: weighted && !repsOnly && hasMachineWeights ? { weights: machineWeights, unit: machineUnit } : null,
+				assisted: weighted && !repsOnly && isMachine && assisted,
+				measure,
+				distanceUnit: measure === 'DistanceTime' ? distanceUnit : null
 			});
 		} finally {
 			saving = false;
@@ -257,7 +290,10 @@
 
 	<div class="grid gap-1.5">
 		<Select.Root
-			onSelectedChange={(v) => (targetMuscleGroup = v?.value)}
+			onSelectedChange={(v) => {
+				targetMuscleGroup = v?.value;
+				if (targetMuscleGroup === 'Cardio' && measure === 'Reps' && !measureLocked) measure = 'Time';
+			}}
 			required
 			selected={targetMuscleGroup
 				? { value: targetMuscleGroup, label: convertCamelCaseToNormal(targetMuscleGroup) }
@@ -268,7 +304,7 @@
 				<Select.Value placeholder="Pick one" />
 			</Select.Trigger>
 			<Select.Content class="h-48 overflow-y-auto">
-				{#each Object.values(MuscleGroups) as muscleGroup}
+				{#each Object.values(MuscleGroups).filter((group) => group !== 'Cardio' || !measureLocked || isCardio) as muscleGroup}
 					<Select.Item label={convertCamelCaseToNormal(muscleGroup)} value={muscleGroup} />
 				{/each}
 			</Select.Content>
@@ -286,6 +322,68 @@
 	</div>
 
 	<div class="grid gap-1.5">
+		<div class="flex items-start justify-between gap-4">
+			<div class="grid gap-0.5">
+				<span class="text-sm font-medium" id="exercise-form-measure">How it's measured</span>
+				<span class="text-xs text-muted-foreground">
+					{#if measureLocked}
+						Fixed once an exercise has workouts. For a change, make a new exercise.
+					{:else if measure === 'Time'}
+						Each set is a timed interval, e.g. a plank or 30 s on the bike.
+					{:else if measure === 'DistanceTime'}
+						Each set is a distance and a time; the pace is worked out for you.
+					{:else}
+						Reps with a weight. Cardio logs time, or distance and time, instead.
+					{/if}
+				</span>
+			</div>
+			<ToggleGroup.Root
+				class="shrink-0 flex-wrap justify-end"
+				aria-labelledby="exercise-form-measure"
+				disabled={measureLocked}
+				onValueChange={(value) => {
+					if (value === 'Reps' || value === 'Time' || value === 'DistanceTime') measure = value;
+				}}
+				type="single"
+				value={measure}
+				variant="outline"
+			>
+				<ToggleGroup.Item
+					aria-label="Measured in reps and weight"
+					disabled={targetMuscleGroup === 'Cardio'}
+					value="Reps">Reps</ToggleGroup.Item
+				>
+				<ToggleGroup.Item aria-label="Measured in time" value="Time">Time</ToggleGroup.Item>
+				<ToggleGroup.Item aria-label="Measured in distance and time" value="DistanceTime">Distance</ToggleGroup.Item>
+			</ToggleGroup.Root>
+		</div>
+		{#if measure === 'DistanceTime'}
+			<div class="mt-1 flex items-center justify-between gap-4">
+				<span class="text-sm font-medium" id="exercise-form-distance-unit">Distance unit</span>
+				<ToggleGroup.Root
+					aria-labelledby="exercise-form-distance-unit"
+					onValueChange={(value) => {
+						if (value === 'KM' || value === 'MI' || value === 'M' || value === 'FT') distanceUnit = value;
+					}}
+					type="single"
+					value={distanceUnit}
+					variant="outline"
+				>
+					{#each DISTANCE_UNITS as unit}
+						<ToggleGroup.Item aria-label="Distance in {distanceUnitLabel(unit)}" value={unit}>
+							{distanceUnitLabel(unit)}
+						</ToggleGroup.Item>
+					{/each}
+				</ToggleGroup.Root>
+			</div>
+			<span class="text-xs text-muted-foreground">
+				Can be changed later: distances are kept in metres, so past {measureLabel(measure).toLowerCase()} sets stay as they
+				were.
+			</span>
+		{/if}
+	</div>
+
+	<div class="grid gap-1.5" class:hidden={isCardio}>
 		<div class="flex items-center justify-between gap-4">
 			<div class="grid gap-0.5">
 				<Label for="exercise-form-reps-only">Reps only</Label>
@@ -308,19 +406,23 @@
 		{/if}
 	</div>
 
-	<div class="grid gap-1.5" class:hidden={repsOnly}>
+	<div class="grid gap-1.5" class:hidden={repsOnly && !isCardio}>
 		<div class="flex items-center justify-between gap-4">
 			<div class="grid gap-0.5">
 				<Label for="exercise-form-machine">Machine</Label>
-				<span class="text-xs text-muted-foreground"
-					>Its weights or levels are the machine's own, the same at every gym.</span
-				>
+				<span class="text-xs text-muted-foreground">
+					{#if isCardio}
+						It has levels (resistance, incline) to log with each interval.
+					{:else}
+						Its weights or levels are the machine's own, the same at every gym.
+					{/if}
+				</span>
 			</div>
 			<Switch id="exercise-form-machine" bind:checked={isMachine} />
 		</div>
 		{#if isMachine}
 			<div class="mt-1 grid gap-3 rounded-md border p-3" data-testid="exercise-form-machine-settings">
-				<div class="flex items-center justify-between gap-4">
+				<div class="flex items-center justify-between gap-4" class:hidden={isCardio}>
 					<span class="text-sm font-medium" id="exercise-form-machine-kind">It shows</span>
 					<ToggleGroup.Root
 						aria-labelledby="exercise-form-machine-kind"
@@ -452,8 +554,12 @@
 						<Switch id="exercise-form-half-levels" bind:checked={halfLevels} />
 					</div>
 					<span class="text-xs text-muted-foreground">
-						Suggestions go {assisted ? 'down a level (less help)' : 'up a level'} once every set reaches the top of the rep
-						range.
+						{#if isCardio}
+							Each interval logs its level; suggestions repeat last time's.
+						{:else}
+							Suggestions go {assisted ? 'down a level (less help)' : 'up a level'} once every set reaches the top of the
+							rep range.
+						{/if}
 					</span>
 				{/if}
 				<div class="flex items-start justify-between gap-4 border-t pt-3">
@@ -473,7 +579,7 @@
 		{/if}
 	</div>
 
-	<div class="grid gap-1.5">
+	<div class="grid gap-1.5" class:hidden={isCardio}>
 		<div class="flex items-center justify-between gap-4">
 			<Label for="exercise-form-bodyweight">Counts bodyweight</Label>
 			<Switch id="exercise-form-bodyweight" bind:checked={countsBodyweight} />

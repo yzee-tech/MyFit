@@ -26,6 +26,10 @@ model Exercise {
   /// An assisted machine: its weights are help (logged as negative loads), or with levels, a higher level
   /// is more help
   assisted           Boolean     @default(false)
+  /// How it's measured: reps and weight (default), time, or distance and time. Fixed once it has history
+  measure            ExerciseMeasure @default(Reps)
+  /// A DistanceTime exercise's display unit; distances are stored in metres
+  distanceUnit       DistanceUnit?
   /// Deleted but kept for the workouts that used it
   archived           Boolean     @default(false)
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)

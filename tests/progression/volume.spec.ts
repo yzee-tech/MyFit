@@ -29,6 +29,8 @@ function performance(name: string, sets: TestSet[], daysAgo: number, userBodywei
 				id: `set-${daysAgo}-${setIndex}`,
 				setIndex,
 				skipped: false,
+				timeSeconds: null,
+				distanceMeters: null,
 				workoutExerciseId: `past-${name}-${daysAgo}`,
 				miniSets: (set.miniSets ?? []).map((miniSet, miniSetIndex) => ({
 					...miniSet,

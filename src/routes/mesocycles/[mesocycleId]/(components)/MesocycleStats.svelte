@@ -70,35 +70,39 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
-				<Card.Title class="text-sm font-medium">Best muscle</Card.Title>
-				<BicepsFlexed />
-			</Card.Header>
-			<Card.Content class="p-4 pt-0">
-				<div class="text-2xl font-bold">
-					{convertCamelCaseToNormal(performanceChangesPerMuscleGroups.at(-1)!.muscleGroup)}
-				</div>
-				<p class="text-xs text-muted-foreground">
-					{performanceChangesPerMuscleGroups.at(-1)!.averagePercentageChange.toFixed(2)}% cyclic increase
-				</p>
-			</Card.Content>
-		</Card.Root>
+		{#if performanceChangesPerMuscleGroups.length}
+			<Card.Root>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
+					<Card.Title class="text-sm font-medium">Best muscle</Card.Title>
+					<BicepsFlexed />
+				</Card.Header>
+				<Card.Content class="p-4 pt-0">
+					<div class="text-2xl font-bold">
+						{convertCamelCaseToNormal(performanceChangesPerMuscleGroups.at(-1)!.muscleGroup)}
+					</div>
+					<p class="text-xs text-muted-foreground">
+						{performanceChangesPerMuscleGroups.at(-1)!.averagePercentageChange.toFixed(2)}% cyclic increase
+					</p>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
-				<Card.Title class="text-sm font-medium">Worst muscle</Card.Title>
-				<Frown />
-			</Card.Header>
-			<Card.Content class="p-4 pt-0">
-				<div class="text-2xl font-bold">
-					{convertCamelCaseToNormal(performanceChangesPerMuscleGroups[0].muscleGroup)}
-				</div>
-				<p class="text-xs text-muted-foreground">
-					{performanceChangesPerMuscleGroups[0].averagePercentageChange.toFixed(2)}% cyclic increase
-				</p>
-			</Card.Content>
-		</Card.Root>
+		{#if performanceChangesPerMuscleGroups.length}
+			<Card.Root>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
+					<Card.Title class="text-sm font-medium">Worst muscle</Card.Title>
+					<Frown />
+				</Card.Header>
+				<Card.Content class="p-4 pt-0">
+					<div class="text-2xl font-bold">
+						{convertCamelCaseToNormal(performanceChangesPerMuscleGroups[0].muscleGroup)}
+					</div>
+					<p class="text-xs text-muted-foreground">
+						{performanceChangesPerMuscleGroups[0].averagePercentageChange.toFixed(2)}% cyclic increase
+					</p>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
 		<Card.Root>
 			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
@@ -130,35 +134,39 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
-				<Card.Title class="text-sm font-medium">Most sets</Card.Title>
-				<ChartColumnIncreasing />
-			</Card.Header>
-			<Card.Content class="p-4 pt-0">
-				<div class="text-2xl font-bold">
-					{setsPerformedPerMuscleGroup.at(-1)!.muscleGroup}
-				</div>
-				<p class="text-xs text-muted-foreground">
-					Total: {setsPerformedPerMuscleGroup.at(-1)!.totalSets} sets
-				</p>
-			</Card.Content>
-		</Card.Root>
+		{#if setsPerformedPerMuscleGroup.length}
+			<Card.Root>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
+					<Card.Title class="text-sm font-medium">Most sets</Card.Title>
+					<ChartColumnIncreasing />
+				</Card.Header>
+				<Card.Content class="p-4 pt-0">
+					<div class="text-2xl font-bold">
+						{setsPerformedPerMuscleGroup.at(-1)!.muscleGroup}
+					</div>
+					<p class="text-xs text-muted-foreground">
+						Total: {setsPerformedPerMuscleGroup.at(-1)!.totalSets} sets
+					</p>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
-		<Card.Root>
-			<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
-				<Card.Title class="text-sm font-medium">Least sets</Card.Title>
-				<ChartColumnDecreasing />
-			</Card.Header>
-			<Card.Content class="p-4 pt-0">
-				<div class="text-2xl font-bold">
-					{setsPerformedPerMuscleGroup[0].muscleGroup}
-				</div>
-				<p class="text-xs text-muted-foreground">
-					Total: {setsPerformedPerMuscleGroup[0].totalSets} sets
-				</p>
-			</Card.Content>
-		</Card.Root>
+		{#if setsPerformedPerMuscleGroup.length}
+			<Card.Root>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 p-4 pb-1.5">
+					<Card.Title class="text-sm font-medium">Least sets</Card.Title>
+					<ChartColumnDecreasing />
+				</Card.Header>
+				<Card.Content class="p-4 pt-0">
+					<div class="text-2xl font-bold">
+						{setsPerformedPerMuscleGroup[0].muscleGroup}
+					</div>
+					<p class="text-xs text-muted-foreground">
+						Total: {setsPerformedPerMuscleGroup[0].totalSets} sets
+					</p>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 	</div>
 {:else}
 	<div class="muted-text-box">No workouts for stat generation</div>

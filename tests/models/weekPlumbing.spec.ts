@@ -171,6 +171,79 @@ async function failSuggestions(page: import('../fixtures').Page) {
 const savedState = (page: import('../fixtures').Page) =>
 	page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
 
+test('failed suggestions Retry brings back cardio intervals and measures', async ({ page, userData }) => {
+	const userId = userData.userId;
+	const runExercise = await prisma.exercise.create({
+		data: { userId, name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	});
+	const twoDaysAgo = new Date(Date.now() - 2 * 86400000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: twoDaysAgo,
+			endedAt: twoDaysAgo,
+			workoutExercises: {
+				create: {
+					name: 'Run',
+					targetMuscleGroup: 'Cardio',
+					exerciseIndex: 0,
+					exerciseId: runExercise.id,
+					setType: 'V2',
+					repRangeStart: 8,
+					repRangeEnd: 15,
+					sets: {
+						create: [{ setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false, timeSeconds: 1560, distanceMeters: 5000 }]
+					}
+				}
+			}
+		}
+	});
+	await prisma.exerciseSplit.create({
+		data: {
+			userId,
+			name: 'My routines',
+			exerciseSplitDays: {
+				create: [
+					{
+						name: 'Cardio day',
+						dayIndex: 0,
+						exercises: {
+							create: [
+								{
+									exerciseIndex: 0,
+									exerciseId: runExercise.id,
+									name: 'Run',
+									targetMuscleGroup: 'Cardio',
+									sets: 1,
+									setType: 'V2',
+									repRangeStart: 8,
+									repRangeEnd: 15
+								}
+							]
+						}
+					}
+				]
+			}
+		}
+	});
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	await pickRoutine(page, 'Cardio day');
+	await failSuggestions(page);
+	await page.unroute(/getWorkoutExercisesWithPreviousData/);
+	await page.getByRole('button', { name: 'Retry', exact: true }).click();
+	// The cardio intervals and how they're measured come back with the retry
+	await expect(page.locator('[id="Run-set-1-distance"]')).toHaveAttribute('placeholder', '5');
+	await expect(page.locator('[id="Run-set-1-time"]')).toHaveAttribute('placeholder', '26:00');
+	await expect(page.getByTestId('Run-distance-unit')).toHaveText('KM');
+	const state = await savedState(page);
+	expect(state.suggestionsFailed).toBe(false);
+	expect(state.measures?.Run?.measure).toBe('DistanceTime');
+	expect(state.measures?.Run?.distanceUnit).toBe('KM');
+});
+
 test('failed suggestions Retry recovers without reload', async ({ page }) => {
 	await prepareRoutine(page);
 	await failSuggestions(page);

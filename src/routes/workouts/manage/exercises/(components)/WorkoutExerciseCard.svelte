@@ -16,6 +16,8 @@
 	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 	import { convertWeight, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { canWarmUp } from '$lib/utils/oneRepMax';
+	import { intervalsLabel, isCardioMeasure } from '$lib/utils/measure';
+	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
 	import { dragHandle } from 'svelte-dnd-action';
 	import GripVertical from 'virtual:icons/lucide/grip-vertical';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -42,6 +44,9 @@
 
 	// Reps only: suggestions add reps, never weight, up to an optional cap
 	let isRepsOnly = $derived(exercise.name in workoutRunes.repsOnly);
+	// Cardio: intervals of time (and distance), repeated from last time; no weight, so no unit to switch
+	let measure = $derived(workoutRunes.measureOf(exercise.name));
+	let isCardio = $derived(isCardioMeasure(measure.measure));
 	let maxReps = $derived(workoutRunes.repsOnly[exercise.name] ?? null);
 	// About the suggestion: decided once every set has reps, so typing different reps doesn't change it
 	let suggestionAtMaxReps: boolean | undefined = $state();
@@ -62,7 +67,7 @@
 	let weightSets: WeightSetLike[] = $derived($page.data.weightSets ?? []);
 	let machine = $derived(machineSetOf(exercise.name, weightSets));
 	let nextWeightHint = $derived(
-		readOnly
+		readOnly || isCardio
 			? null
 			: getNextWeightHint(
 					exercise,
@@ -134,6 +139,16 @@
 			>
 				LVL
 			</span>
+		{:else if isCardio}
+			{#if measure.distanceUnit}
+				<span
+					class="mr-1 rounded bg-secondary px-1.5 text-xs font-medium text-muted-foreground"
+					data-testid="{exercise.name}-distance-unit"
+					title="Distances in this unit (set on the exercise)"
+				>
+					{distanceUnitLabel(measure.distanceUnit).toUpperCase()}
+				</span>
+			{/if}
 		{:else if machine && !readOnly && !reordering}
 			<!-- A machine shows its own unit: no switching -->
 			<span
@@ -189,7 +204,7 @@
 								>
 									<EditIcon /> Edit
 								</DropdownMenu.Item>
-								{#if canWarmUp(exercise, isRepsOnly)}
+								{#if canWarmUp(exercise, isRepsOnly, measure.measure)}
 									<DropdownMenu.Item
 										class="gap-2"
 										onclick={() => {
@@ -221,7 +236,9 @@
 	</div>
 	<div class="flex items-center gap-0.5">
 		<span class="mr-auto text-sm lowercase text-muted-foreground" data-testid="{exercise.name}-summary">
-			{#if blankWorkout}
+			{#if isCardio}
+				{intervalsLabel(exercise.sets.length)}
+			{:else if blankWorkout}
 				{exercise.sets.length} {exercise.sets.length === 1 ? 'set' : 'sets'}
 			{:else}
 				{exercise.sets.length}
@@ -232,7 +249,7 @@
 		{#if isRepsOnly}
 			<Badge class="whitespace-nowrap" variant="outline">Reps only</Badge>
 		{/if}
-		{#if exercise.bodyweightFraction !== null && !isLevelUnit(exercise.weightUnit)}
+		{#if exercise.bodyweightFraction !== null && !isLevelUnit(exercise.weightUnit) && !isCardio}
 			<Badge variant="outline">BW</Badge>
 		{/if}
 		<Badge class="whitespace-nowrap" variant="secondary">
@@ -267,7 +284,8 @@
 	{/if}
 	{#if exercise.sets.length > 0 && !reordering}
 		<Separator class="my-1" />
-		{#if comparing}
+		<!-- Comparing is about the work done: a run has no volume to compare -->
+		{#if comparing && !isCardio}
 			<CompareComponent {exercise} />
 		{:else}
 			<SetsComponent bind:this={setsComponent} repsOnly={isRepsOnly} bind:exercise />

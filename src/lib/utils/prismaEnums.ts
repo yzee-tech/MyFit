@@ -7,6 +7,8 @@
  */
 import {
 	ChangeTypeSchema,
+	DistanceUnitSchema,
+	ExerciseMeasureSchema,
 	MuscleGroupSchema,
 	QuotesDisplayModeSchema,
 	RoutineWeightUnitSchema,
@@ -31,3 +33,9 @@ export type WeightUnit = keyof typeof WeightUnit;
 
 export const RoutineWeightUnit = RoutineWeightUnitSchema.enum;
 export type RoutineWeightUnit = keyof typeof RoutineWeightUnit;
+
+export const ExerciseMeasure = ExerciseMeasureSchema.enum;
+export type ExerciseMeasure = keyof typeof ExerciseMeasure;
+
+export const DistanceUnit = DistanceUnitSchema.enum;
+export type DistanceUnit = keyof typeof DistanceUnit;

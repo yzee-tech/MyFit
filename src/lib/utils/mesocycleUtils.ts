@@ -9,7 +9,7 @@ type GroupedExercisesByMuscleGroup = {
 
 export function groupExercisesByMuscleGroup(exercises: WorkoutExercise[]): GroupedExercisesByMuscleGroup {
 	const groupedObject = Object.groupBy(
-		exercises,
+		exercises.filter((ex) => ex.targetMuscleGroup !== 'Cardio'),
 		({ targetMuscleGroup, customMuscleGroup }) => customMuscleGroup ?? targetMuscleGroup
 	);
 	return Object.entries(groupedObject).map(([muscleGroup, exercises]) => ({

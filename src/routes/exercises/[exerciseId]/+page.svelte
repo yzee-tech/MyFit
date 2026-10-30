@@ -16,6 +16,8 @@
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { formatWeightList } from '$lib/utils/weightSets';
 	import { unitLabel } from '$lib/utils/weightUnits';
+	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
+	import { intervalsLabel, isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import MenuIcon from 'virtual:icons/lucide/menu';
@@ -141,8 +143,13 @@
 		}
 	}
 
+	// Cardio is counted in intervals: its rep range is kept but means nothing
 	const setsText = (entry: { setType: string; repRangeStart: number; repRangeEnd: number; sets?: number }) =>
-		`${entry.sets !== undefined ? `${entry.sets} × ` : ''}${setTypeLabel(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
+		data !== 'loading' && isCardioMeasure(data.exercise.measure)
+			? entry.sets !== undefined
+				? intervalsLabel(entry.sets)
+				: 'Intervals'
+			: `${entry.sets !== undefined ? `${entry.sets} × ` : ''}${setTypeLabel(entry.setType)} sets of ${entry.repRangeStart}–${entry.repRangeEnd} reps`;
 </script>
 
 <!-- Reps only: the cap wins over a routine's range, so say when the range starts above it -->
@@ -192,6 +199,13 @@
 				<Badge variant="secondary">
 					{exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup)}
 				</Badge>
+				{#if isCardioMeasure(exercise.measure)}
+					<Badge variant="outline" data-testid="exercise-measure">
+						{measureLabel(exercise.measure)}{exercise.distanceUnit
+							? ` in ${distanceUnitLabel(exercise.distanceUnit)}`
+							: ''}
+					</Badge>
+				{/if}
 				{#if exercise.bodyweightFraction !== null}
 					<Badge variant="outline">{Math.round(exercise.bodyweightFraction * 100)}% of bodyweight</Badge>
 				{/if}
@@ -266,7 +280,12 @@
 			Changes apply everywhere it's used, including past workouts.
 		{/snippet}
 		{#if editOpen}
-			<ExerciseForm initial={exercise} onSubmit={saveDetails} submitLabel="Save" />
+			<ExerciseForm
+				initial={exercise}
+				measureLocked={data.workoutCount > 0}
+				onSubmit={saveDetails}
+				submitLabel="Save"
+			/>
 		{/if}
 	</ResponsiveDialog>
 

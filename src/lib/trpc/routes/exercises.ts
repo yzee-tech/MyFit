@@ -6,8 +6,8 @@ import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { updateExerciseEverywhere } from '$lib/server/exercises';
 import { withRoutinesTransaction } from '$lib/server/blockCache';
-import { MuscleGroupSchema } from '$lib/zodSchemas';
-import type { ChangeType, Prisma, SetType, WeightUnit } from '@prisma/client';
+import { DistanceUnitSchema, ExerciseMeasureSchema, MuscleGroupSchema } from '$lib/zodSchemas';
+import type { ChangeType, DistanceUnit, ExerciseMeasure, Prisma, SetType, WeightUnit } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
@@ -45,7 +45,24 @@ export const exerciseDetailsInput = z
 			.nullable()
 			.optional(),
 		/** Its weights are help, or a higher level is more help. Missing leaves it as it is */
-		assisted: z.boolean().optional()
+		assisted: z.boolean().optional(),
+		/**
+		 * How it's measured: reps and weight, time, or distance and time. Missing (an app version from before
+		 * cardio) leaves it as it is
+		 */
+		measure: ExerciseMeasureSchema.optional(),
+		/** The unit a DistanceTime exercise's distances are shown in; null for the others */
+		distanceUnit: DistanceUnitSchema.nullable().default(null)
+	})
+	// Reps only and a machine with weights are about weight: they go with reps
+	.refine((details) => !(details.repsOnly && details.measure !== undefined && details.measure !== 'Reps'), {
+		message: 'Reps only goes with reps and weight'
+	})
+	.refine((details) => !(details.machine && details.measure !== undefined && details.measure !== 'Reps'), {
+		message: 'A machine with weights goes with reps and weight'
+	})
+	.refine((details) => details.measure !== 'DistanceTime' || details.distanceUnit !== null, {
+		message: 'Pick the distance unit'
 	})
 	// Reps only never adds load, so it has no machine either; and a machine has weights or levels, not both
 	.refine((details) => !(details.repsOnly && details.levels !== null), {
@@ -79,7 +96,11 @@ export const exerciseDetailsInput = z
 		customMuscleGroup: details.targetMuscleGroup === 'Custom' ? details.customMuscleGroup || null : null,
 		note: details.note || null,
 		// A rep cap only applies to reps-only exercises
-		maxReps: details.repsOnly ? details.maxReps : null
+		maxReps: details.repsOnly ? details.maxReps : null,
+		// A distance unit only applies to DistanceTime exercises; cardio has no bodyweight share to count
+		distanceUnit: details.measure === 'DistanceTime' ? details.distanceUnit : null,
+		bodyweightFraction:
+			details.measure === 'Time' || details.measure === 'DistanceTime' ? null : details.bodyweightFraction
 	}))
 	.refine((details) => details.targetMuscleGroup !== 'Custom' || details.customMuscleGroup, {
 		message: 'Enter the muscle group'
@@ -207,6 +228,42 @@ function machineSettings(
 	return { machineWeights, machineUnit, assisted: isMachine && (details.assisted ?? stored.assisted) };
 }
 
+/**
+ * The measure an exercise ends up with: what was sent, else what it has (an older app version doesn't know
+ * measures). Once an exercise has workouts its measure is fixed, so its history always means what it says: a
+ * change is refused, and a genuine change is a new exercise (e.g. "Row (time)"). The distance unit can change
+ * at any time: distances are stored in metres, so past runs never change
+ */
+async function measureSettings(
+	details: Pick<z.output<typeof exerciseDetailsInput>, 'measure' | 'distanceUnit' | 'repsOnly' | 'machineWeights'>,
+	stored: { id: string; measure: ExerciseMeasure; distanceUnit: DistanceUnit | null; machineWeights: number[] }
+): Promise<{ measure: ExerciseMeasure; distanceUnit: DistanceUnit | null }> {
+	const measure = details.measure ?? stored.measure;
+	if (measure !== stored.measure) {
+		const workoutCount = await prisma.workoutExercise.count({ where: { exerciseId: stored.id } });
+		if (workoutCount > 0) {
+			throw new TRPCError({
+				code: 'PRECONDITION_FAILED',
+				message: 'How an exercise is measured can’t change once it has workouts. Make a new exercise instead'
+			});
+		}
+	}
+	// An older app version can't see the measure: it mustn't turn a cardio exercise into reps only or a machine
+	if (details.measure === undefined && stored.measure !== 'Reps') {
+		const machineWeights = details.machineWeights ?? stored.machineWeights;
+		if (details.repsOnly || machineWeights.length > 0) {
+			throw new TRPCError({ code: 'PRECONDITION_FAILED', message: APP_UPDATED_MESSAGE });
+		}
+	}
+	if (measure === 'DistanceTime' && details.distanceUnit === null && stored.distanceUnit === null) {
+		throw new TRPCError({ code: 'BAD_REQUEST', message: 'Pick the distance unit' });
+	}
+	return {
+		measure,
+		distanceUnit: measure === 'DistanceTime' ? (details.distanceUnit ?? stored.distanceUnit) : null
+	};
+}
+
 async function findOwnExercise(userId: string, id: string) {
 	const exercise = await prisma.exercise.findFirst({ where: { id, userId } });
 	if (!exercise) throw new TRPCError({ code: 'NOT_FOUND', message: 'Exercise not found' });
@@ -332,7 +389,14 @@ export const exercises = t.router({
 	create: t.procedure.input(exerciseDetailsInput).mutation(async ({ ctx, input }) => {
 		await assertNameFree(ctx.userId, input.name);
 		const machine = machineSettings(input, { machineWeights: [], machineUnit: null, assisted: false });
-		return prisma.exercise.create({ data: { ...input, ...machine, userId: ctx.userId } });
+		const measure = input.measure ?? 'Reps';
+		if (input.targetMuscleGroup === 'Cardio' && measure === 'Reps')
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cardio requires time or distance and time' });
+		if (measure !== 'Reps') machine.assisted = false;
+		if (measure === 'DistanceTime' && input.distanceUnit === null) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Pick the distance unit' });
+		}
+		return prisma.exercise.create({ data: { ...input, ...machine, measure, userId: ctx.userId } });
 	}),
 
 	/** Changes an exercise everywhere: routines, blocks and past workouts (a rename included) */
@@ -341,8 +405,12 @@ export const exercises = t.router({
 		.mutation(async ({ ctx, input }) => {
 			const exercise = await findOwnExercise(ctx.userId, input.id);
 			if (input.details.name !== exercise.name) await assertNameFree(ctx.userId, input.details.name, exercise.id);
-			// The note and reps-only settings live on the exercise alone; the rest is copied everywhere
+			// The note, reps-only, machine and measure settings live on the exercise alone; the rest is copied everywhere
 			const machine = machineSettings(input.details, exercise);
+			const measured = await measureSettings(input.details, exercise);
+			if (input.details.targetMuscleGroup === 'Cardio' && measured.measure === 'Reps')
+				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cardio requires time or distance and time' });
+			if (measured.measure !== 'Reps') machine.assisted = false;
 			const {
 				note,
 				repsOnly,
@@ -353,13 +421,15 @@ export const exercises = t.router({
 				machineWeights,
 				machineUnit,
 				assisted,
+				measure,
+				distanceUnit,
 				...shared
 			} = input.details;
 			await withRoutinesTransaction(async (tx) => {
 				await updateExerciseEverywhere(tx, exercise.id, shared);
 				await tx.exercise.update({
 					where: { id: exercise.id },
-					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...machine }
+					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...machine, ...measured }
 				});
 			});
 			return { message: 'Exercise saved' };
@@ -455,6 +525,10 @@ export const exercises = t.router({
 				findOwnExercise(ctx.userId, input.fromId),
 				findOwnExercise(ctx.userId, input.intoId)
 			]);
+			// A run's history can't become a lift's: their rows mean different things
+			if (from.measure !== into.measure) {
+				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only exercises measured the same way can be merged' });
+			}
 			const details = {
 				exerciseId: into.id,
 				name: into.name,

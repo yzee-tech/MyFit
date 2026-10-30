@@ -10,7 +10,7 @@ import { workoutMinutes } from './workoutLength';
 export const BODY_AREAS = ['Back', 'Chest', 'Core', 'Shoulders', 'Arms', 'Legs'] as const;
 export type BodyArea = (typeof BODY_AREAS)[number];
 
-const AREA_OF: Record<Exclude<MuscleGroup, 'Custom'>, BodyArea> = {
+const AREA_OF: Record<Exclude<MuscleGroup, 'Custom' | 'Cardio'>, BodyArea> = {
 	Chest: 'Chest',
 	Lats: 'Back',
 	Traps: 'Back',
@@ -30,9 +30,9 @@ const AREA_OF: Record<Exclude<MuscleGroup, 'Custom'>, BodyArea> = {
 	Abs: 'Core'
 };
 
-/** A muscle group's area; custom ones have none ("Other") */
+/** A muscle group's area; custom ones have none ("Other"), and cardio isn't a muscle */
 export function bodyAreaOf(muscleGroup: MuscleGroup): BodyArea | null {
-	return muscleGroup === 'Custom' ? null : AREA_OF[muscleGroup];
+	return muscleGroup === 'Custom' || muscleGroup === 'Cardio' ? null : AREA_OF[muscleGroup];
 }
 
 type StatsSet = {
@@ -61,10 +61,10 @@ export type PeriodStats = {
 	minutes: number;
 	/** Work done in kg */
 	volume: number;
-	/** Sets done: skipped ones and mini-sets don't count */
+	/** Sets done (cardio intervals included): skipped ones and mini-sets don't count */
 	sets: number;
 	setsByArea: Record<BodyArea, number>;
-	/** Sets per muscle, e.g. "SideDelts" or a custom group's name */
+	/** Sets per muscle, e.g. "SideDelts" or a custom group's name; cardio isn't a muscle, so it's left out */
 	setsByMuscle: Record<string, number>;
 };
 
@@ -84,6 +84,7 @@ export function periodStats(workouts: StatsWorkout[]): PeriodStats {
 			const sets = exercise.sets.filter((set) => !set.skipped).length;
 			if (sets === 0) continue;
 			stats.sets += sets;
+			if (exercise.targetMuscleGroup === 'Cardio') continue;
 			const muscle =
 				exercise.targetMuscleGroup === 'Custom' ? (exercise.customMuscleGroup ?? 'Custom') : exercise.targetMuscleGroup;
 			stats.setsByMuscle[muscle] = (stats.setsByMuscle[muscle] ?? 0) + sets;

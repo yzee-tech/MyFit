@@ -2,6 +2,42 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-30: cardio exercises (PR #56)
+
+### Added
+
+- **How it's measured** on the exercise (Exercises page): **Reps** (reps and a weight, everything until now),
+  **Time** (a plank, a stair climber, bike intervals) or **Distance** (a run, a row, a ride). Distance exercises pick
+  a unit: km, mi, m or ft. Distances are kept in metres, so the unit can change later without changing past runs;
+  how an exercise is measured is fixed once it has workouts (make a new exercise for a change).
+- **Cardio set rows** in a workout: a time box (m:ss, or minutes), a distance box in the exercise's unit with the
+  pace worked out under it (per km or mile; per 500 m for metres; per 100 ft), and a level box on a machine with
+  levels. No reps, weight or RIR. "Previous" and tap-to-copy work as for lifts; sets are **intervals**: a steady run
+  is 1, 8 × 30 s sprints are 8.
+- Suggestions for cardio repeat last time's intervals, never progress them, and a deload week doesn't cut a run
+  short. First time, the boxes start empty.
+- A **Cardio** muscle group, with built-in Running, Treadmill, Rowing machine, Stationary bike, Stair climber and
+  Elliptical to start from.
+- Cardio charts on Stats: **Total time**, and for distances **Total distance** and **Pace**, one point per workout.
+  Past workouts and History show a cardio row's level, distance, time and pace.
+
+### Changed
+
+- The routine editor shows **Intervals** for a cardio exercise instead of sets, a set type, a rep range, weights and
+  progression overrides.
+- Cardio stays out of the sets-per-muscle charts (the Cardio group isn't a muscle), 1RM, Warm up, volume and the
+  workout comparison; its intervals still count in the total sets done. A Time exercise in a muscle group (a plank in
+  Abs) still counts its sets under that muscle.
+- Saving a workout checks each cardio interval has its time (and distance); an app version from before cardio is
+  asked to reopen the app, as its save can't carry them.
+- The CSV export has two new columns at the end, `timeSeconds` and `distanceMeters`, filled for cardio sets (the
+  JSON export carries them on every set).
+
+### Fixed
+
+- Sets that follow set 1 (copies of its numbers) keep following it after the exercise is edited in its
+  drawer (a note, a picked weight set, the routine settings), not only after a kg/lb switch.
+
 ## 2026-10-28: clean-up after the weeks and hints work (PR #58)
 
 ### Fixed
