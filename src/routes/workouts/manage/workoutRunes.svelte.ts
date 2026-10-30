@@ -489,8 +489,11 @@ function createWorkoutRunes() {
 				const historySet = exerciseFromHistory.sets[i];
 				if (!historySet) break;
 				const keepLevel = sameKindOfLoad && isLevelUnit(exerciseToEdit.weightUnit);
+				// Copied on purpose, as in the strength copy below: the pre-copy suggestion goes with the
+				// old numbers, so an emptied box stays empty instead of reviving it
+				const { suggested: _preCopySuggestion, ...restOfTheSet } = exerciseToEdit.sets[i];
 				exerciseToEdit.sets[i] = {
-					...exerciseToEdit.sets[i],
+					...restOfTheSet,
 					skipped: historySet.skipped,
 					completed: false,
 					load: keepLevel ? historySet.load : exerciseToEdit.sets[i].load,

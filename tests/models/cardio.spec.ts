@@ -358,6 +358,129 @@ test("swapping a cardio exercise for a strength one drops the old measure's numb
 	expect(set.distance).toBeUndefined();
 });
 
+test("swapping a strength exercise for a cardio one drops the old measure's numbers and suggestion", async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bench press', targetMuscleGroup: 'Chest' }
+	]);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Bench press']);
+	await page.getByTestId('Bench press-add-set').click();
+	await box(page, 'Bench press', 1, 'load').fill('40');
+	await box(page, 'Bench press', 1, 'reps').fill('12');
+	// Set 2 shows set 1's numbers as suggestions: a remembered suggestion exists to drop
+	await expect(box(page, 'Bench press', 2, 'load')).toHaveAttribute('data-suggested', 'true');
+	await editWorkoutExercise(page, 'Bench press');
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByPlaceholder('Search your exercises').fill('Run');
+	await page.getByRole('option', { name: 'Run', exact: true }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
+	// Distance and time now: empty, and nothing of the lift's numbers or suggestion shows or lingers
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('');
+	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	for (const set of saved.workoutExercises[0].sets) {
+		expect(set.suggested).toBeUndefined();
+		expect(set.hintBase).toBeUndefined();
+		expect(set.reps).toBeUndefined();
+		expect(set.load).toBeUndefined();
+		expect(set.RIR).toBeUndefined();
+	}
+});
+
+test('editing a past cardio workout: emptied time and distance boxes stay empty, with no suggestion or hint', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	const past = await logPastCardio(userId);
+	await page.goto(`/workouts/${past.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('5');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
+	// A past workout's numbers are the record: an emptied box stays empty, no suggestion or hint returns
+	await page.getByTestId('Run-set-1-action').click();
+	await box(page, 'Run', 1, 'distance').fill('');
+	await box(page, 'Run', 1, 'time').fill('');
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('');
+	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('data-suggested', 'false');
+	await expect(box(page, 'Run', 1, 'time')).toHaveAttribute('data-suggested', 'false');
+});
+
+test('after a History copy of cardio intervals, an emptied box stays empty: the old suggestion is gone', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	// Two past runs: the suggestion comes from the latest (5 km in 26:00); the History copy takes the older (4 km in 22:00)
+	const run = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Run' } } });
+	const threeDaysAgo = new Date(Date.now() - 3 * 86400000);
+	await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt: threeDaysAgo,
+			endedAt: new Date(threeDaysAgo.getTime() + 3600000),
+			workoutExercises: {
+				create: [
+					{
+						setType: 'V2',
+						repRangeStart: 8,
+						repRangeEnd: 15,
+						exerciseIndex: 0,
+						exerciseId: run.id,
+						name: 'Run',
+						targetMuscleGroup: 'Cardio',
+						sets: {
+							create: [
+								{ setIndex: 0, reps: 0, load: 0, RIR: 0, skipped: false, timeSeconds: 1320, distanceMeters: 4000 }
+							]
+						}
+					}
+				]
+			}
+		}
+	});
+	await logPastCardio(userId);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	// Last time's run is the suggestion
+	await expect(box(page, 'Run', 1, 'time')).toHaveAttribute('placeholder', '26:00');
+	// Typed over, the suggestion is remembered as the box's backup
+	await box(page, 'Run', 1, 'distance').fill('3');
+	await box(page, 'Run', 1, 'time').fill('30:00');
+	await box(page, 'Run', 1, 'time').blur();
+	// Copy the older run from History: its numbers become the person's own
+	await page.getByTestId('Run-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	const history = page.getByRole('dialog').filter({ hasText: 'History' });
+	await history.getByLabel('Copy these sets').last().click();
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('4');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('22:00');
+	// Emptying a copied box leaves it empty: the pre-copy suggestion (26:00) does not come back
+	await box(page, 'Run', 1, 'time').fill('');
+	await expect(box(page, 'Run', 1, 'time')).toHaveValue('');
+	await expect(box(page, 'Run', 1, 'time')).toHaveAttribute('data-suggested', 'false');
+	await box(page, 'Run', 1, 'distance').fill('');
+	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');
+	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('data-suggested', 'false');
+});
+
 test('a cardio suggestion carries no hint baseline, on screen or on the phone', async ({ page, userData }) => {
 	const userId = userData.userId;
 	await createExercises(userId, [

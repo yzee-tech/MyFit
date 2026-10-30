@@ -2060,6 +2060,104 @@ test('sets that follow set 1 keep following it after a kg/lb switch', async ({ p
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
 });
 
+test('a measure change on the Exercises page drops every follow to set 1', async ({ page, userData }) => {
+	await createExercises(userData.userId, [{ name: 'Sled push', targetMuscleGroup: 'Quads' }]);
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await quickAdd(page, ['Sled push']);
+	await page.getByTestId('Sled push-add-set').click();
+	const box = (set: number, field: 'load' | 'reps' | 'time') => page.locator(`[id="Sled\\ push-set-${set}-${field}"]`);
+	await box(1, 'load').fill('40');
+	await box(1, 'reps').fill('12');
+	// Set 2 follows set 1 before the change
+	await expect(box(2, 'load')).toHaveAttribute('data-suggested', 'true');
+	// The exercise has no workouts yet, so its measure can change: Reps -> Time on the Exercises page
+	const sledPush = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Sled push' } }
+	});
+	await page.goto(`/exercises/${sledPush.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('dialog').locator('[aria-label="Measured in time"]').click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-measure')).toHaveText('Time');
+	// Back in the workout, a drawer Edit re-picking the exercise brings the new measure in
+	await page.goto('/workouts/manage/exercises');
+	await editWorkoutExercise(page, 'Sled push');
+	await page.getByLabel('Pick an exercise').click();
+	await page.getByPlaceholder('Search your exercises').fill('Sled push');
+	await page.getByRole('option', { name: 'Sled push', exact: true }).click();
+	await page.getByRole('button', { name: 'Update' }).click();
+	// The old measure's numbers, suggestion and hint baseline are gone, persisted included
+	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const sled = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Sled push');
+	for (const set of sled.sets) {
+		expect(set.reps).toBeUndefined();
+		expect(set.load).toBeUndefined();
+		expect(set.suggested).toBeUndefined();
+		expect(set.hintBase).toBeUndefined();
+	}
+	// Time boxes now, all numbers cleared: no stale suggestion or follow tag survives the change
+	await expect(box(2, 'time')).toHaveValue('');
+	await expect(box(2, 'time')).toHaveAttribute('data-suggested', 'false');
+	// Fresh copy-down still works after the change: an empty box takes set 1's new number as a suggestion
+	await box(1, 'time').fill('1:30');
+	await box(1, 'time').blur();
+	await expect(box(1, 'time')).toHaveValue('1:30');
+	await expect(box(2, 'time')).toHaveValue('');
+	await expect(box(2, 'time')).toHaveAttribute('placeholder', '1:30');
+	await expect(box(2, 'time')).toHaveAttribute('data-suggested', 'true');
+});
+
+test('a weights-to-levels machine switch drops the load follows but keeps the rest', async ({ page, userData }) => {
+	await createExercises(userData.userId, [{ name: 'Hack squat', targetMuscleGroup: 'Quads' }]);
+	const hackSquat = await prisma.exercise.findUniqueOrThrow({
+		where: { userId_name: { userId: userData.userId, name: 'Hack squat' } }
+	});
+	await prisma.exercise.update({
+		where: { id: hackSquat.id },
+		data: { machineWeights: [20, 40, 60], machineUnit: 'KG' }
+	});
+	await createSplitAndMesoForTest(page);
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('100');
+	await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/manage\/exercises/);
+	await quickAdd(page, ['Hack squat']);
+	await page.getByTestId('Hack squat-add-set').click();
+	const box = (set: number, field: 'load' | 'reps') => page.locator(`[id="Hack\\ squat-set-${set}-${field}"]`);
+	await box(1, 'load').fill('40');
+	await box(1, 'reps').fill('12');
+	// Set 2 follows set 1's load and reps before the switch
+	await expect(box(2, 'load')).toHaveAttribute('data-suggested', 'true');
+	// The machine is switched from weights to levels on the Exercises page
+	await page.goto(`/exercises/${hackSquat.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.getByRole('dialog').getByRole('radio', { name: 'Levels', exact: true }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	// Saved before the database read: the dialog closes once the update lands
+	await expect(page.getByRole('dialog')).toBeHidden();
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: hackSquat.id } })).levelsFrom).toBe(1);
+	// Back in the workout, a drawer Edit picks the switch up: loads clear and stop following
+	await page.goto('/workouts/manage/exercises');
+	await editWorkoutExercise(page, 'Hack squat');
+	await page.getByRole('button', { name: 'Update' }).click();
+	// The old loads are gone; the level boxes start empty
+	await expect(box(1, 'load')).toHaveValue('');
+	await expect(box(2, 'load')).toHaveValue('');
+	// The rest survives the switch: set 1's reps, and set 2's copy of it as a suggestion
+	await expect(box(1, 'reps')).toHaveValue('12');
+	await expect(box(2, 'reps')).toHaveValue('');
+	await expect(box(2, 'reps')).toHaveAttribute('placeholder', '12');
+	await expect(box(2, 'reps')).toHaveAttribute('data-suggested', 'true');
+});
+
 test('sets that follow set 1 keep following it after a drawer Edit of the exercise', async ({ page }) => {
 	const box = await facePullsWithCopies(page);
 	// Same exercise, same measure: only a routine note changes. The edit rebuilds the set records, and
