@@ -219,7 +219,7 @@
 	}
 </script>
 
-<H2>
+<H2 compact>
 	Workouts
 	{#snippet action()}
 		<Button class="shrink-0 gap-1.5" onclick={toggleCalendar} size="sm" variant="outline">

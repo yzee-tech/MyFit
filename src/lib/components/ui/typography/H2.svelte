@@ -10,12 +10,16 @@
 		children: Snippet;
 		/** A button at the right end of the heading, e.g. Hide calendar */
 		action?: Snippet;
+		/** Less space below the heading, where the page's content needs the room */
+		compact?: boolean;
 	};
-	let { showChartIcon = false, children, action, chartMode = $bindable(false) }: PropsType = $props();
+	let { showChartIcon = false, children, action, compact = false, chartMode = $bindable(false) }: PropsType = $props();
 </script>
 
 <h2
-	class="mb-4 flex h-10 scroll-m-20 items-end justify-between gap-2 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0"
+	class="{compact
+		? 'mb-2'
+		: 'mb-4'} flex h-10 scroll-m-20 items-end justify-between gap-2 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0"
 >
 	{@render children()}
 	{@render action?.()}

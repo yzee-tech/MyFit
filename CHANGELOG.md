@@ -2,6 +2,18 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-31: small fixes (calendar spacing, gym weights on the start page)
+
+### Fixed
+
+- **"Weights here" on the start page** listed each machine's own weights (e.g. "Leg press (AMHK)") next to the gym's
+  weight sets. It now lists only the gym's weights; a machine always uses its own.
+
+### Changed
+
+- **Workouts calendar**: the month name is a little larger and there is less space between the heading and the
+  calendar, so more of the workouts below show. The calendar itself is the same size.
+
 ## 2026-10-30: cardio exercises (PR #56)
 
 ### Added

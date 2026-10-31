@@ -120,7 +120,7 @@
 		>
 			<ChevronLeftIcon class="h-7 w-7" />
 		</button>
-		<span class="text-sm font-semibold" data-testid="calendar-month">{title}</span>
+		<span class="text-base font-semibold" data-testid="calendar-month">{title}</span>
 		<button
 			class="flex h-12 w-12 items-center justify-center rounded-md border disabled:opacity-30"
 			aria-label="Next month"

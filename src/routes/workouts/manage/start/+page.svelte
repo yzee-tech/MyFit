@@ -29,7 +29,7 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
-	import type { WeightSetLike } from '$lib/utils/weightSets';
+	import { pickableWeightSets, type WeightSetLike } from '$lib/utils/weightSets';
 	import * as Select from '$lib/components/ui/select';
 
 	type TodaysWorkoutData = RouterOutputs['workouts']['getTodaysWorkoutData'];
@@ -68,7 +68,10 @@
 	let sessionWeightUnit: WeightUnit = $state(homeWeightUnit);
 	let sessionWeightSetId: string | null = $state(null);
 	const weightSets: WeightSetLike[] = $page.data.weightSets ?? [];
-	let sessionWeightSetOptions = $derived(weightSets.filter((weightSet) => weightSet.unit === sessionWeightUnit));
+	// A gym's weights: a machine's own levels or weights belong to its exercise, not to the gym
+	let sessionWeightSetOptions = $derived(
+		pickableWeightSets(weightSets).filter((weightSet) => weightSet.unit === sessionWeightUnit)
+	);
 	let sessionWeightSet = $derived(sessionWeightSetOptions.find((weightSet) => weightSet.id === sessionWeightSetId));
 	let switchRoutineDialogOpen = $state(false);
 	// A workout already started: this page then sets it up again rather than starting another
