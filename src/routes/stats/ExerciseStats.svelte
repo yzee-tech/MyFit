@@ -161,7 +161,7 @@
 		</Popover.Trigger>
 		<Popover.Content sameWidth>
 			<Command.Root class="mb-6 h-fit" shouldFilter={false}>
-				<Command.Input placeholder="Type here" bind:value={searchText} />
+				<Command.Input clearable placeholder="Type here" bind:value={searchText} />
 				<Command.List>
 					{#if exercisesByMuscleGroup === undefined}
 						<Command.Loading>

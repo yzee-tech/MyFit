@@ -11,8 +11,16 @@ What changed in MyFit, newest first.
 
 ### Changed
 
-- **Workouts calendar**: the month name is a little larger and there is less space between the heading and the
-  calendar, so more of the workouts below show. The calendar itself is the same size.
+- **Workouts calendar**: the month name is larger and there is less space between the heading and the calendar, so
+  more of the workouts below show. The calendar itself is the same size. The mesocycle's calendar is the same
+  calendar, so it matches.
+
+### Added
+
+- **A clear "x" in the exercise search boxes** (the Add exercises sheet, the Exercises page, the exercise picker in
+  routines and mesocycles, the Mesocycles page and the exercise search on Stats). It shows when there is text and
+  empties the box with one tap, keeping the cursor there. On Mesocycles it also removes the search from the link; on
+  Stats it keeps the exercise and its chart.
 
 ## 2026-10-30: cardio exercises (PR #56)
 

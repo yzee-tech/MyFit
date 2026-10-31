@@ -1,10 +1,10 @@
 <script lang="ts">
+	import SearchInput from '$lib/components/SearchInput.svelte';
 	import { invalidate } from '$app/navigation';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
 	import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { trpc } from '$lib/trpc/client';
@@ -176,7 +176,7 @@
 			<Sheet.Title>{replacingName ? `Replace ${replacingName}` : 'Add exercises'}</Sheet.Title>
 		</Sheet.Header>
 		<div class="mt-3 flex items-center gap-1">
-			<Input class="grow" placeholder="Search your exercises" bind:value={search} />
+			<SearchInput placeholder="Search your exercises" bind:value={search} />
 			<Popover.Root bind:open={filterOpen}>
 				<Popover.Trigger>
 					<Button

@@ -1,7 +1,7 @@
 <script lang="ts">
+	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
-	import { Input } from '$lib/components/ui/input';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import { trpc } from '$lib/trpc/client';
@@ -77,7 +77,7 @@
 </H2>
 
 <div class="mb-2 flex gap-2">
-	<Input aria-label="Search exercises" placeholder="Search" bind:value={search} />
+	<SearchInput aria-label="Search exercises" placeholder="Search" bind:value={search} />
 	<ResponsiveDialog
 		long
 		title="New exercise"
