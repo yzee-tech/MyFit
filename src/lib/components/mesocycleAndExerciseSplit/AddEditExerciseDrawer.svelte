@@ -295,7 +295,7 @@
 				{#if pickerOpen}
 					<Command.Root class="rounded-md border" shouldFilter={false}>
 						<div class="flex items-center gap-1 pr-1">
-							<Command.Input class="w-full" placeholder="Search your exercises" bind:value={pickerSearch} />
+							<Command.Input class="w-full" clearable placeholder="Search your exercises" bind:value={pickerSearch} />
 							<Popover.Root bind:open={filterOpen}>
 								<Popover.Trigger>
 									<Button

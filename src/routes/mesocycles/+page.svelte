@@ -1,10 +1,10 @@
 <script lang="ts">
+	import SearchInput from '$lib/components/SearchInput.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import { Input } from '$lib/components/ui/input';
 	import Separator from '$lib/components/ui/separator/separator.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
@@ -25,8 +25,8 @@
 		activeMesocycle = await data.activeMesocycle;
 	});
 
-	function updateSearchParam(e: Event) {
-		e.preventDefault();
+	async function updateSearchParam(e?: Event) {
+		e?.preventDefault();
 		const url = new URL($page.url);
 		if (searchString === (url.searchParams.get('search') ?? '')) return;
 
@@ -34,7 +34,13 @@
 		else url.searchParams.delete('search');
 
 		mesocycles = [];
-		goto(url);
+		await goto(url);
+	}
+
+	// The page is made again for the new search: the cursor goes back in the box for the next one
+	async function clearSearch() {
+		await updateSearchParam();
+		document.getElementById('search-mesocycles')?.focus();
 	}
 
 	async function loadMore(infiniteEvent: InfiniteEvent) {
@@ -62,7 +68,13 @@
 <div class="flex grow flex-col gap-2">
 	<div class="flex gap-1">
 		<form class="contents" onsubmit={updateSearchParam}>
-			<Input id="search-mesocycles" placeholder="Search" type="search" bind:value={searchString} />
+			<SearchInput
+				id="search-mesocycles"
+				onclear={clearSearch}
+				placeholder="Search"
+				type="search"
+				bind:value={searchString}
+			/>
 			<Button aria-label="search" type="submit" variant="secondary">
 				<SearchIcon />
 			</Button>

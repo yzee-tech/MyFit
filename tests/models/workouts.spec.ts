@@ -2721,3 +2721,28 @@ test('the exercise ⋯ menu closes when the list scrolls, instead of sticking to
 	await expect(page.getByTestId('Pull-ups-menu-button')).not.toBeInViewport();
 	await expect(page.getByRole('menu')).toHaveCount(0);
 });
+
+test('a blank workout’s "Weights here" lists the gym’s weights, not a machine’s own levels or weights', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [
+		{ name: 'Leg press', targetMuscleGroup: 'Quads' },
+		{ name: 'Cable curl', targetMuscleGroup: 'Biceps', levelsFrom: 1, levelsTo: 10, levelStep: 1 }
+	]);
+	await prisma.exercise.update({
+		where: { userId_name: { userId: userData.userId, name: 'Leg press' } },
+		data: { machineWeights: [10, 20, 30], machineUnit: 'KG' }
+	});
+	await prisma.weightSet.create({
+		data: { userId: userData.userId, name: 'Hotel DBs', unit: 'KG', weights: [8, 10, 12] }
+	});
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	if (await page.getByRole('radio', { name: /^Blank workout/ }).count()) await pickRoutine(page, 'Blank workout');
+	await page.getByLabel('Weights here').click();
+	await expect(page.getByRole('option', { name: 'Hotel DBs' })).toBeVisible();
+	await expect(page.getByRole('option', { name: 'Standard steps' })).toBeVisible();
+	await expect(page.getByRole('option')).toHaveCount(2);
+});

@@ -425,3 +425,22 @@ test('exercise stats: a block filter is cleared when another exercise is picked,
 		await prisma.mesocycle.deleteMany({ where: { userId } });
 	}
 });
+
+test('exercise stats: the clear button empties the search text and keeps the exercise and its chart', async ({
+	page,
+	userData
+}) => {
+	await seedSessions(userData.userId, 3);
+	await page.goto('/stats?exercise=Lateral%20raises');
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '3');
+	await page.getByRole('combobox').filter({ hasText: 'Lateral raises' }).click();
+	const search = page.getByPlaceholder('Type here');
+	await expect(search).toHaveValue('Lateral raises');
+	await page.getByRole('button', { name: 'Clear search' }).click();
+	await expect(search).toHaveValue('');
+	await expect(search).toBeFocused();
+	await expect(page.getByRole('button', { name: 'Clear search' })).toBeHidden();
+	// The chart and the link stay as they were
+	await expect(page.getByTestId('exercise-chart')).toHaveAttribute('data-points', '3');
+	await expect(page).toHaveURL(/exercise=Lateral(\+|%20)raises/);
+});

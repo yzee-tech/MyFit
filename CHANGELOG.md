@@ -2,6 +2,26 @@
 
 What changed in MyFit, newest first.
 
+## 2026-10-31: small fixes (calendar spacing, gym weights on the start page)
+
+### Fixed
+
+- **"Weights here" on the start page** listed each machine's own weights (e.g. "Leg press (AMHK)") next to the gym's
+  weight sets. It now lists only the gym's weights; a machine always uses its own.
+
+### Changed
+
+- **Workouts calendar**: the month name is larger and there is less space between the heading and the calendar, so
+  more of the workouts below show. The calendar itself is the same size. The mesocycle's calendar is the same
+  calendar, so it matches.
+
+### Added
+
+- **A clear "x" in the exercise search boxes** (the Add exercises sheet, the Exercises page, the exercise picker in
+  routines and mesocycles, the Mesocycles page and the exercise search on Stats). It shows when there is text and
+  empties the box with one tap, keeping the cursor there. On Mesocycles it also removes the search from the link; on
+  Stats it keeps the exercise and its chart.
+
 ## 2026-10-30: cardio exercises (PR #56)
 
 ### Added
