@@ -13,7 +13,7 @@
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { trpc } from '$lib/trpc/client';
-	import { formatWeekEffort, getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere, isBlockPaused } from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
@@ -30,9 +30,29 @@
 	const now = useNow();
 	let currentWeek = $derived.by(() => {
 		if (!mesocycle.startDate || mesocycle.endDate || !now.value) return null;
-		const week = getBlockWeekHere(mesocycle.startDate, now.value);
+		const week = getBlockWeekHere(mesocycle.startDate, now.value, mesocycle.pauses);
 		return week <= mesocycle.weeklyRIR.length ? week : null;
 	});
+	// A paused block's week stands still until it is resumed
+	let paused = $derived(isBlockPaused(mesocycle.pauses));
+	let pausingOrResuming = $state(false);
+	let stopConfirmOpen = $state(false);
+
+	async function pauseOrResume() {
+		pausingOrResuming = true;
+		try {
+			const { message } = await (paused
+				? trpc().mesocycles.resume.mutate(mesocycle.id)
+				: trpc().mesocycles.pause.mutate(mesocycle.id));
+			const fresh = await trpc().mesocycles.findById.query(mesocycle.id);
+			if (fresh) mesocycle.pauses = fresh.pauses;
+			await invalidate('mesocycles:active');
+			toast.success(message);
+		} catch (error) {
+			if (error instanceof TRPCClientError) toast.error(error.message);
+		}
+		pausingOrResuming = false;
+	}
 
 	function loadMesocycle(mode: 'edit' | 'clone') {
 		if (mode === 'edit') {
@@ -59,6 +79,7 @@
 
 	async function progressMesocycle() {
 		callingPatchEndpoint = true;
+		stopConfirmOpen = false;
 		try {
 			const response = await trpc().mesocycles.progressToNextStage.mutate({
 				id: mesocycle.id,
@@ -67,6 +88,12 @@
 			});
 			mesocycle.startDate = response.startDate;
 			mesocycle.endDate = response.endDate;
+			// Stopping closes a pause still open
+			if (response.endDate)
+				mesocycle.pauses = mesocycle.pauses.map((pause) => ({
+					...pause,
+					resumedAt: pause.resumedAt ?? response.endDate
+				}));
 			await invalidate('mesocycles:active');
 			toast.success(response.message);
 		} catch (error) {
@@ -127,7 +154,10 @@
 				{#if !mesocycle.startDate}
 					<Badge variant="secondary">Unused</Badge>
 				{:else if !mesocycle.endDate}
-					<Badge>Active</Badge>
+					<div class="flex gap-1">
+						{#if paused}<Badge variant="secondary" data-testid="mesocycle-paused-badge">Paused</Badge>{/if}
+						<Badge>Active</Badge>
+					</div>
 				{:else}
 					<Badge variant="outline">Completed</Badge>
 				{/if}
@@ -140,6 +170,9 @@
 				<span class="text-sm text-muted-foreground">Weekly effort</span>
 				<Badge variant="outline">{mesocycle.weeklyRIR.length} weeks</Badge>
 			</div>
+			{#if paused && currentWeek !== null}
+				<span class="text-sm" data-testid="mesocycle-paused-week">Week {currentWeek} - paused</span>
+			{/if}
 			<div class="flex flex-wrap gap-1" data-testid="mesocycle-weekly-effort">
 				{#each mesocycle.weeklyRIR as _, idx}
 					<Badge
@@ -178,8 +211,21 @@
 		</div>
 	</Card.Content>
 	{#if !mesocycle.endDate}
-		<Card.Footer class="justify-end">
-			<Button class="w-36" disabled={callingPatchEndpoint} onclick={progressMesocycle}>
+		<Card.Footer class="justify-end gap-2">
+			{#if mesocycle.startDate}
+				<Button class="w-36" disabled={pausingOrResuming} onclick={pauseOrResume} variant="secondary">
+					{#if pausingOrResuming}
+						<LoaderCircle class="animate-spin" />
+					{:else}
+						{paused ? 'Resume mesocycle' : 'Pause mesocycle'}
+					{/if}
+				</Button>
+			{/if}
+			<Button
+				class="w-36"
+				disabled={callingPatchEndpoint}
+				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}
+			>
 				{#if callingPatchEndpoint}
 					<LoaderCircle class="animate-spin" />
 				{:else}
@@ -189,6 +235,13 @@
 		</Card.Footer>
 	{/if}
 </Card.Root>
+
+<ResponsiveDialog title="Stop mesocycle?" bind:open={stopConfirmOpen}>
+	{#snippet description()}
+		Stopping ends the block and closes the pause.
+	{/snippet}
+	<Button class="gap-2" disabled={callingPatchEndpoint} onclick={progressMesocycle}>Stop mesocycle</Button>
+</ResponsiveDialog>
 
 <ResponsiveDialog title="Delete mesocycle?" bind:open={deleteConfirmDrawerOpen}>
 	{#snippet description()}

@@ -4,6 +4,7 @@ import type {
 	DistanceUnit,
 	ExerciseMeasure,
 	Mesocycle,
+	MesocyclePause,
 	Workout,
 	WorkoutExercise,
 	WorkoutExerciseMiniSet,
@@ -20,7 +21,7 @@ export const load = async (event) => {
 export type FullWorkoutWithMesoData = Workout & {
 	/** My routines still has the routine this workout was done from */
 	routineExists: boolean;
-	workoutOfMesocycle: (WorkoutOfMesocycle & { mesocycle: Mesocycle }) | null;
+	workoutOfMesocycle: (WorkoutOfMesocycle & { mesocycle: Mesocycle & { pauses: MesocyclePause[] } }) | null;
 	workoutExercises: (WorkoutExercise & {
 		sets: (WorkoutExerciseSet & { miniSets: WorkoutExerciseMiniSet[] })[];
 		/** Linked measure for all-skipped editing, plus distance display unit; none for an unlinked row */

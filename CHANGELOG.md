@@ -2,6 +2,20 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-01: pause a mesocycle, and choose whether a workout counts toward progression
+
+### Added
+
+- **Pause a mesocycle** (Pause mesocycle / Resume mesocycle on its page, e.g. for a holiday). Its week count stands
+  still while it is paused, and resuming carries on in the same week. The dashboard, start page and mesocycle page
+  read "Week N - paused". Stopping a paused mesocycle asks first and closes the pause. Past workouts keep the week
+  they were done in. Workouts started while it is paused are ordinary workouts, not part of the mesocycle.
+- **"Counts toward progression" switch** on the Start workout page (for a routine or a blank workout) and on a
+  workout's page. Off means the workout is saved in your history, stats and charts, but isn't used to calculate your
+  weights and reps progression (or the Previous column); a workout with the switch off shows a "Not counted" tag.
+  It starts on, and off while the mesocycle is paused (you can turn it on). Editing a workout keeps its choice.
+- The data export includes pauses and a countsForProgression column (CSV, after isDeload).
+
 ## 2026-10-31: small fixes (calendar spacing, gym weights on the start page)
 
 ### Fixed

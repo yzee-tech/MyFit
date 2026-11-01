@@ -5,7 +5,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { formatWeekEffort, getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere, isBlockPaused } from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { workoutRunes } from '../../workouts/manage/workoutRunes.svelte';
 	import WorkoutProgressionChart from './WorkoutProgressionChart.svelte';
@@ -41,7 +41,10 @@
 	{:then todaysWorkoutData}
 		{@const block = todaysWorkoutData.activeBlock}
 		{@const weekNumber =
-			block?.mesocycle.startDate && now.value ? getBlockWeekHere(block.mesocycle.startDate, now.value) : null}
+			block?.mesocycle.startDate && now.value
+				? getBlockWeekHere(block.mesocycle.startDate, now.value, block.mesocycle.pauses)
+				: null}
+		{@const blockPaused = block !== undefined && isBlockPaused(block.mesocycle.pauses)}
 		{#if block}
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
@@ -55,6 +58,8 @@
 						{block.routines.length} routines
 					{:else if weekNumber > block.totalWeeks}
 						Block finished, all {block.totalWeeks} weeks done
+					{:else if blockPaused}
+						Week {weekNumber} - paused · {block.routines.length} routines
 					{:else}
 						Week {weekNumber} of {block.totalWeeks} · {block.routines.length} routines
 					{/if}

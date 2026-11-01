@@ -280,6 +280,14 @@
 						})}
 					</span>
 					<span class="flex min-w-0 items-center gap-1 text-muted-foreground">
+						{#if !workout.countsForProgression}
+							<span
+								class="shrink-0 rounded-full border px-1.5 text-xs text-muted-foreground"
+								data-testid="not-counted-tag"
+							>
+								Not counted
+							</span>
+						{/if}
 						{#if workout.note}
 							<StickyNoteIcon class="shrink-0" />
 						{/if}

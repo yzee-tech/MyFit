@@ -57,6 +57,7 @@ const EXPECTED_HEADER = [
 	'RIR',
 	'skipped',
 	'isDeload',
+	'countsForProgression',
 	'weightSetId',
 	'bodyweightKg',
 	'bodyweightFraction',
@@ -301,6 +302,16 @@ async function seedRichData(userId: string) {
 test('exports all data as JSON and CSV for a seeded account', async ({ browser }) => {
 	const { userId, context } = await createUserContext(browser);
 	await seedRichData(userId);
+	// A workout that doesn't count toward progression, and a block that was paused for a while
+	await prisma.workout.update({ where: { id: 'wA0000000000000000000001' }, data: { countsForProgression: false } });
+	await prisma.mesocyclePause.create({
+		data: {
+			id: 'mpA00000000000000000001',
+			mesocycleId: 'mA0000000000000000000001',
+			pausedAt: new Date('2024-01-05T10:00:00Z'),
+			resumedAt: new Date('2024-01-09T10:00:00Z')
+		}
+	});
 
 	// A second user whose data must never leak into the export
 	const otherUserId = createId();
@@ -380,6 +391,12 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	// The empty workout appears in JSON
 	expect(json.workouts[1].workoutExercises).toHaveLength(0);
 	expect(json.workouts[1].isDeload).toBe(true);
+	// The choice is exported either way, and so are the pauses
+	expect(json.workouts[0].countsForProgression).toBe(false);
+	expect(json.workouts[1].countsForProgression).toBe(true);
+	expect(json.mesocycles[0].pauses).toHaveLength(1);
+	expect(json.mesocycles[0].pauses[0].pausedAt).toBe('2024-01-05T10:00:00.000Z');
+	expect(json.mesocycles[0].pauses[0].resumedAt).toBe('2024-01-09T10:00:00.000Z');
 
 	// No auth models, no other user's data
 	expect(jsonText).not.toContain('sessionToken');
@@ -423,6 +440,7 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 	expect(row1[bySetId.displayUnit]).toBe('KG');
 	expect(row1[bySetId.skipped]).toBe('false');
 	expect(row1[bySetId.isDeload]).toBe('false');
+	expect(row1[bySetId.countsForProgression]).toBe('false');
 	expect(row1[bySetId.weightSetId]).toBe('wsA000000000000000000001');
 	expect(row1[bySetId.bodyweightKg]).toBe('80.5');
 	expect(row1[bySetId.bodyweightFraction]).toBe('1');

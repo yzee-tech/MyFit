@@ -18,6 +18,7 @@
 		browserTimeZone,
 		formatWeekEffort,
 		getBlockWeekHere,
+		isBlockPaused,
 		isDeloadWeek,
 		localDaysBetween
 	} from '$lib/utils/workoutUtils';
@@ -91,8 +92,14 @@
 	// The week is counted on the phone (its clock and timezone), so null until the page is up
 	const now = useNow();
 	let weekNumber = $derived(
-		activeBlock?.mesocycle.startDate && now.value ? getBlockWeekHere(activeBlock.mesocycle.startDate, now.value) : null
+		activeBlock?.mesocycle.startDate && now.value
+			? getBlockWeekHere(activeBlock.mesocycle.startDate, now.value, activeBlock.mesocycle.pauses)
+			: null
 	);
+	// A paused block's week stands still and its routines are done as ordinary workouts
+	let blockPaused = $derived(activeBlock !== undefined && isBlockPaused(activeBlock.mesocycle.pauses));
+	// Whether this workout's lifts are used for progression: on, unless the block is paused (it can be flipped)
+	let countsForProgression = $state(true);
 	let blockFinished = $derived(activeBlock !== undefined && weekNumber !== null && weekNumber > activeBlock.totalWeeks);
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
@@ -102,7 +109,9 @@
 	let sameAsInProgress = $derived((useRoutine ? selectedRoutineName : null) === inProgressRoutineName);
 	let switchToName = $derived(useRoutine && selectedRoutine ? selectedRoutine.name : 'a blank workout');
 	let deloadWeek = $derived(
-		activeBlock && weekNumber !== null ? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, weekNumber) : false
+		activeBlock && !blockPaused && weekNumber !== null
+			? isDeloadWeek(activeBlock.mesocycle.weeklyRIR, weekNumber)
+			: false
 	);
 	// Days since the last workout are counted on the phone, like the week; null until the page is up
 	let welcomeBackDays = $derived.by(() => {
@@ -119,6 +128,10 @@
 			else workoutData = workoutRunes.workoutData as TodaysWorkoutData;
 
 			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
+			// Decided when the page is shown: a workout in progress keeps its own choice
+			countsForProgression = inProgress
+				? (workoutRunes.workoutData?.countsForProgression ?? true)
+				: !isBlockPaused(workoutData.activeBlock?.mesocycle.pauses);
 			const options = workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [];
 			if (workoutData.activeBlock !== undefined || options.length > 0) useRoutine = true;
 			// Back from a workout in progress: it stays picked
@@ -133,19 +146,21 @@
 		if (workoutData === 'loading') return null;
 		const { activeBlock, myRoutines, ...rest } = workoutData;
 		if (!useRoutine || !selectedRoutine) {
-			return { ...rest, workoutExercises: [], workoutOfMesocycle: undefined, routineName: null };
+			return { ...rest, workoutExercises: [], workoutOfMesocycle: undefined, routineName: null, countsForProgression };
 		}
-		// No block: a routine of My routines, and the workout isn't part of any block
-		if (!activeBlock) {
+		// No block, or a paused one: a routine of My routines, and the workout isn't part of any block
+		if (!activeBlock || blockPaused) {
 			return {
 				...rest,
 				workoutExercises: selectedRoutine.workoutExercises,
 				workoutOfMesocycle: undefined,
-				routineName: selectedRoutine.name
+				routineName: selectedRoutine.name,
+				countsForProgression
 			};
 		}
 		return {
 			...rest,
+			countsForProgression,
 			workoutExercises: selectedRoutine.workoutExercises,
 			routineName: selectedRoutine.name,
 			workoutOfMesocycle: {
@@ -297,11 +312,15 @@
 		<div class="mb-1 flex items-baseline justify-between px-1">
 			<span class="font-semibold">Pick a routine</span>
 			{#if activeBlock && weekNumber !== null}
-				<span class="text-sm text-muted-foreground">
-					Week {Math.min(weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
-						activeBlock.mesocycle.weeklyRIR,
-						weekNumber
-					)}
+				<span class="text-sm text-muted-foreground" data-testid="start-week">
+					{#if blockPaused}
+						Week {Math.min(weekNumber, activeBlock.totalWeeks)} - paused
+					{:else}
+						Week {Math.min(weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
+							activeBlock.mesocycle.weeklyRIR,
+							weekNumber
+						)}
+					{/if}
 				</span>
 			{/if}
 		</div>
@@ -393,6 +412,22 @@
 				{/key}
 			</div>
 		{/if}
+	{/if}
+	{#if workoutRunes.editingWorkoutId === null}
+		<div class="mb-1 flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
+			<div class="flex flex-col gap-1">
+				<Label for="counts-for-progression">Counts toward progression</Label>
+				<p class="text-sm text-muted-foreground" data-testid="counts-for-progression-help">
+					{#if countsForProgression}
+						Workout used to calculate weights and reps progression.
+					{:else}
+						Workout saved in history, but not used to calculate weights and reps progression.
+						{#if blockPaused}Off since mesocycle is paused.{/if}
+					{/if}
+				</p>
+			</div>
+			<Switch id="counts-for-progression" name="counts-for-progression" bind:checked={countsForProgression} />
+		</div>
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>
 		{#if $navigating}

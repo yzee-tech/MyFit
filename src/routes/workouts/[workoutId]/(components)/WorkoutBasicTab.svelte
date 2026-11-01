@@ -15,6 +15,7 @@
 	import SaveIcon from 'virtual:icons/lucide/save';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Switch } from '$lib/components/ui/switch';
 	import { onMount } from 'svelte';
 	import type { FullWorkoutWithMesoData } from '../+page.server';
 	import { toast } from 'svelte-sonner';
@@ -61,6 +62,21 @@
 		savingAsRoutine = false;
 	}
 
+	// Whether its lifts are used to calculate progression; saved as soon as it is flipped
+	let countsForProgression = $state(workout.countsForProgression);
+	async function setCountsForProgression(value: boolean) {
+		const before = countsForProgression;
+		countsForProgression = value;
+		try {
+			await trpc().workouts.setCountsForProgression.mutate({ id: workout.id, countsForProgression: value });
+			workout.countsForProgression = value;
+			await invalidate('workouts:all');
+		} catch (error) {
+			countsForProgression = before;
+			if (error instanceof TRPCClientError) toast.error(error.message);
+		}
+	}
+
 	const targetedMuscleGroups = new Set(
 		workout.workoutExercises.map((ex) => ex.customMuscleGroup ?? ex.targetMuscleGroup)
 	);
@@ -88,10 +104,15 @@
 <Card.Root>
 	<Card.Header>
 		<Card.Title class="flex items-center justify-between">
-			{workout.startedAt.toLocaleDateString(undefined, {
-				day: '2-digit',
-				month: 'long'
-			})}
+			<span class="flex items-center gap-2">
+				{workout.startedAt.toLocaleDateString(undefined, {
+					day: '2-digit',
+					month: 'long'
+				})}
+				{#if !countsForProgression}
+					<Badge data-testid="not-counted-tag" variant="outline">Not counted</Badge>
+				{/if}
+			</span>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger aria-label="workout-options">
 					<MenuIcon />
@@ -160,7 +181,7 @@
 						</a>
 						{#if wm.mesocycle.startDate}
 							<span class="text-sm text-muted-foreground" data-testid="workout-mesocycle-week">
-								Week {getBlockWeekHere(wm.mesocycle.startDate, workout.startedAt)}
+								Week {getBlockWeekHere(wm.mesocycle.startDate, workout.startedAt, wm.mesocycle.pauses)}
 							</span>
 						{/if}
 					</div>
@@ -193,6 +214,24 @@
 				</div>
 			</div>
 		{/if}
+		<div class="flex items-center justify-between gap-4">
+			<div class="flex flex-col gap-1">
+				<Label for="counts-for-progression">Counts toward progression</Label>
+				<p class="text-sm text-muted-foreground" data-testid="counts-for-progression-help">
+					{#if countsForProgression}
+						Workout used to calculate weights and reps progression.
+					{:else}
+						Workout saved in history, but not used to calculate weights and reps progression.
+					{/if}
+				</p>
+			</div>
+			<Switch
+				id="counts-for-progression"
+				name="counts-for-progression"
+				checked={countsForProgression}
+				onCheckedChange={setCountsForProgression}
+			/>
+		</div>
 	</Card.Content>
 </Card.Root>
 

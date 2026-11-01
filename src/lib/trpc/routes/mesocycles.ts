@@ -44,6 +44,7 @@ export const mesocycles = t.router({
 				where: { id: input, userId: ctx.userId },
 				include: {
 					exerciseSplit: true,
+					pauses: { orderBy: { pausedAt: 'asc' } },
 					mesocycleCyclicSetChanges: true,
 					workoutsOfMesocycle: {
 						include: {
@@ -164,10 +165,15 @@ export const mesocycles = t.router({
 					});
 					return started;
 				}
-				// A finished mesocycle is its workouts: it no longer uses My routines
+				// A finished mesocycle is its workouts: it no longer uses My routines. A pause still open ends with it
+				const endDate = new Date();
+				await tx.mesocyclePause.updateMany({
+					where: { mesocycleId: input.id, mesocycle: { userId: ctx.userId }, resumedAt: null },
+					data: { resumedAt: endDate }
+				});
 				return tx.mesocycle.update({
 					where: { id: input.id, userId: ctx.userId },
-					data: { endDate: new Date(), exerciseSplitId: null }
+					data: { endDate, exerciseSplitId: null }
 				});
 			});
 			return {
@@ -176,6 +182,43 @@ export const mesocycles = t.router({
 				endDate: updatedMesocycle.endDate
 			};
 		}),
+
+	/**
+	 * Pauses a started block that isn't finished: its week count stands still until it is resumed. Pausing a paused
+	 * block does nothing, so two devices (or a double tap) can't make two pauses
+	 */
+	pause: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+		const mesocycle = await prisma.mesocycle.findFirst({
+			where: { id: input, userId: ctx.userId },
+			select: { startDate: true, endDate: true, pauses: { where: { resumedAt: null }, select: { id: true } } }
+		});
+		if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+		if (!mesocycle.startDate || mesocycle.endDate) {
+			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a mesocycle in progress can be paused' });
+		}
+		if (mesocycle.pauses.length > 0) return { message: 'Mesocycle already paused' };
+		try {
+			await prisma.mesocyclePause.create({ data: { mesocycleId: input, pausedAt: new Date() } });
+		} catch (error) {
+			// The other device got there first: the one open pause per block is held by the database
+			if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+		}
+		return { message: 'Mesocycle paused' };
+	}),
+
+	/** Ends a block's open pause; a block that isn't paused is left as it is */
+	resume: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+		const mesocycle = await prisma.mesocycle.findFirst({
+			where: { id: input, userId: ctx.userId },
+			select: { id: true }
+		});
+		if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+		const { count } = await prisma.mesocyclePause.updateMany({
+			where: { mesocycleId: input, resumedAt: null },
+			data: { resumedAt: new Date() }
+		});
+		return { message: count > 0 ? 'Mesocycle resumed' : 'Mesocycle was not paused' };
+	}),
 
 	/** The active block's latest workouts done */
 	getWorkouts: t.procedure.query(async ({ ctx }) => {

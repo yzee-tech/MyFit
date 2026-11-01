@@ -559,7 +559,9 @@ function createWorkoutRunes() {
 			workoutExercises: [],
 			note: workout.note,
 			homeWeightUnit,
-			routineName: workout.routineName
+			routineName: workout.routineName,
+			// Kept as saved: editing the sets must not turn a workout that doesn't count back on
+			countsForProgression: workout.countsForProgression
 		};
 		// Saved loads are in kg and distances in metres; show them in the units each exercise was done in
 		workoutExercises = workout.workoutExercises.map((ex) => {
