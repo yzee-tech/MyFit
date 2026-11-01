@@ -123,7 +123,7 @@ test('start and stop a mesocycle', async ({ page }) => {
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await expect(page.getByRole('main')).toContainText("Active MesoName Active All MesoName Active That's all");
 	await page.getByRole('link', { name: 'MesoName Active' }).first().click();
-	await page.getByRole('button', { name: 'Stop mesocycle' }).click();
+	await page.getByRole('button', { name: 'Stop', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle stopped successfully' })).toBeVisible({
 		timeout: 10000
 	});

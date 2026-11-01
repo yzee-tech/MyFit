@@ -10,6 +10,9 @@
 	import DeleteIcon from 'virtual:icons/lucide/trash';
 	import MenuIcon from 'virtual:icons/lucide/menu';
 	import EditIcon from 'virtual:icons/lucide/pencil';
+	import PauseIcon from 'virtual:icons/lucide/pause';
+	import PlayIcon from 'virtual:icons/lucide/play';
+	import StopIcon from 'virtual:icons/lucide/square';
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { trpc } from '$lib/trpc/client';
@@ -213,23 +216,34 @@
 	{#if !mesocycle.endDate}
 		<Card.Footer class="justify-end gap-2">
 			{#if mesocycle.startDate}
-				<Button class="w-36" disabled={pausingOrResuming} onclick={pauseOrResume} variant="secondary">
+				<Button
+					class="w-[108px] gap-1.5"
+					size="sm"
+					disabled={pausingOrResuming}
+					onclick={pauseOrResume}
+					variant="secondary"
+				>
 					{#if pausingOrResuming}
 						<LoaderCircle class="animate-spin" />
+					{:else if paused}
+						<PlayIcon /> Resume
 					{:else}
-						{paused ? 'Resume mesocycle' : 'Pause mesocycle'}
+						<PauseIcon /> Pause
 					{/if}
 				</Button>
 			{/if}
 			<Button
-				class="w-36"
+				class="gap-1.5"
+				size="sm"
 				disabled={callingPatchEndpoint}
 				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}
 			>
 				{#if callingPatchEndpoint}
 					<LoaderCircle class="animate-spin" />
+				{:else if !mesocycle.startDate}
+					Start mesocycle
 				{:else}
-					{!mesocycle.startDate ? 'Start mesocycle' : 'Stop mesocycle'}
+					<StopIcon /> Stop
 				{/if}
 			</Button>
 		</Card.Footer>

@@ -167,20 +167,20 @@ test('mesocycle page: Pause, "Week 2 - paused", Resume, and Stop on a paused blo
 	const { block } = await seedBlock(userData.userId);
 	await page.goto(`/mesocycles/${block.id}`);
 	await expect(page.getByTestId('mesocycle-paused-badge')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Pause mesocycle' }).click();
+	await page.getByRole('button', { name: 'Pause', exact: true }).click();
 	await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
 	await expect(page.getByTestId('mesocycle-paused-week')).toHaveText('Week 2 - paused');
 	expect(await prisma.mesocyclePause.count({ where: { mesocycleId: block.id, resumedAt: null } })).toBe(1);
 
-	await page.getByRole('button', { name: 'Resume mesocycle' }).click();
+	await page.getByRole('button', { name: 'Resume', exact: true }).click();
 	await expect(page.getByTestId('mesocycle-paused-badge')).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Pause mesocycle' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
 	expect(await prisma.mesocyclePause.count({ where: { mesocycleId: block.id, resumedAt: null } })).toBe(0);
 
 	// Paused again: Stop says what it does before it does it
-	await page.getByRole('button', { name: 'Pause mesocycle' }).click();
+	await page.getByRole('button', { name: 'Pause', exact: true }).click();
 	await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
-	await page.getByRole('button', { name: 'Stop mesocycle' }).click();
+	await page.getByRole('button', { name: 'Stop', exact: true }).click();
 	const dialog = page.getByRole('dialog');
 	await expect(dialog).toContainText('Stopping ends the block and closes the pause.');
 	expect((await prisma.mesocycle.findUniqueOrThrow({ where: { id: block.id } })).endDate).toBeNull();
@@ -195,7 +195,7 @@ test('mesocycle page: Pause, "Week 2 - paused", Resume, and Stop on a paused blo
 test('mesocycle page: stopping a block that is not paused needs no confirmation', async ({ page, userData }) => {
 	const { block } = await seedBlock(userData.userId);
 	await page.goto(`/mesocycles/${block.id}`);
-	await page.getByRole('button', { name: 'Stop mesocycle' }).click();
+	await page.getByRole('button', { name: 'Stop', exact: true }).click();
 	await expect(page.getByText('Completed')).toBeVisible();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 });
