@@ -216,6 +216,75 @@ test.describe('pause and resume on the server', () => {
 		await caller.mesocycles.deleteById(block.id);
 		expect(await prisma.mesocyclePause.count({ where: { mesocycleId: block.id } })).toBe(0);
 	});
+	test('a pause that arrives while a stop is in flight waits for it, then is refused: no open pause is left on the finished block', async () => {
+		const { caller, block } = await seedPerson();
+		const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+		let pausing: Promise<unknown> = Promise.resolve();
+		try {
+			// A stop that has taken the block's lock and set its end date, but has not committed yet
+			await prisma.$transaction(
+				async (tx) => {
+					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
+					await tx.mesocycle.update({ where: { id: block.id }, data: { endDate: new Date() } });
+					// The pause starts now: it must wait for the lock, not read the block as it was
+					pausing = caller.mesocycles.pause(block.id).then(
+						() => 'paused',
+						(error) => error
+					);
+					await sleep(700);
+				},
+				{ timeout: 15000, maxWait: 5000 }
+			);
+			const result = await Promise.race([pausing, sleep(10000).then(() => 'timed out waiting for the pause')]);
+			expect(result).toMatchObject({ code: 'BAD_REQUEST' });
+			expect(await openPauses(block.id)).toHaveLength(0);
+		} finally {
+			// A failing run must not leave the lock held or the pause hanging
+			await Promise.race([pausing, sleep(5000)]);
+		}
+	});
+
+	test('a stop that arrives while a pause is in flight waits for it, then closes that pause too: no open pause is left on the finished block', async () => {
+		const { caller, block } = await seedPerson();
+		const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+		let stopped = false;
+		let stopping: Promise<unknown> = Promise.resolve();
+		let stoppedWhileHeld: boolean | undefined;
+		try {
+			// A pause that has taken the block's lock and made its pause, but has not committed yet
+			await prisma.$transaction(
+				async (tx) => {
+					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
+					await tx.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } });
+					stopping = caller.mesocycles
+						.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
+						.then(() => (stopped = true));
+					await sleep(700);
+					stoppedWhileHeld = stopped;
+				},
+				{ timeout: 15000, maxWait: 5000 }
+			);
+			await Promise.race([stopping, sleep(10000)]);
+			// The stop did not run ahead of the pause; afterwards it closed that pause with the block
+			expect(stoppedWhileHeld).toBe(false);
+			expect(stopped).toBe(true);
+			expect(await openPauses(block.id)).toHaveLength(0);
+			expect((await prisma.mesocycle.findUniqueOrThrow({ where: { id: block.id } })).endDate).not.toBeNull();
+		} finally {
+			await Promise.race([stopping, sleep(5000)]);
+		}
+	});
+
+	test('a resume and a pause at the same moment leave at most one open pause, and a closed one for the resume', async () => {
+		const { caller, block } = await seedPerson();
+		await caller.mesocycles.pause(block.id);
+		for (let round = 0; round < 4; round++) {
+			await Promise.all([caller.mesocycles.resume(block.id), caller.mesocycles.pause(block.id)]);
+			expect((await openPauses(block.id)).length).toBeLessThanOrEqual(1);
+		}
+		await caller.mesocycles.resume(block.id);
+		expect(await openPauses(block.id)).toHaveLength(0);
+	});
 });
 
 function workoutOf(options: {

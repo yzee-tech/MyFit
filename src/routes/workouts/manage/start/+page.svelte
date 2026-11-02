@@ -250,11 +250,20 @@
 	{#if activeBlock && blockFinished && workoutRunes.editingWorkoutId === null}
 		<Card.Root class="mb-1">
 			<Card.Header>
-				<Card.Title>Block finished &nbsp;🎉</Card.Title>
-				<Card.Description>
-					All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done. Finish it to see how it went, then
-					start a new one. If you want to keep going, extend it instead.
-				</Card.Description>
+				{#if blockPaused}
+					<!-- Paused past its planned weeks: finishing is still the move, but it is not finished yet -->
+					<Card.Title>Past its planned weeks</Card.Title>
+					<Card.Description>
+						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done, and it is paused. Finish it to see
+						how it went, then start a new one. If you want to keep going, extend it instead.
+					</Card.Description>
+				{:else}
+					<Card.Title>Block finished &nbsp;🎉</Card.Title>
+					<Card.Description>
+						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done. Finish it to see how it went, then
+						start a new one. If you want to keep going, extend it instead.
+					</Card.Description>
+				{/if}
 			</Card.Header>
 			<Card.Footer class="flex justify-end gap-1">
 				<Button href={`/mesocycles/${activeBlock.mesocycle.id}`} variant="secondary">Extend</Button>
@@ -314,7 +323,7 @@
 			{#if activeBlock && weekNumber !== null}
 				<span class="text-sm text-muted-foreground" data-testid="start-week">
 					{#if blockPaused}
-						Week {Math.min(weekNumber, activeBlock.totalWeeks)} - paused
+						Week {weekNumber} - paused
 					{:else}
 						Week {Math.min(weekNumber, activeBlock.totalWeeks)} of {activeBlock.totalWeeks} · {formatWeekEffort(
 							activeBlock.mesocycle.weeklyRIR,

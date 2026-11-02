@@ -9,7 +9,10 @@ What changed in MyFit, newest first.
 - **Pause a mesocycle** (compact Pause / Resume and Stop buttons on its page, all the same size, with icons, e.g. for a holiday). Its week count stands
   still while it is paused, and resuming carries on in the same week. The dashboard, start page and mesocycle page
   read "Week N - paused". Stopping a paused mesocycle asks first and closes the pause. Past workouts keep the week
-  they were done in. Workouts started while it is paused are ordinary workouts, not part of the mesocycle.
+  they were done in. Workouts started while it is paused are ordinary workouts, not part of the mesocycle. A paused
+  mesocycle that is past its planned weeks reads "Week N - paused" (not "Block finished"), and a paused block shows
+  no effort chip on the dashboard. Pause, Resume and Stop wait for each other, so a Pause at the same moment as a Stop
+  can't leave a pause open on a finished mesocycle.
 - **"Counts toward progression" switch** on the Start workout page (for a routine or a blank workout) and on a
   workout's page. Off means the workout is saved in your history, stats and charts, but isn't used to calculate your
   weights and reps progression (or the Previous column); a workout with the switch off shows a "Not counted" tag.

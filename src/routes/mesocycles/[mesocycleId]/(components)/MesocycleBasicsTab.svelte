@@ -31,11 +31,12 @@
 
 	// The week of an active block, in the phone's days; none for a block not started or finished, or past its length
 	const now = useNow();
-	let currentWeek = $derived.by(() => {
-		if (!mesocycle.startDate || mesocycle.endDate || !now.value) return null;
-		const week = getBlockWeekHere(mesocycle.startDate, now.value, mesocycle.pauses);
-		return week <= mesocycle.weeklyRIR.length ? week : null;
-	});
+	let weekNow = $derived(
+		!mesocycle.startDate || mesocycle.endDate || !now.value
+			? null
+			: getBlockWeekHere(mesocycle.startDate, now.value, mesocycle.pauses)
+	);
+	let currentWeek = $derived(weekNow !== null && weekNow <= mesocycle.weeklyRIR.length ? weekNow : null);
 	// A paused block's week stands still until it is resumed
 	let paused = $derived(isBlockPaused(mesocycle.pauses));
 	let pausingOrResuming = $state(false);
@@ -173,8 +174,9 @@
 				<span class="text-sm text-muted-foreground">Weekly effort</span>
 				<Badge variant="outline">{mesocycle.weeklyRIR.length} weeks</Badge>
 			</div>
-			{#if paused && currentWeek !== null}
-				<span class="text-sm" data-testid="mesocycle-paused-week">Week {currentWeek} - paused</span>
+			{#if paused && weekNow !== null}
+				<!-- Past the planned weeks too: it is still paused in that week -->
+				<span class="text-sm" data-testid="mesocycle-paused-week">Week {weekNow} - paused</span>
 			{/if}
 			<div class="flex flex-wrap gap-1" data-testid="mesocycle-weekly-effort">
 				{#each mesocycle.weeklyRIR as _, idx}

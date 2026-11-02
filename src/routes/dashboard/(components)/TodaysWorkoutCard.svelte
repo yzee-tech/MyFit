@@ -49,17 +49,21 @@
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					{block.mesocycle.name}
-					{#if weekNumber !== null}
-						<Badge variant="secondary">{formatWeekEffort(block.mesocycle.weeklyRIR, weekNumber)}</Badge>
+					<!-- A paused block has no effort target in force -->
+					{#if weekNumber !== null && !blockPaused}
+						<Badge data-testid="dashboard-effort-chip" variant="secondary"
+							>{formatWeekEffort(block.mesocycle.weeklyRIR, weekNumber)}</Badge
+						>
 					{/if}
 				</Card.Title>
 				<Card.Description>
 					{#if weekNumber === null}
 						{block.routines.length} routines
+					{:else if blockPaused}
+						<!-- Before "finished": a block past its planned weeks can still be paused -->
+						Week {weekNumber} - paused · {block.routines.length} routines
 					{:else if weekNumber > block.totalWeeks}
 						Block finished, all {block.totalWeeks} weeks done
-					{:else if blockPaused}
-						Week {weekNumber} - paused · {block.routines.length} routines
 					{:else}
 						Week {weekNumber} of {block.totalWeeks} · {block.routines.length} routines
 					{/if}

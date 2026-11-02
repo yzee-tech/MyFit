@@ -17,8 +17,11 @@ const rows = {
 const HELP_ON = 'Workout used to calculate weights and reps progression.';
 const HELP_OFF = 'Workout saved in history, but not used to calculate weights and reps progression.';
 
-/** A routine, and a block that started 12 days ago (week 2 of 6), paused or not */
-async function seedBlock(userId: string, options: { paused?: boolean } = {}) {
+/**
+ * A routine, and a block that started 12 days ago (week 2 of 6), paused or not. `overdue` makes it a 4-week block
+ * that started 37 days ago with 8 days paused (a closed 4-day pause and the open one): week 5, past its plan
+ */
+async function seedBlock(userId: string, options: { paused?: boolean; overdue?: boolean } = {}) {
 	const caller = createCaller({ event: {} as never, userId });
 	await createExercises(userId, [rows.name]);
 	await caller.exerciseSplits.save({
@@ -29,14 +32,23 @@ async function seedBlock(userId: string, options: { paused?: boolean } = {}) {
 		data: {
 			userId,
 			name: 'MyMeso',
-			weeklyRIR: [3, 2, 2, 1, 0, -1],
-			startDate: new Date(Date.now() - 12 * DAY),
+			weeklyRIR: options.overdue ? [3, 2, 1, 0] : [3, 2, 2, 1, 0, -1],
+			startDate: new Date(Date.now() - (options.overdue ? 37 : 12) * DAY),
 			startOverloadPercentage: 2.5,
 			lastSetToFailure: false,
 			forceRIRMatching: false
 		}
 	});
-	if (options.paused) {
+	if (options.overdue) {
+		await prisma.mesocyclePause.create({
+			data: {
+				mesocycleId: block.id,
+				pausedAt: new Date(Date.now() - 30 * DAY),
+				resumedAt: new Date(Date.now() - 26 * DAY)
+			}
+		});
+		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - 4 * DAY) } });
+	} else if (options.paused) {
 		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - 2 * DAY) } });
 	}
 	return { caller, block };
@@ -223,6 +235,60 @@ test('dashboard: a paused block reads "Week 2 - paused"', async ({ page, userDat
 	await seedBlock(userData.userId, { paused: true });
 	await page.goto('/dashboard');
 	await expect(page.getByText('Week 2 - paused')).toBeVisible();
+	// A paused block has no effort target in force: no effort chip on the card
+	await expect(page.getByTestId('dashboard-effort-chip')).toHaveCount(0);
+});
+
+test('dashboard: a block that is not paused keeps its effort chip', async ({ page, userData }) => {
+	await seedBlock(userData.userId);
+	await page.goto('/dashboard');
+	await expect(page.getByText('Week 2 of 6')).toBeVisible();
+	await expect(page.getByTestId('dashboard-effort-chip')).toHaveCount(1);
+});
+
+test('a block past its planned weeks and paused is "Week 5 - paused" on the dashboard, never "Block finished"', async ({
+	page,
+	userData
+}) => {
+	await seedBlock(userData.userId, { overdue: true });
+	await page.goto('/dashboard');
+	await expect(page.getByText('Week 5 - paused')).toBeVisible();
+	await expect(page.getByText('Block finished')).toHaveCount(0);
+	await expect(page.getByTestId('dashboard-effort-chip')).toHaveCount(0);
+});
+
+test('a block past its planned weeks that is not paused still reads "Block finished" on the dashboard and start page', async ({
+	page,
+	userData
+}) => {
+	const { block } = await seedBlock(userData.userId, { overdue: true });
+	await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
+	await page.goto('/dashboard');
+	// 37 days, no pause: week 6 of 4
+	await expect(page.getByText('Block finished, all 4 weeks done')).toBeVisible();
+	await openStartPage(page);
+	await expect(page.getByText('Block finished')).toBeVisible();
+});
+
+test('a block past its planned weeks and paused: the mesocycle page and the start page say "Week 5 - paused" and do not claim it is finished', async ({
+	page,
+	userData
+}) => {
+	const { block } = await seedBlock(userData.userId, { overdue: true });
+	await page.goto(`/mesocycles/${block.id}`);
+	await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
+	await expect(page.getByTestId('mesocycle-paused-week')).toHaveText('Week 5 - paused');
+	// No week of the plan is highlighted: it is past them all
+	await expect(page.locator('[data-current="true"]')).toHaveCount(0);
+
+	await openStartPage(page);
+	await pickRoutine(page, 'Pull A');
+	await expect(page.getByTestId('start-week')).toHaveText('Week 5 - paused');
+	// The card keeps its actions (finishing is still right for an overdue block) but not the claim
+	await expect(page.getByText('Block finished')).toHaveCount(0);
+	await expect(page.getByText('Past its planned weeks')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Finish block' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Extend' })).toBeVisible();
 });
 
 test('the detail page switch turns a saved workout off and on, with the tag in the list and on the page', async ({
