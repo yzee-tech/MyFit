@@ -226,9 +226,9 @@
 					{#if pausingOrResuming}
 						<LoaderCircle class="animate-spin" />
 					{:else if paused}
-						<PlayIcon /> Resume
+						<PlayIcon class="shrink-0" /> Resume
 					{:else}
-						<PauseIcon /> Pause
+						<PauseIcon class="shrink-0" /> Pause
 					{/if}
 				</Button>
 			{/if}
@@ -243,7 +243,7 @@
 				{:else if !mesocycle.startDate}
 					Start mesocycle
 				{:else}
-					<StopIcon /> Stop
+					<StopIcon class="shrink-0" /> Stop
 				{/if}
 			</Button>
 		</Card.Footer>

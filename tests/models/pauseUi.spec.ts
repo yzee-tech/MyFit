@@ -171,17 +171,22 @@ test('mesocycle page: Pause, "Week 2 - paused", Resume, and Stop on a paused blo
 	// All three buttons share one compact size: 92 x 30
 	const pauseBtn = page.getByRole('button', { name: 'Pause', exact: true });
 	const stopBtn = page.getByRole('button', { name: 'Stop', exact: true });
-	for (const btn of [pauseBtn, stopBtn]) {
+	const expectCompact = async (btn: ReturnType<typeof page.getByRole>) => {
 		const box = await btn.boundingBox();
 		expect(Math.round(box!.width)).toBe(92);
 		expect(Math.round(box!.height)).toBe(30);
+		// Its icon keeps its full square size (no flex-shrink)
+		const icon = await btn.locator('svg').first().boundingBox();
+		expect(icon!.width).toBeGreaterThan(14);
+		expect(Math.abs(icon!.width - icon!.height)).toBeLessThanOrEqual(1);
+	};
+	for (const btn of [pauseBtn, stopBtn]) {
+		await expectCompact(btn);
 	}
 
 	await pauseBtn.click();
 	const resumeBtn = page.getByRole('button', { name: 'Resume', exact: true });
-	const resumeBox = await resumeBtn.boundingBox();
-	expect(Math.round(resumeBox!.width)).toBe(92);
-	expect(Math.round(resumeBox!.height)).toBe(30);
+	await expectCompact(resumeBtn);
 	await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
 	await expect(page.getByTestId('mesocycle-paused-week')).toHaveText('Week 2 - paused');
 	expect(await prisma.mesocyclePause.count({ where: { mesocycleId: block.id, resumedAt: null } })).toBe(1);
