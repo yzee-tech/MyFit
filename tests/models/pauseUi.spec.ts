@@ -307,6 +307,20 @@ test('Extend on the start page opens the block in the mesocycle editor, plan loa
 	await expect(page.getByLabel('Week 4 effort')).toContainText('0 RIR');
 });
 
+test('Extend that cannot load the block says so, stays put and can be retried', async ({ page, userData }) => {
+	await seedBlock(userData.userId, { overdue: true });
+	await openStartPage(page);
+	await expect(page.getByText('Past its planned weeks')).toBeVisible();
+	await page.route('**/trpc/mesocycles.findById*', (route) => route.abort());
+	await page.getByRole('button', { name: 'Extend' }).click();
+	await expect(
+		page.getByText("Couldn't open the block for editing. Check your connection and try again.")
+	).toBeVisible();
+	// No navigation, and the editor was not loaded; the button is back for another try
+	await expect(page).not.toHaveURL(/\/mesocycles\/manage\/basics/);
+	await expect(page.getByRole('button', { name: 'Extend' })).toBeEnabled();
+});
+
 test('the detail page switch turns a saved workout off and on, with the tag in the list and on the page', async ({
 	page,
 	userData

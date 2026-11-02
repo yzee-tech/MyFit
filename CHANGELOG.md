@@ -23,7 +23,7 @@ What changed in MyFit, newest first.
 
 - **Extend opens the block in the mesocycle editor.** On the Start workout page, when a block has used up its planned
   weeks, Extend now opens the mesocycle editor with that block's name, weeks and settings loaded as saved, instead of
-  linking to the block's page.
+  linking to the block's page. If the block can't be loaded (e.g. you're offline), it says so and you stay put.
 
 ## 2026-10-31: small fixes (calendar spacing, gym weights on the start page)
 

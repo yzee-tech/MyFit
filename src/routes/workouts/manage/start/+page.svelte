@@ -249,6 +249,9 @@
 			}
 			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
 			await goto('/mesocycles/manage/basics');
+		} catch {
+			// Offline or the fetch failed: stay put, nothing loaded, free to try again
+			toast.error("Couldn't open the block for editing. Check your connection and try again.");
 		} finally {
 			extendingBlock = false;
 		}
