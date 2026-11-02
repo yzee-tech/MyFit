@@ -217,7 +217,7 @@
 		<Card.Footer class="justify-end gap-2">
 			{#if mesocycle.startDate}
 				<Button
-					class="w-[108px] gap-1.5"
+					class="h-[30px] w-[92px] gap-1.5"
 					size="sm"
 					disabled={pausingOrResuming}
 					onclick={pauseOrResume}
@@ -233,7 +233,7 @@
 				</Button>
 			{/if}
 			<Button
-				class="gap-1.5"
+				class={mesocycle.startDate ? 'h-[30px] w-[92px] gap-1.5' : 'gap-1.5'}
 				size="sm"
 				disabled={callingPatchEndpoint}
 				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}

@@ -6,7 +6,7 @@ What changed in MyFit, newest first.
 
 ### Added
 
-- **Pause a mesocycle** (Pause / Resume buttons on its page, with icons, e.g. for a holiday; the Stop button now has a stop icon too). Its week count stands
+- **Pause a mesocycle** (compact Pause / Resume and Stop buttons on its page, all the same size, with icons, e.g. for a holiday). Its week count stands
   still while it is paused, and resuming carries on in the same week. The dashboard, start page and mesocycle page
   read "Week N - paused". Stopping a paused mesocycle asks first and closes the pause. Past workouts keep the week
   they were done in. Workouts started while it is paused are ordinary workouts, not part of the mesocycle.

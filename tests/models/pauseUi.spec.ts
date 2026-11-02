@@ -167,7 +167,21 @@ test('mesocycle page: Pause, "Week 2 - paused", Resume, and Stop on a paused blo
 	const { block } = await seedBlock(userData.userId);
 	await page.goto(`/mesocycles/${block.id}`);
 	await expect(page.getByTestId('mesocycle-paused-badge')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Pause', exact: true }).click();
+
+	// All three buttons share one compact size: 92 x 30
+	const pauseBtn = page.getByRole('button', { name: 'Pause', exact: true });
+	const stopBtn = page.getByRole('button', { name: 'Stop', exact: true });
+	for (const btn of [pauseBtn, stopBtn]) {
+		const box = await btn.boundingBox();
+		expect(Math.round(box!.width)).toBe(92);
+		expect(Math.round(box!.height)).toBe(30);
+	}
+
+	await pauseBtn.click();
+	const resumeBtn = page.getByRole('button', { name: 'Resume', exact: true });
+	const resumeBox = await resumeBtn.boundingBox();
+	expect(Math.round(resumeBox!.width)).toBe(92);
+	expect(Math.round(resumeBox!.height)).toBe(30);
 	await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
 	await expect(page.getByTestId('mesocycle-paused-week')).toHaveText('Week 2 - paused');
 	expect(await prisma.mesocyclePause.count({ where: { mesocycleId: block.id, resumedAt: null } })).toBe(1);
