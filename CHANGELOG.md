@@ -19,6 +19,12 @@ What changed in MyFit, newest first.
   It starts on, and off while the mesocycle is paused (you can turn it on). Editing a workout keeps its choice.
 - The data export includes pauses and a countsForProgression column (CSV, after isDeload).
 
+### Changed
+
+- **Extend opens the block in the mesocycle editor.** On the Start workout page, when a block has used up its planned
+  weeks, Extend now opens the mesocycle editor with that block's name, weeks and settings loaded as saved, instead of
+  linking to the block's page.
+
 ## 2026-10-31: small fixes (calendar spacing, gym weights on the start page)
 
 ### Fixed

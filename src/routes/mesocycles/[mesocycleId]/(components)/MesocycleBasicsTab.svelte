@@ -20,7 +20,7 @@
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
-	import { mesocycleRunes, type FullMesocycleWithoutIds } from '../../manage/mesocycleRunes.svelte';
+	import { fullMesocycleWithoutIds, mesocycleRunes } from '../../manage/mesocycleRunes.svelte';
 	import { TRPCClientError } from '@trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 
@@ -60,25 +60,11 @@
 
 	function loadMesocycle(mode: 'edit' | 'clone') {
 		if (mode === 'edit') {
-			mesocycleRunes.loadMesocycle(getMesocycleWithoutIds(), mesocycle.id);
+			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
 		} else if (mode === 'clone') {
-			mesocycleRunes.loadMesocycle({ ...getMesocycleWithoutIds(), startDate: null, endDate: null });
+			mesocycleRunes.loadMesocycle({ ...fullMesocycleWithoutIds(mesocycle), startDate: null, endDate: null });
 		}
 		goto(`/mesocycles/manage/basics`);
-	}
-
-	/** The block's own settings, to edit or clone: its routines are My routines */
-	function getMesocycleWithoutIds(): FullMesocycleWithoutIds {
-		return {
-			name: mesocycle.name,
-			weeklyRIR: mesocycle.weeklyRIR,
-			startDate: mesocycle.startDate,
-			endDate: mesocycle.endDate,
-			startOverloadPercentage: mesocycle.startOverloadPercentage,
-			lastSetToFailure: mesocycle.lastSetToFailure,
-			forceRIRMatching: mesocycle.forceRIRMatching,
-			mesocycleCyclicSetChanges: mesocycle.mesocycleCyclicSetChanges.map(({ id, mesocycleId, ...rest }) => rest)
-		};
 	}
 
 	async function progressMesocycle() {

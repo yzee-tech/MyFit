@@ -26,6 +26,7 @@
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
+	import { fullMesocycleWithoutIds, mesocycleRunes } from '../../../mesocycles/manage/mesocycleRunes.svelte.js';
 	import { exercisesLink } from '../exercisesLink';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
@@ -86,6 +87,7 @@
 	);
 	let inProgressName = $derived(inProgressRoutineName ?? 'the blank workout');
 	let finishingBlock = $state(false);
+	let extendingBlock = $state(false);
 	let takeItEasy = $state(true);
 
 	let activeBlock = $derived(workoutData === 'loading' ? undefined : workoutData.activeBlock);
@@ -233,6 +235,24 @@
 			finishingBlock = false;
 		}
 	}
+
+	// Extend: open the block in the mesocycle editor, its weeks and settings loaded as saved
+	async function extendBlock() {
+		if (!activeBlock) return;
+		extendingBlock = true;
+		try {
+			// The start page's block lacks its stored set changes: fetch it whole, like the Edit menu does
+			const mesocycle = await trpc().mesocycles.findById.query(activeBlock.mesocycle.id);
+			if (!mesocycle) {
+				toast.error('Block not found');
+				return;
+			}
+			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
+			await goto('/mesocycles/manage/basics');
+		} finally {
+			extendingBlock = false;
+		}
+	}
 </script>
 
 <H3>Start</H3>
@@ -266,7 +286,13 @@
 				{/if}
 			</Card.Header>
 			<Card.Footer class="flex justify-end gap-1">
-				<Button href={`/mesocycles/${activeBlock.mesocycle.id}`} variant="secondary">Extend</Button>
+				<Button disabled={extendingBlock} onclick={extendBlock} variant="secondary">
+					{#if extendingBlock}
+						<LoaderCircle class="animate-spin" />
+					{:else}
+						Extend
+					{/if}
+				</Button>
 				<Button disabled={finishingBlock} onclick={finishBlock}>
 					{#if finishingBlock}
 						<LoaderCircle class="animate-spin" />

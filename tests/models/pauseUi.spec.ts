@@ -288,7 +288,23 @@ test('a block past its planned weeks and paused: the mesocycle page and the star
 	await expect(page.getByText('Block finished')).toHaveCount(0);
 	await expect(page.getByText('Past its planned weeks')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Finish block' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Extend' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Extend' })).toBeVisible();
+});
+
+test('Extend on the start page opens the block in the mesocycle editor, plan loaded as saved', async ({
+	page,
+	userData
+}) => {
+	await seedBlock(userData.userId, { overdue: true });
+	await openStartPage(page);
+	await expect(page.getByText('Past its planned weeks')).toBeVisible();
+	await page.getByRole('button', { name: 'Extend' }).click();
+	await page.waitForURL('/mesocycles/manage/basics');
+	// The block's own settings are loaded, not a fresh suggestion: its week 4 is 0 RIR, a suggested 4-week plan ends in a deload
+	await expect(page.getByLabel('Mesocycle name')).toHaveValue('MyMeso');
+	await expect(page.getByLabel('Mesocycle duration (weeks)')).toHaveValue('4');
+	await expect(page.getByLabel('Week 1 effort')).toContainText('3 RIR');
+	await expect(page.getByLabel('Week 4 effort')).toContainText('0 RIR');
 });
 
 test('the detail page switch turns a saved workout off and on, with the tag in the list and on the page', async ({

@@ -1,5 +1,5 @@
 import { suggestWeeklyRIR, weeklyRIRFromWeeksPerRIR } from '$lib/utils/workoutUtils';
-import type { Prisma, Mesocycle } from '@prisma/client';
+import type { Prisma, Mesocycle, MesocycleCyclicSetChange } from '@prisma/client';
 
 type MesocycleWithoutIds = Omit<Mesocycle, 'id' | 'exerciseSplitId' | 'userId'>;
 const defaultMesocycle: MesocycleWithoutIds = {
@@ -16,6 +16,22 @@ const defaultMesocycle: MesocycleWithoutIds = {
 export type FullMesocycleWithoutIds = MesocycleWithoutIds & {
 	mesocycleCyclicSetChanges: Prisma.MesocycleCyclicSetChangeCreateWithoutMesocycleInput[];
 };
+
+/** A block's own settings, to edit or clone: its routines are My routines */
+export function fullMesocycleWithoutIds(
+	mesocycle: Mesocycle & { mesocycleCyclicSetChanges: MesocycleCyclicSetChange[] }
+): FullMesocycleWithoutIds {
+	return {
+		name: mesocycle.name,
+		weeklyRIR: mesocycle.weeklyRIR,
+		startDate: mesocycle.startDate,
+		endDate: mesocycle.endDate,
+		startOverloadPercentage: mesocycle.startOverloadPercentage,
+		lastSetToFailure: mesocycle.lastSetToFailure,
+		forceRIRMatching: mesocycle.forceRIRMatching,
+		mesocycleCyclicSetChanges: mesocycle.mesocycleCyclicSetChanges.map(({ id, mesocycleId, ...rest }) => rest)
+	};
+}
 
 /** Setting up or editing a block: its weeks, weekly effort and progression settings */
 export function createMesocycleRunes() {
