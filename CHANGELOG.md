@@ -2,6 +2,14 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-03: faster test runs
+
+### Changed
+
+- **Behind the scenes:** GitHub now runs the tests two at a time (about half the waiting time, if it holds up) and
+  retries a failing test twice instead of three times, so a flaky test shows up instead of being hidden. Nothing in
+  the app changes.
+
 ## 2026-11-01: pause a mesocycle, and choose whether a workout counts toward progression
 
 ### Added
