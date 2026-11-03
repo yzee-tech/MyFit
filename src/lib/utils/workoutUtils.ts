@@ -439,15 +439,58 @@ export function localDaysBetween(from: Date | string, to: Date, timeZone?: strin
 	}
 }
 
+/** A time a block was paused; no end means it is paused now */
+export type BlockPause = { pausedAt: Date | string; resumedAt: Date | string | null };
+
+/** Whether `at` falls in one of the pauses (a pause with no end lasts to now and beyond) */
+export function isInPause(pauses: BlockPause[] | undefined, at: Date): boolean {
+	return (pauses ?? []).some(
+		(pause) =>
+			new Date(pause.pausedAt).getTime() <= at.getTime() &&
+			(pause.resumedAt === null || at.getTime() < new Date(pause.resumedAt).getTime())
+	);
+}
+
+/** Whether the block is paused right now: one of its pauses has no end */
+export function isBlockPaused(pauses: BlockPause[] | undefined): boolean {
+	return (pauses ?? []).some((pause) => pause.resumedAt === null);
+}
+
+/**
+ * The calendar days of the timezone a block spent paused before `now`: from the day it was paused to the
+ * day it was resumed (or `now`), so pausing and resuming on the same day removes none and every midnight
+ * crossed while paused removes one. A pause after `now` is not counted yet, which keeps the week a past
+ * workout shows as it was
+ */
+function pausedLocalDays(pauses: BlockPause[] | undefined, now: Date, zone: string) {
+	let days = 0;
+	for (const pause of pauses ?? []) {
+		const pausedAt = new Date(pause.pausedAt);
+		if (Number.isNaN(pausedAt.getTime()) || pausedAt.getTime() >= now.getTime()) continue;
+		const resumedAt = pause.resumedAt ? new Date(pause.resumedAt) : null;
+		const end =
+			resumedAt && !Number.isNaN(resumedAt.getTime()) && resumedAt.getTime() < now.getTime() ? resumedAt : now;
+		days += Math.max(0, localDayNumber(end, zone) - localDayNumber(pausedAt, zone));
+	}
+	return days;
+}
+
 /**
  * 1-based week of a block, counted in calendar days of the timezone (the phone's): the 8th day
- * since the start day is in Week 2, whatever time the block was started at. A missing, empty, invalid
- * or over-long timezone counts the days in UTC. It never throws
+ * since the start day is in Week 2, whatever time the block was started at. Days the block was paused
+ * are not counted, so a paused block's week stands still. A missing, empty, invalid or over-long
+ * timezone counts the days in UTC. It never throws
  */
-export function getBlockWeek(startDate: Date | string, now: Date = new Date(), timeZone?: string | null): number {
+export function getBlockWeek(
+	startDate: Date | string,
+	now: Date = new Date(),
+	timeZone?: string | null,
+	pauses?: BlockPause[]
+): number {
 	const start = new Date(startDate);
 	if (Number.isNaN(start.getTime()) || Number.isNaN(now.getTime())) return 1;
-	const days = (zone: string) => localDayNumber(now, zone) - localDayNumber(start, zone);
+	const days = (zone: string) =>
+		localDayNumber(now, zone) - localDayNumber(start, zone) - pausedLocalDays(pauses, now, zone);
 	let elapsedDays: number;
 	try {
 		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
@@ -471,8 +514,8 @@ export function browserTimeZone(): string | undefined {
 }
 
 /** The week in the phone's timezone */
-export function getBlockWeekHere(startDate: Date | string, now: Date = new Date()): number {
-	return getBlockWeek(startDate, now, browserTimeZone());
+export function getBlockWeekHere(startDate: Date | string, now: Date = new Date(), pauses?: BlockPause[]): number {
+	return getBlockWeek(startDate, now, browserTimeZone(), pauses);
 }
 
 function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {

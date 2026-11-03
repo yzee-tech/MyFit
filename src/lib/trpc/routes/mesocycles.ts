@@ -37,6 +37,15 @@ const getActiveMesocycle = async (userId: string) => {
 	});
 };
 
+/**
+ * Takes the block's row lock until the transaction ends. Pausing, resuming and stopping all write the block's
+ * end date and pauses, so they wait for each other here; a plain transaction would not do that (each would
+ * read the block as it was before the other committed)
+ */
+async function lockMesocycle(tx: Prisma.TransactionClient, userId: string, mesocycleId: string) {
+	await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${mesocycleId} AND "userId" = ${userId} FOR UPDATE`;
+}
+
 export const mesocycles = t.router({
 	findById: t.procedure.input(z.string().cuid2()).query(async ({ input, ctx }) => {
 		const [mesocycle, myRoutines] = await Promise.all([
@@ -44,6 +53,7 @@ export const mesocycles = t.router({
 				where: { id: input, userId: ctx.userId },
 				include: {
 					exerciseSplit: true,
+					pauses: { orderBy: { pausedAt: 'asc' } },
 					mesocycleCyclicSetChanges: true,
 					workoutsOfMesocycle: {
 						include: {
@@ -151,6 +161,7 @@ export const mesocycles = t.router({
 			}
 			const starting = !input.startDate;
 			const updatedMesocycle = await withRoutinesTransaction(async (tx) => {
+				await lockMesocycle(tx, ctx.userId, input.id);
 				if (starting) {
 					const activeMesocycle = await tx.mesocycle.findFirst({
 						where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
@@ -164,10 +175,15 @@ export const mesocycles = t.router({
 					});
 					return started;
 				}
-				// A finished mesocycle is its workouts: it no longer uses My routines
+				// A finished mesocycle is its workouts: it no longer uses My routines. A pause still open ends with it
+				const endDate = new Date();
+				await tx.mesocyclePause.updateMany({
+					where: { mesocycleId: input.id, mesocycle: { userId: ctx.userId }, resumedAt: null },
+					data: { resumedAt: endDate }
+				});
 				return tx.mesocycle.update({
 					where: { id: input.id, userId: ctx.userId },
-					data: { endDate: new Date(), exerciseSplitId: null }
+					data: { endDate, exerciseSplitId: null }
 				});
 			});
 			return {
@@ -176,6 +192,53 @@ export const mesocycles = t.router({
 				endDate: updatedMesocycle.endDate
 			};
 		}),
+
+	/**
+	 * Pauses a started block that isn't finished: its week count stands still until it is resumed. Pausing a paused
+	 * block does nothing, so two devices (or a double tap) can't make two pauses
+	 */
+	pause: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+		try {
+			return await prisma.$transaction(async (tx) => {
+				// Behind a stop (or a resume) that is in flight: the block is read after it commits
+				await lockMesocycle(tx, ctx.userId, input);
+				const mesocycle = await tx.mesocycle.findFirst({
+					where: { id: input, userId: ctx.userId },
+					select: { startDate: true, endDate: true, pauses: { where: { resumedAt: null }, select: { id: true } } }
+				});
+				if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+				if (!mesocycle.startDate || mesocycle.endDate) {
+					throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a mesocycle in progress can be paused' });
+				}
+				if (mesocycle.pauses.length > 0) return { message: 'Mesocycle already paused' };
+				await tx.mesocyclePause.create({ data: { mesocycleId: input, pausedAt: new Date() } });
+				return { message: 'Mesocycle paused' };
+			});
+		} catch (error) {
+			// The database's one open pause per block is the backstop if the lock is ever bypassed
+			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+				return { message: 'Mesocycle already paused' };
+			}
+			throw error;
+		}
+	}),
+
+	/** Ends a block's open pause; a block that isn't paused is left as it is */
+	resume: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+		return prisma.$transaction(async (tx) => {
+			await lockMesocycle(tx, ctx.userId, input);
+			const mesocycle = await tx.mesocycle.findFirst({
+				where: { id: input, userId: ctx.userId },
+				select: { id: true }
+			});
+			if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+			const { count } = await tx.mesocyclePause.updateMany({
+				where: { mesocycleId: input, resumedAt: null },
+				data: { resumedAt: new Date() }
+			});
+			return { message: count > 0 ? 'Mesocycle resumed' : 'Mesocycle was not paused' };
+		});
+	}),
 
 	/** The active block's latest workouts done */
 	getWorkouts: t.procedure.query(async ({ ctx }) => {

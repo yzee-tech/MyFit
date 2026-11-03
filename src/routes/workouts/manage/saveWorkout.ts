@@ -68,7 +68,8 @@ export function buildWorkoutSaveData(): WorkoutSaveData | undefined {
 			workoutOfMesocycle: workoutRunes.workoutData.workoutOfMesocycle,
 			routineName: workoutRunes.workoutData.routineName ?? null,
 			userBodyweight,
-			note: workoutRunes.workoutData.note ?? undefined
+			note: workoutRunes.workoutData.note ?? undefined,
+			countsForProgression: workoutRunes.workoutData.countsForProgression ?? true
 		},
 		workoutExercises: exercisesInKg.map((ex, idx) => {
 			const { sets, ...exercise } = ex;

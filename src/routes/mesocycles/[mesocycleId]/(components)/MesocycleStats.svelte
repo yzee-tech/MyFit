@@ -27,7 +27,7 @@
 	const weeksDone = $derived.by(() => {
 		if (!mesocycle.startDate) return 0;
 		const lastDay = mesocycle.endDate ?? now.value ?? new Date();
-		return Math.min(getBlockWeekHere(mesocycle.startDate, new Date(lastDay)), plannedWeeks);
+		return Math.min(getBlockWeekHere(mesocycle.startDate, new Date(lastDay), mesocycle.pauses), plannedWeeks);
 	});
 	const workoutsPerWeek = $derived(weeksDone > 0 ? performedWorkouts.length / weeksDone : 0);
 

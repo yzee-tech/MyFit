@@ -15,6 +15,18 @@ model Mesocycle {
   forceRIRMatching          Boolean
   mesocycleCyclicSetChanges MesocycleCyclicSetChange[]
   workoutsOfMesocycle       WorkoutOfMesocycle[]
+  pauses                    MesocyclePause[]
+}
+
+/// A time the block was paused: its week count stands still. No resumedAt: paused now
+model MesocyclePause {
+  id          String    @id @default(cuid()) /// @zod.string.cuid2()
+  mesocycle   Mesocycle @relation(fields: [mesocycleId], references: [id], onDelete: Cascade)
+  mesocycleId String
+  pausedAt    DateTime
+  resumedAt   DateTime?
+
+  @@index([mesocycleId])
 }
 
 model MesocycleCyclicSetChange {

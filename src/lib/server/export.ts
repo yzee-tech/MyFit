@@ -70,6 +70,8 @@ async function estimateExportBytes(tx: Tx, userId: string): Promise<number> {
 			UNION ALL
 			SELECT NULL, COUNT(*) FROM "WorkoutOfMesocycle" wom JOIN "Mesocycle" m ON m.id = wom."mesocycleId" WHERE m."userId" = ${userId}
 			UNION ALL
+			SELECT NULL, COUNT(*) FROM "MesocyclePause" mp JOIN "Mesocycle" m ON m.id = mp."mesocycleId" WHERE m."userId" = ${userId}
+			UNION ALL
 			SELECT SUM(OCTET_LENGTH(COALESCE(ws.name, ''))), COUNT(*) FROM "WeightSet" ws WHERE ws."userId" = ${userId}
 			UNION ALL
 			SELECT SUM(OCTET_LENGTH(COALESCE(u.name, '')) + OCTET_LENGTH(COALESCE(u.email, ''))), COUNT(*) FROM "User" u WHERE u.id = ${userId}
@@ -102,7 +104,8 @@ export async function fetchExportData(tx: Tx, userId: string) {
 		orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
 		include: {
 			mesocycleCyclicSetChanges: { orderBy: { id: 'asc' } },
-			workoutsOfMesocycle: { orderBy: { workoutId: 'asc' } }
+			workoutsOfMesocycle: { orderBy: { workoutId: 'asc' } },
+			pauses: { orderBy: [{ pausedAt: 'asc' }, { id: 'asc' }] }
 		}
 	});
 	const workouts = await tx.workout.findMany({
@@ -165,6 +168,7 @@ const CSV_HEADERS = [
 	'RIR',
 	'skipped',
 	'isDeload',
+	'countsForProgression',
 	'weightSetId',
 	'bodyweightKg',
 	'bodyweightFraction',
@@ -240,6 +244,7 @@ export function buildCsvExport(data: ExportData): string {
 						String(set.RIR),
 						boolCell(set.skipped),
 						boolCell(workout.isDeload),
+						boolCell(workout.countsForProgression),
 						textCell(exercise.weightSetId),
 						numCell(workout.userBodyweight),
 						numCell(exercise.bodyweightFraction),

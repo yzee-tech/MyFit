@@ -5,7 +5,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { formatWeekEffort, getBlockWeekHere } from '$lib/utils/workoutUtils';
+	import { formatWeekEffort, getBlockWeekHere, isBlockPaused } from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { workoutRunes } from '../../workouts/manage/workoutRunes.svelte';
 	import WorkoutProgressionChart from './WorkoutProgressionChart.svelte';
@@ -41,18 +41,27 @@
 	{:then todaysWorkoutData}
 		{@const block = todaysWorkoutData.activeBlock}
 		{@const weekNumber =
-			block?.mesocycle.startDate && now.value ? getBlockWeekHere(block.mesocycle.startDate, now.value) : null}
+			block?.mesocycle.startDate && now.value
+				? getBlockWeekHere(block.mesocycle.startDate, now.value, block.mesocycle.pauses)
+				: null}
+		{@const blockPaused = block !== undefined && isBlockPaused(block.mesocycle.pauses)}
 		{#if block}
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					{block.mesocycle.name}
-					{#if weekNumber !== null}
-						<Badge variant="secondary">{formatWeekEffort(block.mesocycle.weeklyRIR, weekNumber)}</Badge>
+					<!-- A paused block has no effort target in force -->
+					{#if weekNumber !== null && !blockPaused}
+						<Badge data-testid="dashboard-effort-chip" variant="secondary"
+							>{formatWeekEffort(block.mesocycle.weeklyRIR, weekNumber)}</Badge
+						>
 					{/if}
 				</Card.Title>
 				<Card.Description>
 					{#if weekNumber === null}
 						{block.routines.length} routines
+					{:else if blockPaused}
+						<!-- Before "finished": a block past its planned weeks can still be paused -->
+						Week {weekNumber} - paused · {block.routines.length} routines
 					{:else if weekNumber > block.totalWeeks}
 						Block finished, all {block.totalWeeks} weeks done
 					{:else}

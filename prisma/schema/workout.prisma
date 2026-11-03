@@ -7,19 +7,22 @@ model WorkoutOfMesocycle {
 }
 
 model Workout {
-  id                 String              @id @default(cuid()) /// @zod.string.cuid2()
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workoutOfMesocycle WorkoutOfMesocycle?
-  userBodyweight     Float
-  startedAt          DateTime
-  endedAt            DateTime
-  workoutExercises   WorkoutExercise[]
-  userId             String
-  note               String?
+  id                   String              @id @default(cuid()) /// @zod.string.cuid2()
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutOfMesocycle   WorkoutOfMesocycle?
+  userBodyweight       Float
+  startedAt            DateTime
+  endedAt              DateTime
+  workoutExercises     WorkoutExercise[]
+  userId               String
+  note                 String?
   /// Done in a deload week: not used as the baseline for progression
-  isDeload           Boolean             @default(false)
+  isDeload             Boolean             @default(false)
+  /// Whether its lifts are used to calculate weights and reps progression; off for e.g. a trainer session or a
+  /// light workout on holiday. It is saved in history and stats either way
+  countsForProgression Boolean             @default(true)
   /// The routine it was done from, by its name at the time (history only); none for a blank workout
-  routineName        String?
+  routineName          String?
 }
 
 model WorkoutExercise {
