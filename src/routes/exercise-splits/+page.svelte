@@ -1,24 +1,19 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import ExerciseTemplateCard from '$lib/components/mesocycleAndExerciseSplit/ExerciseTemplateCard.svelte';
+	import RoutineCard from '$lib/components/mesocycleAndExerciseSplit/RoutineCard.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { convertCamelCaseToNormal } from '$lib/utils';
 	import { formatRoutineCount } from '$lib/utils/mesocycleUtils';
 	import { TRPCClientError } from '@trpc/client';
 	import { onMount, tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import ChevronDownIcon from 'virtual:icons/lucide/chevron-down';
-	import ChevronUpIcon from 'virtual:icons/lucide/chevron-up';
 	import EllipsisIcon from 'virtual:icons/lucide/ellipsis-vertical';
 	import FileUpIcon from 'virtual:icons/lucide/file-up';
 	import MenuIcon from 'virtual:icons/lucide/menu';
-	import EditIcon from 'virtual:icons/lucide/pencil';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import ExerciseSplitSkeleton from './(components)/ExerciseSplitSkeleton.svelte';
 	import { fetchMyRoutines, saveMyRoutines, withDuplicate, withMoved, type MyRoutine } from './myRoutines';
@@ -58,20 +53,6 @@
 
 	function editLink(name: string) {
 		return `/exercise-splits/edit?routine=${encodeURIComponent(name)}`;
-	}
-
-	function muscleGroups(routine: Routine) {
-		return [
-			...new Set(
-				routine.exercises.map(
-					(exercise) => exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup)
-				)
-			)
-		];
-	}
-
-	function unitText(routine: Routine) {
-		return routine.weightUnit === 'ASK' ? 'unit asked each time' : routine.weightUnit;
 	}
 
 	function toggleShown(name: string) {
@@ -171,30 +152,13 @@
 		<p class="mb-2 text-sm text-muted-foreground">You pick one of these each time you train.</p>
 		<div class="flex flex-col gap-2 overflow-y-auto pb-2">
 			{#each routines as routine, idx (routine.id)}
-				{@const isShown = shown.includes(routine.name)}
-				<div class="rounded-lg border bg-card p-3" data-testid="routine-card" id="routine-{routine.id}">
-					<div class="flex items-start gap-2">
-						<!-- The title opens and closes the card; the menu beside it stays its own button -->
-						<button
-							class="flex min-w-0 grow flex-col text-left"
-							aria-expanded={isShown}
-							aria-label="{isShown ? 'Hide' : 'Show'} the exercises of {routine.name}"
-							onclick={() => toggleShown(routine.name)}
-							type="button"
-						>
-							<span class="flex items-center gap-1 text-lg font-semibold">
-								<span data-testid="routine-card-name">{routine.name}</span>
-								{#if isShown}
-									<ChevronUpIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-								{:else}
-									<ChevronDownIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-								{/if}
-							</span>
-							<span class="text-sm text-muted-foreground">
-								{routine.exercises.length}
-								{routine.exercises.length === 1 ? 'exercise' : 'exercises'} · {unitText(routine)}
-							</span>
-						</button>
+				<RoutineCard
+					editHref={editLink(routine.name)}
+					{routine}
+					ontoggle={() => toggleShown(routine.name)}
+					shown={shown.includes(routine.name)}
+				>
+					{#snippet menu()}
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button
@@ -235,36 +199,8 @@
 								</DropdownMenu.Group>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
-					</div>
-					{#if routine.exercises.length > 0}
-						<div class="mt-2 flex flex-wrap gap-1">
-							{#each muscleGroups(routine) as muscleGroup}
-								<Badge variant="secondary">{muscleGroup}</Badge>
-							{/each}
-						</div>
-					{/if}
-					{#if isShown}
-						<div class="mt-2 flex flex-col gap-1" data-testid="routine-card-exercises">
-							{#each routine.exercises as exercise}
-								<ExerciseTemplateCard context="exerciseSplit" exerciseTemplate={exercise} readOnly />
-							{/each}
-						</div>
-						<div class="mt-2 flex items-center justify-end gap-1">
-							<Button class="gap-1" href={editLink(routine.name)} size="sm" variant="outline">
-								<EditIcon class="h-4 w-4" /> Edit
-							</Button>
-							<Button
-								class="gap-1"
-								aria-label="Close {routine.name}"
-								onclick={() => toggleShown(routine.name)}
-								size="sm"
-								variant="ghost"
-							>
-								Hide <ChevronUpIcon class="h-4 w-4" />
-							</Button>
-						</div>
-					{/if}
-				</div>
+					{/snippet}
+				</RoutineCard>
 			{/each}
 		</div>
 	{:else}

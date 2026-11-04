@@ -4,12 +4,18 @@
 	import type { Selected } from 'bits-ui';
 	import WorkoutProgressionChart from '../../../dashboard/(components)/WorkoutProgressionChart.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
+	import { sortRoutineNames } from '$lib/utils/listOrder';
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
 	// The routines this mesocycle's workouts were done from, by their names at the time
 	const done = mesocycle.workoutsOfMesocycle.filter((wm) => wm.workout.routineName);
-	const routineNames = [...new Set(done.map((wm) => wm.workout.routineName!))];
+	// A running block follows the order of My routines; names that aren't there any more come after, A to Z
+	// (a finished block has no My routines: A to Z)
+	const routineNames = sortRoutineNames(
+		[...new Set(done.map((wm) => wm.workout.routineName!))],
+		mesocycle.routines?.map((routine) => routine.name) ?? null
+	);
 	let selectedRoutine: Selected<string> | undefined = $state(
 		routineNames[0] === undefined ? undefined : { value: routineNames[0], label: routineNames[0] }
 	);

@@ -9,7 +9,8 @@
 	import * as Select from '$lib/components/ui/select';
 	import { trpc } from '$lib/trpc/client.js';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { dateToCalendarDate } from '$lib/utils';
+	import { convertCamelCaseToNormal, dateToCalendarDate } from '$lib/utils';
+	import { compareLabels, sortBlockNames, sortGroupHeadings } from '$lib/utils/listOrder';
 	import { cn } from '$lib/utils.js';
 	import { DateFormatter, getLocalTimeZone } from '@internationalized/date';
 	import type { DateRange, Selected } from 'bits-ui';
@@ -51,7 +52,9 @@
 	});
 	let mesocycleNames = $derived.by(() => {
 		if (!exerciseInstances) return [];
-		return Array.from(new Set(exerciseInstances.map((ex) => ex.workout.workoutOfMesocycle?.mesocycle.name ?? null)));
+		return sortBlockNames(
+			Array.from(new Set(exerciseInstances.map((ex) => ex.workout.workoutOfMesocycle?.mesocycle.name ?? null)))
+		);
 	});
 	let selectedMesocycleNames: Selected<string | null>[] = $state([]);
 
@@ -85,11 +88,14 @@
 
 	async function loadExercises() {
 		const exerciseList = await data.exerciseList;
-		exercisesByMuscleGroup = Object.entries(
-			Object.groupBy(exerciseList, (ex) => ex.customMuscleGroup ?? ex.targetMuscleGroup)
-		).map(([group, exercises]) => ({
+		// Sections A to Z by the name shown (a custom group under its own name), their exercises A to Z too
+		const byGroup = Object.groupBy(
+			exerciseList,
+			(ex) => ex.customMuscleGroup ?? convertCamelCaseToNormal(ex.targetMuscleGroup)
+		);
+		exercisesByMuscleGroup = sortGroupHeadings(Object.keys(byGroup)).map((group) => ({
 			group,
-			exercises: exercises!.filter((ex) => ex !== undefined)
+			exercises: byGroup[group]!.toSorted((a, b) => compareLabels(a.name, b.name))
 		}));
 	}
 

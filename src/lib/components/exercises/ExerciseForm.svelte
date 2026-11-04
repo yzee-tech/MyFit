@@ -59,6 +59,7 @@
 	import { isLevelUnit, unitLabel } from '$lib/utils/weightUnits';
 	import { expandRange, formatWeightList, normalizeWeights, pickableWeightSets } from '$lib/utils/weightSets';
 	import { DISTANCE_UNITS, distanceUnitLabel } from '$lib/utils/distanceUnits';
+	import { sortMuscleGroups } from '$lib/utils/listOrder';
 	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import AddIcon from 'virtual:icons/lucide/plus';
 
@@ -304,7 +305,7 @@
 				<Select.Value placeholder="Pick one" />
 			</Select.Trigger>
 			<Select.Content class="h-48 overflow-y-auto">
-				{#each Object.values(MuscleGroups).filter((group) => group !== 'Cardio' || !measureLocked || isCardio) as muscleGroup}
+				{#each sortMuscleGroups(Object.values(MuscleGroups).filter((group) => group !== 'Cardio' || !measureLocked || isCardio)) as muscleGroup}
 					<Select.Item label={convertCamelCaseToNormal(muscleGroup)} value={muscleGroup} />
 				{/each}
 			</Select.Content>

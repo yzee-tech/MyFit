@@ -6,6 +6,7 @@ import {
 	formatDistance,
 	formatDuration,
 	formatPace,
+	formatTimerDigits,
 	fromMeters,
 	isValidDistanceMeters,
 	isValidTimeSeconds,
@@ -55,6 +56,47 @@ test('distances: stored in metres, shown in km, mi, m or ft, and back without dr
 	// Metres and feet are whole; km and miles to 10 m
 	expect(distanceStep('M')).toBe(1);
 	expect(distanceStep('KM')).toBe(0.01);
+});
+
+test('the time box while typing, like a timer: the last two digits are seconds, colons come by themselves', () => {
+	for (const [typed, shown] of [
+		['', ''],
+		['1', '0:01'],
+		['45', '0:45'],
+		['530', '5:30'],
+		['1500', '15:00'],
+		['9000', '90:00'],
+		['9045', '90:45'],
+		['10530', '1:05:30'],
+		['123045', '12:30:45']
+	] as const) {
+		expect(formatTimerDigits(typed), typed).toBe(shown);
+	}
+	// What the box shows is read again as it is typed on (backspace, a digit added): the same digits
+	expect(formatTimerDigits('15:30')).toBe('15:30');
+	expect(formatTimerDigits('15:3')).toBe('1:53');
+	expect(formatTimerDigits('15:301')).toBe('1:53:01');
+	expect(formatTimerDigits('0:451')).toBe('4:51');
+	// Leading zeros don't count; a 7th digit is ignored, never shifting the others
+	expect(formatTimerDigits('0')).toBe('');
+	expect(formatTimerDigits('00:05')).toBe('0:05');
+	expect(formatTimerDigits('1230451')).toBe('12:30:45');
+	// Letters and spaces are dropped; no digits at all gives nothing
+	expect(formatTimerDigits('1a5 3b0')).toBe('15:30');
+	expect(formatTimerDigits('fast')).toBe('');
+	// Every box text is read back on leaving the box, and shown as h:mm:ss from an hour
+	expect(parseDuration(formatTimerDigits('9045'))).toBe(5445);
+	expect(formatDuration(parseDuration(formatTimerDigits('9045'))!)).toBe('1:30:45');
+	expect(parseDuration(formatTimerDigits('10530'))).toBe(3930);
+	expect(parseDuration(formatTimerDigits('999999'))).toBeNull();
+	// Not times: seconds of 60 or more, minutes of 60 or more beside hours, over a day
+	expect(parseDuration(formatTimerDigits('1575'))).toBeNull();
+	expect(parseDuration(formatTimerDigits('16030'))).toBeNull();
+	expect(parseDuration(formatTimerDigits('250000'))).toBeNull();
+	// The longest time is a day: 24:00:00 is the last one the box can hold that counts
+	expect(parseDuration(formatTimerDigits('235959'))).toBe(86399);
+	expect(parseDuration(formatTimerDigits('240000'))).toBe(86400);
+	expect(parseDuration(formatTimerDigits('240001'))).toBeNull();
 });
 
 test('times: m:ss (h:mm:ss past the hour) out, and m:ss, h:mm:ss or minutes in', () => {

@@ -387,10 +387,19 @@ test('the current mesocycle uses My routines: a rename, set counts, overrides, a
 	// The mesocycle shows them read-only, without Legs B, with a way to edit My routines
 	await page.goto(`/mesocycles/${block.id}`);
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await expect(page.getByRole('tab', { name: 'Legs B' })).toHaveCount(0);
-	await expect(page.getByRole('tab', { name: 'Hotel – Pull' })).toBeVisible();
-	await page.getByRole('link', { name: 'Edit ›' }).click();
-	await page.waitForURL('/exercise-splits');
+	await expect(page.getByTestId('routine-card-name')).toHaveText([
+		'Hotel – Pull',
+		'Push A',
+		'Pull B',
+		'Legs A',
+		'Push B'
+	]);
+	// Each opens to its exercises, and its Edit button opens that routine in My routines
+	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Show the exercises of Hotel – Pull' }).click();
+	await page.getByRole('link', { name: 'Edit' }).click();
+	await page.waitForURL(/\/exercise-splits\/edit\?routine=/);
+	await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Hotel – Pull');
 });
 
 test('old links open My routines: a routine library, and the old all-routines editor', async ({ page }) => {

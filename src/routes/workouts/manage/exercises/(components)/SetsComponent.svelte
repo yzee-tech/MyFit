@@ -7,6 +7,7 @@
 		distanceStep,
 		distanceUnitLabel,
 		formatDuration,
+		formatTimerDigits,
 		formatPace,
 		fromMeters,
 		isValidDistanceMeters,
@@ -423,8 +424,30 @@
 	const timeHint = (set: WorkoutExerciseSet) =>
 		isSuggested(set, 'timeSeconds') && set.timeSeconds !== undefined ? formatDuration(set.timeSeconds) : 'm:ss';
 
+	/** Time boxes with an input method (IME) composing: left alone until it ends */
+	const composing = new WeakSet<HTMLInputElement>();
+	/** What each time box showed after its last typed digit, for a box that gets only letters */
+	const lastTimeText = new WeakMap<HTMLInputElement, string>();
+
 	/**
-	 * A time typed as m:ss (or minutes), taken when the box is left, so the text isn't reformatted under
+	 * Typing in a time box, like a timer: the digits fill from the right and the colons appear by
+	 * themselves (1530 shows 15:30). Only the box's text is rewritten here; the set is changed when the box is
+	 * left (timeChanged), so the shown value isn't touched under the typing. Letters are ignored
+	 */
+	function timeTyping(e: Event, set: WorkoutExerciseSet) {
+		const input = e.currentTarget as HTMLInputElement;
+		if (composing.has(input)) return;
+		const formatted = formatTimerDigits(input.value);
+		if (input.value !== '' && formatted === '') {
+			input.value = lastTimeText.get(input) ?? timeShown(set);
+			return;
+		}
+		input.value = formatted;
+		lastTimeText.set(input, formatted);
+	}
+
+	/**
+	 * A time typed as m:ss (or h:mm:ss), taken when the box is left, so the text isn't reformatted under
 	 * the typing. Something that isn't a time goes back to what the box held
 	 */
 	function timeChanged(e: Event, set: WorkoutExerciseSet, idx: number) {
@@ -436,6 +459,7 @@
 		const seconds = parseDuration(input.value);
 		if (seconds === null) {
 			input.value = timeShown(set);
+			lastTimeText.set(input, input.value);
 			return;
 		}
 		if (isSuggested(set, 'timeSeconds')) {
@@ -445,6 +469,7 @@
 		}
 		set.timeSeconds = seconds;
 		input.value = formatDuration(seconds);
+		lastTimeText.set(input, input.value);
 		typed(set, idx, 'timeSeconds');
 	}
 
@@ -824,9 +849,15 @@
 					data-suggested={isSuggested(set, 'timeSeconds')}
 					onfocus={() => noteSet1(set, 'timeSeconds')}
 					onchange={(e) => timeChanged(e, set, idx)}
+					oncompositionend={(e) => {
+						composing.delete(e.currentTarget);
+						timeTyping(e, set);
+					}}
+					oncompositionstart={(e) => composing.add(e.currentTarget)}
+					oninput={(e) => timeTyping(e, set)}
 					disabled={set.completed}
 					inputmode="numeric"
-					pattern="[0-9:.]*"
+					pattern="[0-9:]*"
 					placeholder={timeHint(set)}
 					type="text"
 					value={timeShown(set)}

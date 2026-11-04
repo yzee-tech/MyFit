@@ -72,6 +72,20 @@ export function parseDuration(text: string): number | null {
 }
 
 /**
+ * What a time box shows while its digits are typed, like a kitchen timer: they fill from the right, the
+ * last two are seconds, the ones before them minutes, then hours. 45 → 0:45, 1500 → 15:00, 9045 → 90:45
+ * (minutes may pass 59 until the box is left), 10530 → 1:05:30, 123045 → 12:30:45. Anything that isn't a
+ * digit is dropped, leading zeros don't count, and a 7th digit is ignored. No digits gives "".
+ */
+export function formatTimerDigits(text: string): string {
+	const digits = text.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6);
+	if (digits === '') return '';
+	const seconds = digits.slice(-2).padStart(2, '0');
+	if (digits.length <= 4) return `${digits.slice(0, -2) || '0'}:${seconds}`;
+	return `${digits.slice(0, -4)}:${digits.slice(-4, -2)}:${seconds}`;
+}
+
+/**
  * How pace is quoted per unit: minutes per km or mile; rowing's per 500 m; per 100 ft. The denominator
  * in metres, and its label
  */

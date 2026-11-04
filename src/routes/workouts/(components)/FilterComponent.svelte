@@ -4,6 +4,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import type { RouterInputs, RouterOutputs } from '$lib/trpc/router';
 	import { dateToCalendarDate } from '$lib/utils';
+	import { sortMesocycles } from '$lib/utils/listOrder';
 	import type { DateRange, Selected } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import FilterIcon from 'virtual:icons/lucide/filter';
@@ -85,7 +86,7 @@
 			</Select.Trigger>
 			<Select.Content>
 				<Select.Item class="italic" value={null}>{NOT_IN_A_BLOCK}</Select.Item>
-				{#each filterData.allMesocycles as mesocycle}
+				{#each sortMesocycles(filterData.allMesocycles) as mesocycle}
 					{@const isActive = mesocycle.startDate && mesocycle.endDate === null}
 					<Select.Item class="flex items-center justify-between" label={mesocycleLabel(mesocycle)} value={mesocycle.id}>
 						{mesocycleLabel(mesocycle)}

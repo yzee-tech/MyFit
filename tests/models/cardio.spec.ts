@@ -161,8 +161,8 @@ test('logging a run and bike intervals: distance and time boxes, pace, levels; s
 	await box(page, 'Run', 1, 'time').fill('fast');
 	await box(page, 'Run', 1, 'time').blur();
 	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
-	// A bare number is minutes
-	await box(page, 'Run', 1, 'time').fill('30');
+	// The last two digits are seconds: 3000 is 30 minutes
+	await box(page, 'Run', 1, 'time').fill('3000');
 	await box(page, 'Run', 1, 'time').blur();
 	await expect(box(page, 'Run', 1, 'time')).toHaveValue('30:00');
 	await expect(page.getByTestId('Run-set-1-pace')).toHaveText('6:00 /km');
@@ -226,6 +226,168 @@ test('logging a run and bike intervals: distance and time boxes, pace, levels; s
 	await expect(panel.getByTestId('Run-cardio-sets')).toContainText(/km\s*Time\s*Pace\s*1\s*5\s*30:00\s*6:00 \/km/);
 	await expect(panel.getByTestId('Bike-cardio-sets')).toContainText(/Level\s*Time\s*1\s*8\s*0:30\s*2\s*8\s*0:30/);
 	await expect(panel).not.toContainText('RIR 1 0 0 0');
+});
+
+test('the time box takes digits like a timer: the last two are seconds, colons come by themselves, letters are ignored', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	const time = box(page, 'Run', 1, 'time');
+	const savedSeconds = async () =>
+		(await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!))).workoutExercises[0].sets[0]
+			.timeSeconds;
+
+	// Key by key, the colon appears as the digits come in
+	await time.click();
+	await time.pressSequentially('1');
+	await expect(time).toHaveValue('0:01');
+	await time.pressSequentially('5');
+	await expect(time).toHaveValue('0:15');
+	await time.pressSequentially('3');
+	await expect(time).toHaveValue('1:53');
+	await time.pressSequentially('0');
+	await expect(time).toHaveValue('15:30');
+	// Backspace takes the last digit off; a letter is ignored
+	await time.press('Backspace');
+	await expect(time).toHaveValue('1:53');
+	await time.pressSequentially('x');
+	await expect(time).toHaveValue('1:53');
+	await time.pressSequentially('0');
+	await expect(time).toHaveValue('15:30');
+	// Nothing is taken until the box is left; then the set has it
+	expect(await savedSeconds()).toBeUndefined();
+	await time.blur();
+	await expect(time).toHaveValue('15:30');
+	await expect.poll(savedSeconds).toBe(930);
+
+	// Select all and type over: a new time, and 15 on its own is 15 seconds
+	await time.click();
+	await time.press('ControlOrMeta+a');
+	await time.pressSequentially('15');
+	await expect(time).toHaveValue('0:15');
+	await time.blur();
+	await expect.poll(savedSeconds).toBe(15);
+
+	// Minutes can pass 59 while typing; from an hour the box shows hours once it is left
+	await time.fill('');
+	await time.pressSequentially('9045');
+	await expect(time).toHaveValue('90:45');
+	await time.blur();
+	await expect(time).toHaveValue('1:30:45');
+	await expect.poll(savedSeconds).toBe(5445);
+
+	// Five and six digits are h:mm:ss; a seventh digit is ignored
+	await time.fill('');
+	await time.pressSequentially('123045');
+	await expect(time).toHaveValue('12:30:45');
+	await time.pressSequentially('9');
+	await expect(time).toHaveValue('12:30:45');
+	await time.blur();
+	await expect.poll(savedSeconds).toBe(12 * 3600 + 30 * 60 + 45);
+
+	// Not a time (seconds of 60 or more): the box goes back to what it held
+	await time.fill('1575');
+	await expect(time).toHaveValue('15:75');
+	await time.blur();
+	await expect(time).toHaveValue('12:30:45');
+	await expect.poll(savedSeconds).toBe(12 * 3600 + 30 * 60 + 45);
+	// Over a day, and minutes of 60 or more beside hours: the same
+	await time.fill('250000');
+	await time.blur();
+	await expect(time).toHaveValue('12:30:45');
+	await time.fill('16030');
+	await time.blur();
+	await expect(time).toHaveValue('12:30:45');
+
+	// Emptied: the time is cleared
+	await time.fill('');
+	await time.blur();
+	await expect(time).toHaveValue('');
+});
+
+test('the time box: pasted or autofilled digits, an input method composing, and a box left half typed while the page updates', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run', 'Bike']);
+	const time = box(page, 'Run', 1, 'time');
+
+	// Pasted or autofilled in one go: the same as typed
+	await time.fill('2605');
+	await expect(time).toHaveValue('26:05');
+	await time.fill('26:05');
+	await expect(time).toHaveValue('26:05');
+
+	// An input method composing is left alone until it ends
+	await time.fill('');
+	await time.evaluate((input: HTMLInputElement) => {
+		input.dispatchEvent(new CompositionEvent('compositionstart'));
+		input.value = 'ni1';
+		input.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true }));
+	});
+	await expect(time).toHaveValue('ni1');
+	await time.evaluate((input: HTMLInputElement) => {
+		input.value = '12';
+		input.dispatchEvent(new CompositionEvent('compositionend'));
+	});
+	await expect(time).toHaveValue('0:12');
+
+	// Half typed, with the page updating (the workout clock ticks): the box keeps what was typed
+	await time.fill('');
+	await time.pressSequentially('4');
+	await page.waitForTimeout(2200);
+	await expect(time).toHaveValue('0:04');
+	await time.pressSequentially('50');
+	await expect(time).toHaveValue('4:50');
+	await time.blur();
+	await expect(time).toHaveValue('4:50');
+
+	// Another box's change and a removed interval do not touch the others
+	await page.getByRole('button', { name: 'Add an interval to Bike' }).click();
+	await box(page, 'Bike', 2, 'time').pressSequentially('45');
+	await box(page, 'Bike', 1, 'time').pressSequentially('130');
+	await expect(box(page, 'Bike', 1, 'time')).toHaveValue('1:30');
+	await expect(box(page, 'Bike', 2, 'time')).toHaveValue('0:45');
+	await page.getByTestId('Bike-set-1-remove').click();
+	await page.getByTestId('Bike-set-1-remove').click();
+	await expect(box(page, 'Bike', 1, 'time')).toHaveValue('0:45');
+	await expect(time).toHaveValue('4:50');
+});
+
+test('Add exercises says how a cardio exercise is measured, not reps and a set type', async ({ page, userData }) => {
+	await createExercises(userData.userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 },
+		{ name: 'Barbell rows', targetMuscleGroup: 'Traps' }
+	]);
+	await startBlankWorkout(page);
+	await page.getByLabel('add-exercise').click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await expect(sheet.getByTestId('Run-starts-with')).toHaveText('Distance & time in km');
+	await expect(sheet.getByTestId('Bike-starts-with')).toHaveText('Time');
+	// Lifts say it as before
+	await expect(sheet.getByTestId('Barbell rows-starts-with')).toHaveText('New: Independent · 8–15 reps');
+	await expect(sheet.getByTestId('Run-starts-with')).not.toContainText(/reps|Independent|New:/);
+	await expect(sheet.getByTestId('Bike-starts-with')).not.toContainText(/reps|Independent|New:/);
+	await page.keyboard.press('Escape');
+
+	// From last time or a routine, the same words: it never has reps
+	await logPastCardio(userData.userId);
+	await page.reload();
+	await page.getByLabel('add-exercise').click();
+	const reopened = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
+	await expect(reopened.getByTestId('Run-starts-with')).toHaveText('Distance & time in km');
+	await expect(reopened.getByTestId('Bike-starts-with')).toHaveText('Time');
 });
 
 test('"Previous" repeats last time’s intervals, tap to copy; History copies them; an added run starts from last time', async ({

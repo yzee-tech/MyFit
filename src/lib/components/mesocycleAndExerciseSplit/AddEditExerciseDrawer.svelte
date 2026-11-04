@@ -41,6 +41,7 @@
 	import XIcon from 'virtual:icons/lucide/x';
 	import type { RoutineExerciseTemplate, SplitExerciseTemplateWithoutIdsOrIndex } from './commonTypes';
 	import type { DistanceUnit, ExerciseMeasure } from '$lib/utils/prismaEnums';
+	import { sortMuscleGroups } from '$lib/utils/listOrder';
 	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
 
@@ -130,7 +131,9 @@
 			)
 		).sort(([a], [b]) => a.localeCompare(b))
 	);
-	let pickerMuscleGroups = $derived([...new Set(pickerExercises.map((exercise) => exercise.targetMuscleGroup))]);
+	let pickerMuscleGroups = $derived(
+		sortMuscleGroups([...new Set(pickerExercises.map((exercise) => exercise.targetMuscleGroup))])
+	);
 
 	const extraMesocycleProps: Partial<RoutineExerciseTemplate> = {
 		sets: undefined,

@@ -436,6 +436,7 @@ test('a workout’s changes (exercises deleted, sets and a note edited) leave th
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
+	await page.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
 	await expect(page.getByRole('main')).toContainText('Pull-ups 3 Straight sets of 5 to 15 reps');
 	await expect(page.getByRole('main')).toContainText('Barbell rows');
 	await expect(page.getByRole('main')).not.toContainText('Custom note');

@@ -70,7 +70,7 @@ export const mesocycles = t.router({
 			prisma.exerciseSplitDay.findMany({
 				where: { exerciseSplit: { userId: ctx.userId } },
 				orderBy: { dayIndex: 'asc' },
-				select: { name: true, exercises: { orderBy: { exerciseIndex: 'asc' } } }
+				select: { id: true, name: true, weightUnit: true, exercises: { orderBy: { exerciseIndex: 'asc' } } }
 			})
 		]);
 		if (!mesocycle) return null;

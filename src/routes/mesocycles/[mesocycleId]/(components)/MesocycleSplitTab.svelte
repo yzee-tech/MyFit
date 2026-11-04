@@ -1,35 +1,31 @@
 <script lang="ts">
-	import * as Tabs from '$lib/components/ui/tabs';
-	import ExerciseTemplateCard from '$lib/components/mesocycleAndExerciseSplit/ExerciseTemplateCard.svelte';
+	import RoutineCard from '$lib/components/mesocycleAndExerciseSplit/RoutineCard.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
 
 	let { mesocycle }: { mesocycle: NonNullable<RouterOutputs['mesocycles']['findById']> } = $props();
 
-	// Read-only: a mesocycle that isn't finished uses My routines, edited there
+	// Read-only, like My routines' cards without their menu: a mesocycle that isn't finished uses My routines,
+	// edited there (each opened routine has its Edit button)
 	const routines = mesocycle.routines ?? [];
-	let selectedName = $state(routines[0]?.name ?? '');
-	let selectedRoutine = $derived(routines.find((routine) => routine.name === selectedName));
+	/** Routines showing their exercises: none to start with */
+	let shown: string[] = $state([]);
+
+	function toggleShown(name: string) {
+		shown = shown.includes(name) ? shown.filter((other) => other !== name) : [...shown, name];
+	}
 </script>
 
 {#if routines.length > 0}
-	<Tabs.Root class="w-full" onValueChange={(v) => v && (selectedName = v)} value={selectedName}>
-		<Tabs.List class="flex justify-start overflow-x-auto">
-			{#each routines as routine}
-				<Tabs.Trigger value={routine.name}>{routine.name}</Tabs.Trigger>
-			{/each}
-			<!-- The routines are My routines: edited there -->
-			<a class="ml-1 shrink-0 whitespace-nowrap px-2 text-sm text-primary hover:underline" href="/exercise-splits">
-				Edit ›
-			</a>
-		</Tabs.List>
-		{#if selectedRoutine}
-			<Tabs.Content class="flex flex-col gap-1" value={selectedRoutine.name}>
-				{#each selectedRoutine.exercises as exercise}
-					<ExerciseTemplateCard context="exerciseSplit" exerciseTemplate={exercise} readOnly />
-				{/each}
-			</Tabs.Content>
-		{/if}
-	</Tabs.Root>
+	<div class="flex flex-col gap-2 overflow-y-auto pb-2">
+		{#each routines as routine (routine.id)}
+			<RoutineCard
+				editHref="/exercise-splits/edit?routine={encodeURIComponent(routine.name)}"
+				{routine}
+				ontoggle={() => toggleShown(routine.name)}
+				shown={shown.includes(routine.name)}
+			/>
+		{/each}
+	</div>
 {:else}
 	<div class="muted-text-box">
 		No routines yet. Create them in <a class="underline" href="/exercise-splits">My routines</a>, or train with a blank

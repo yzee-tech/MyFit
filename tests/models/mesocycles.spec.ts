@@ -55,8 +55,57 @@ test('create a mesocycle', async ({ page }) => {
 	await expect(page.getByRole('tabpanel')).toContainText('Start overload percentage 1.25% Last set to failure');
 
 	await page.getByRole('tab', { name: 'Routines' }).click();
+	await expect(page.getByTestId('routine-card-name')).toHaveText([
+		'Pull A',
+		'Push A',
+		'Legs A',
+		'Pull B',
+		'Push B',
+		'Legs B'
+	]);
+	await page.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
 	await expect(page.getByRole('main')).toContainText('Pull-ups 3 Straight sets of 5 to 15 reps');
-	await expect(page.getByRole('main')).toContainText('Pull APush ALegs APull BPush BLegs B');
+});
+
+test('Routines tab: a card for each routine in My routines order, closed to start; several can be open; Edit opens that routine', async ({
+	page
+}) => {
+	await createMesocycle(page, { exerciseSplitCreated: true });
+	await page.goto('/mesocycles');
+	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
+	await page.getByRole('tab', { name: 'Routines' }).click();
+
+	// A list like My routines: name, how many exercises and the unit, the muscle groups; all closed
+	await expect(page.getByTestId('routine-card-name')).toHaveText([
+		'Pull A',
+		'Push A',
+		'Legs A',
+		'Pull B',
+		'Push B',
+		'Legs B'
+	]);
+	const pullA = page.getByTestId('routine-card').filter({ hasText: 'Pull A' }).first();
+	await expect(pullA).toContainText('4 exercises · KG');
+	for (const muscle of ['Lats', 'Traps', 'Biceps', 'Rear delts']) await expect(pullA).toContainText(muscle);
+	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(0);
+	// No strip of routine tabs, no menu on the cards (they are changed in My routines), no top link
+	await expect(page.getByRole('tab', { name: 'Pull A' })).toHaveCount(0);
+	await expect(page.getByLabel('Routine Pull A options')).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Edit ›' })).toHaveCount(0);
+
+	// Several open at once; Hide closes one
+	await page.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
+	await page.getByRole('button', { name: 'Show the exercises of Push A' }).click();
+	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(2);
+	await expect(page.getByTestId('routine-card-exercises').first()).toContainText('Barbell rows');
+	await page.getByRole('button', { name: 'Close Pull A' }).click();
+	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(1);
+	await expect(page.getByTestId('routine-card-exercises')).not.toContainText('Barbell rows');
+
+	// Edit on an opened routine goes to that routine in My routines
+	await page.getByRole('link', { name: 'Edit' }).click();
+	await page.waitForURL(/\/exercise-splits\/edit\?routine=Push%20A/);
+	await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Push A');
 });
 
 test('delete a mesocycle', async ({ page }) => {
@@ -163,6 +212,7 @@ test('a block starts with My routines as they are when it starts', async ({ page
 	});
 	await page.reload();
 	await page.getByRole('tab', { name: 'Routines' }).click();
+	await page.getByRole('button', { name: 'Show the exercises of Pull A' }).click();
 	await expect(page.getByRole('main')).toContainText('Face pulls 4 Straight sets of 15 to 30 reps Rear delts');
 	const list = await prisma.exerciseSplit.findUniqueOrThrow({ where: { userId: userData.userId } });
 	expect((await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } })).exerciseSplitId).toBe(
@@ -195,8 +245,7 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();
-	await page.getByRole('link', { name: 'Edit ›' }).click();
-	await page.waitForURL('/exercise-splits');
+	await page.goto('/exercise-splits');
 	// Routines are edited in My routines; Legs A keeps its workout wherever it moves
 	await deleteRoutine(page, 'Push A');
 	await page.getByRole('link', { name: 'New routine' }).click();
