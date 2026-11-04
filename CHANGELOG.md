@@ -2,6 +2,15 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-03: faster test runs
+
+### Changed
+
+- **Behind the scenes:** GitHub now runs the tests two at a time, which cut a full test run from about 15 minutes to
+  about 10, and retries a failing test twice instead of three times so a persistent failure shows up sooner. Nine
+  tests that repeated a neighbour were folded into it (same checks), about 25 seconds less per run. Nothing in the
+  app changes.
+
 ## 2026-11-01: pause a mesocycle, and choose whether a workout counts toward progression
 
 ### Added

@@ -638,18 +638,10 @@ async function setUpForWelcomeBack(page: Page, userId: string, lastWorkoutAt: Da
 // Monday Oct 19 at 18:00 in Shanghai
 const LAST_WORKOUT = new Date('2026-10-19T10:00:00Z');
 
-test('welcome back counts the phone calendar days: 7 days on Monday morning, though it is under 168 hours', async ({
+test('welcome back counts the phone calendar days: it appears at the first minute of the 7th, though that is under 168 hours', async ({
 	page,
 	userData
 }) => {
-	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
-	// Mon Oct 26 at 09:00 in Shanghai: 6 days and 15 hours after the workout, the 7th calendar day since
-	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
-	await page.goto('/workouts/manage/start');
-	await expect(page.getByRole('main')).toContainText("Welcome back: take it easy today It's been 7 days");
-});
-
-test('welcome back appears at the first minute of the 7th calendar day, not before', async ({ page, userData }) => {
 	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
 	// Sun Oct 25 at 23:59 in Shanghai is 6 days since; Mon at 00:00 is 7
 	await page.clock.install({ time: new Date('2026-10-25T15:59:00Z') });
@@ -658,7 +650,8 @@ test('welcome back appears at the first minute of the 7th calendar day, not befo
 	await expect(page.getByRole('main')).not.toContainText('Welcome back');
 	await page.clock.setFixedTime(new Date('2026-10-25T16:00:00Z'));
 	await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-	await expect(page.getByRole('main')).toContainText("It's been 7 days");
+	// 6 days and 6 hours after the workout: under 168 hours, but the 7th calendar day since
+	await expect(page.getByRole('main')).toContainText("Welcome back: take it easy today It's been 7 days");
 });
 
 test('welcome back: switched off on the card, the link does not carry the flag', async ({ page, userData }) => {

@@ -312,22 +312,6 @@ test('drop sets: mini-sets line up under the load, reps and RIR boxes', async ({
 	}
 });
 
-test('an exercise added during a workout gets its "Previous" too', async ({ page, userData }) => {
-	await setUpLastTime(userData.userId);
-	await page.goto('/workouts');
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Blank workout');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await quickAdd(page, ['Barbell rows']);
-	await editWorkoutExercise(page, 'Barbell rows');
-	await page.getByLabel('Sets').fill('3');
-	await page.getByRole('button', { name: 'Update' }).click();
-	await expect(previous(page, 'Barbell rows', 1)).toHaveText('60 × 10');
-	await expect(previous(page, 'Barbell rows', 2)).toHaveText('60 × 9');
-	await expect(previous(page, 'Barbell rows', 3)).toHaveText('–');
-});
-
 test('suggested numbers look lighter until typed, copied in, or the set is ticked; kept after a reload and a unit switch', async ({
 	page,
 	userData
@@ -413,7 +397,7 @@ test('editing a past workout: no "Previous" column and no reps hint', async ({ p
 	await expect(page.getByRole('button', { name: 'Adjust reps to the new load' })).toHaveCount(0);
 });
 
-test('past sets read weight, reps, RIR, like the workout screen: workout page, History and Stats', async ({
+test('an exercise added during a workout gets its "Previous" too; past sets read weight, reps, RIR, like the workout screen: workout page, History and Stats', async ({
 	page,
 	userData
 }) => {
@@ -434,6 +418,10 @@ test('past sets read weight, reps, RIR, like the workout screen: workout page, H
 	await editWorkoutExercise(page, 'Barbell rows');
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Update' }).click();
+	// Added during the workout, it has its "Previous" too
+	await expect(previous(page, 'Barbell rows', 1)).toHaveText('60 × 10');
+	await expect(previous(page, 'Barbell rows', 2)).toHaveText('60 × 9');
+	await expect(previous(page, 'Barbell rows', 3)).toHaveText('–');
 	await page.getByTestId('Barbell rows-menu-button').click();
 	await page.getByRole('menuitem', { name: 'History' }).click();
 	await expect(page.getByRole('dialog').filter({ hasText: 'History' })).toContainText(rowsOrder);
@@ -960,23 +948,6 @@ const savedExerciseSets = (page: Page, exercise: string) =>
 		exercise
 	);
 
-test('a typed-over weight comes back in the new unit when its box is emptied after a unit switch', async ({
-	page,
-	userData
-}) => {
-	await setUpLastTime(userData.userId);
-	await startTestDay(page);
-	const load = box(page, 'Barbell rows', 1, 'load');
-	const suggestedKg = Number(await boxNumber(load));
-	await load.fill('70');
-	await page.getByTestId('Barbell rows-unit-toggle').click();
-	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
-	await load.fill('');
-	await expect(load).toHaveAttribute('data-suggested', 'true');
-	// The suggestion in lb (the same effort), never the old kg number
-	await expectBox(load, String(roundWeight(convertWeight(suggestedKg, 'KG', 'LB'))));
-});
-
 test('the remembered weight is converted and saved: a reload between the switch and the empty keeps it', async ({
 	page,
 	userData
@@ -1031,6 +1002,8 @@ test('all three typed over, then a unit switch: weight comes back converted, rep
 	await expect(page.getByTestId('Barbell rows-unit-toggle')).toHaveText('LB');
 	const afterSwitch = (await savedExerciseSets(page, 'Barbell rows'))[0];
 	for (const field of ['load', 'reps', 'RIR'] as const) await box(page, 'Barbell rows', 1, field).fill('');
+	// The suggestion in lb (the same effort), never the old kg number, and it reads as a suggestion again
+	await expect(box(page, 'Barbell rows', 1, 'load')).toHaveAttribute('data-suggested', 'true');
 	await expectBox(box(page, 'Barbell rows', 1, 'load'), String(roundWeight(convertWeight(suggestedKg, 'KG', 'LB'))));
 	// What the hint starts from after the switch, not the old suggestion
 	await expectBox(box(page, 'Barbell rows', 1, 'reps'), String(afterSwitch.hintBase.reps));
@@ -1178,58 +1151,6 @@ test('a reps-only answer that arrives after a past workout was discarded cannot 
 	const after = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
 	expect(after.repsOnly).toEqual({});
 	expect(after.workoutData.userBodyweight).toBe(90);
-});
-
-test('Replace in a past workout: a plain swap keeps the logged numbers, a swap to machine levels clears them', async ({
-	page,
-	userData
-}) => {
-	const workout = await setUpLastTime(userData.userId);
-	await prisma.exercise.create({
-		data: {
-			userId: userData.userId,
-			name: 'Pec deck',
-			targetMuscleGroup: 'Chest',
-			levelsFrom: 1,
-			levelsTo: 10,
-			levelStep: 1
-		}
-	});
-	await page.goto(`/workouts/${workout.id}`);
-	await page.getByLabel('workout-options').click();
-	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
-	await expect(box(page, 'Barbell rows', 1, 'load')).toBeVisible();
-
-	const replace = async (from: string, to: string) => {
-		await page.getByTestId(`${from}-menu-button`).click();
-		await page.getByRole('menuitem', { name: 'Replace' }).click();
-		await page
-			.getByRole('dialog')
-			.filter({ hasText: `Replace ${from}` })
-			.getByRole('button', { name: to, exact: true })
-			.click();
-		await expect(page.getByTestId(`${to}-menu-button`)).toBeVisible();
-	};
-	const saved = async (name: string) =>
-		(await savedWorkoutExercises(page)).find((ex: { name: string }) => ex.name === name);
-
-	// Weights to weights: same numbers, still ticked
-	await replace('Barbell rows', 'Lateral raises');
-	const swapped = await saved('Lateral raises');
-	expect(swapped.sets.slice(0, 2).map((set: { load: number }) => set.load)).toEqual([60, 60]);
-	expect(swapped.sets.slice(0, 2).every((set: { completed: boolean }) => set.completed)).toBe(true);
-
-	// Weights to levels: the loads mean something else now, so they go, with everything remembered about them
-	await replace('Leg press', 'Pec deck');
-	const levels = await saved('Pec deck');
-	expect(levels.weightUnit).toBe('LEVEL');
-	for (const set of levels.sets) {
-		expect(set.load).toBeUndefined();
-		expect(set.completed).toBe(false);
-		expect(set.hintBase).toBeUndefined();
-		expect(set.suggested?.load).toBeUndefined();
-	}
 });
 
 test('visiting the start page during a past-workout edit sends you back to it and leaves the edit alone', async ({

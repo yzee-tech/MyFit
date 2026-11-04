@@ -252,6 +252,10 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
 	await expect(box(page, 'Run', 1, 'time')).toHaveAttribute('placeholder', '26:00');
 	await expect(box(page, 'Run', 1, 'time')).toHaveAttribute('data-suggested', 'true');
+	// The suggestion shows from last time's data; the set itself gains no hint baseline, on the phone either
+	const started = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
+	const runState = started.workoutExercises.find((ex: { name: string }) => ex.name === 'Run');
+	expect(runState.sets[0].hintBase).toBeUndefined();
 	await page.getByRole('button', { name: 'Add an interval to Run' }).click();
 	await expect(page.getByTestId('Run-set-2-previous')).toHaveText('–');
 	await expect(box(page, 'Run', 2, 'time')).toHaveAttribute('placeholder', '26:00');
@@ -539,21 +543,6 @@ test('removing a cardio machine’s levels clears the level but keeps the time',
 	const bikeSet = saved.workoutExercises.find((ex: { name: string }) => ex.name === 'Bike').sets[0];
 	expect(bikeSet.load).toBeUndefined();
 	expect(bikeSet.timeSeconds).toBe(30);
-});
-
-test('a cardio suggestion carries no hint baseline, on screen or on the phone', async ({ page, userData }) => {
-	const userId = userData.userId;
-	await createExercises(userId, [
-		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
-		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
-	]);
-	await logPastCardio(userId);
-	await startBlankWorkout(page);
-	await quickAdd(page, ['Run']);
-	await expect(box(page, 'Run', 1, 'distance')).toHaveAttribute('placeholder', '5');
-	// The suggestion shows from last time's data; the set itself gains no hint baseline
-	const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!));
-	expect(saved.workoutExercises[0].sets[0].hintBase).toBeUndefined();
 });
 
 test('a late suggestions answer for a discarded workout writes no cardio numbers or measure', async ({

@@ -423,21 +423,12 @@ test('an exercise never done and in no routine starts as Independent, 8–15 rep
 	await page.getByLabel('Sets').fill('3');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 	await expect(page.getByRole('main').getByText(/3\s+independent sets of\s+8 to 15 reps/i)).toBeVisible();
-});
-
-test('adding an exercise by picking it in a new routine', async ({ page, userData }) => {
-	await prisma.exercise.create({ data: { userId: userData.userId, name: 'Squats', targetMuscleGroup: 'Quads' } });
-	await page.getByRole('link', { name: 'New routine' }).click();
-	await page.getByLabel('Name', { exact: true }).fill('Legs');
-	await page.getByLabel('add-exercise').click();
-	await pickExercise(page, 'Squats');
-	await page.getByLabel('Sets').fill('3');
-	await page.getByRole('button', { name: 'Add exercise' }).click();
+	// Saved as picked, in kg
 	await expect(page.getByTestId('routine-exercise-count')).toHaveText('1 exercise');
 	await saveRoutine(page);
 	const saved = await savedRoutines(userData.userId);
 	expect(saved.map((routine) => [routine.name, routine.weightUnit])).toEqual([['Legs', 'KG']]);
-	expect(saved[0].exercises.map((exercise) => [exercise.name, exercise.sets])).toEqual([['Squats', 3]]);
+	expect(saved[0].exercises.map((exercise) => [exercise.name, exercise.sets])).toEqual([['Barbell squats', 3]]);
 });
 
 test('adding an exercise: set type from My routines, else Independent; reps only has no weights to pick', async ({
