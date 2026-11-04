@@ -11,7 +11,7 @@ const config: PlaywrightTestConfig = {
 	testDir: 'tests',
 	testMatch: /(.+\.)?(test|spec)\.[jt]s/,
 	fullyParallel: true,
-	// A failing test is tried again twice, so a flaky one shows up as a retry and is not hidden behind three
+	// A failing test is tried again twice instead of three times, so a persistent failure shows up sooner
 	retries: 2,
 	globalSetup: './tests/global-setup',
 	globalTeardown: './tests/global-teardown',
