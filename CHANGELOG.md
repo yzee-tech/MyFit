@@ -2,6 +2,18 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-05: tests start from seeded data
+
+### Changed
+
+- **Tests that are not about adding a template or starting a block no longer click through those pages first.**
+  Helpers in `tests/models/seed.ts` add the template's routines, start a block and save a logged workout by calling
+  the same server operations the pages call. Other tests check that what the helpers leave in the database is what
+  the pages leave (`seedEquivalence.spec.ts`, `seedLoggedWorkout.spec.ts`: routines, the block's settings, a workout's
+  routine name, block, sets, start and time zone, deload week and whether it counts). The tests that own those flows
+  (adding a template, creating a block, logging and deleting exercises in a workout) still go through the pages.
+  Nothing in the app changes. Whether this makes the test run faster hasn't been measured yet.
+
 ## 2026-11-04: lists in order, cardio wording, timer-style time box, block routines like My routines
 
 ### Changed

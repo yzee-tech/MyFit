@@ -14,6 +14,7 @@ import {
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
+import { seedLoggedWorkout, seedRoutinesAndMesocycle, type SeededSet } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -26,6 +27,27 @@ async function createSplitAndMesoForTest(page: Page) {
 	await createMesocycle(page);
 	await page.goto('/workouts');
 }
+
+/**
+ * The same start as createSplitAndMesoForTest, without the pages: for the tests that are not about adding the
+ * template or starting a block (those are tested in exercise-splits.spec and mesocycles.spec)
+ */
+async function seedSplitAndMesoForTest(page: Page, userId: string) {
+	await seedRoutinesAndMesocycle(userId);
+	await page.goto('/workouts');
+}
+
+/**
+ * Three sets of Barbell rows in Pull A as the pages log them (the other exercises deleted), with the reps in
+ * reserve the page fills in for week 1; seedEquivalence checks it against the pages
+ */
+const BARBELL_ROWS_LOGGED: Record<string, SeededSet[]> = {
+	'Barbell rows': [
+		{ reps: 13, load: 40, RIR: 3 },
+		{ reps: 13, load: 40, RIR: 3 },
+		{ reps: 12, load: 40, RIR: 0 }
+	]
+};
 
 test('create workout', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell bench press']);
@@ -448,29 +470,10 @@ test('a workout’s changes (exercises deleted, sets and a note edited) leave th
 	await expect(page.getByTestId('routine-card-exercises')).not.toContainText('Custom note');
 });
 
-async function logBarbellRowsInPullA(page: Page) {
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
-	await page.getByRole('button', { name: 'Next' }).click();
-	for (const exercise of ['Pull-ups', 'Dumbbell bicep curls', 'Face pulls']) {
-		await page.getByTestId(`${exercise}-menu-button`).click();
-		await page.getByRole('menuitem', { name: 'Delete' }).click();
-	}
-	await page.locator('[id="Barbell\\ rows-set-1-reps"]').fill('13');
-	await page.locator('[id="Barbell\\ rows-set-2-reps"]').fill('13');
-	await page.locator('[id="Barbell\\ rows-set-3-reps"]').fill('12');
-	await page.locator('[id="Barbell\\ rows-set-1-load"]').fill('40');
-	await page.getByTestId('Barbell rows-set-1-action').click();
-	await page.getByTestId('Barbell rows-set-2-action').click();
-	await page.getByTestId('Barbell rows-set-3-action').click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page);
-}
-
 test('welcome back after a break: repeat last numbers, easier', async ({ page, userData }) => {
-	await createSplitAndMesoForTest(page);
-	await logBarbellRowsInPullA(page);
+	await seedRoutinesAndMesocycle(userData.userId);
+	await seedLoggedWorkout(userData.userId, { routineName: 'Pull A', exercises: BARBELL_ROWS_LOGGED });
+	await page.goto('/workouts');
 
 	// Pretend that workout was 10 days ago
 	await prisma.workout.updateMany({
@@ -496,8 +499,9 @@ test('welcome back after a break: repeat last numbers, easier', async ({ page, u
 });
 
 test('deload week: same weights, half the sets', async ({ page, userData }) => {
-	await createSplitAndMesoForTest(page);
-	await logBarbellRowsInPullA(page);
+	await seedRoutinesAndMesocycle(userData.userId);
+	await seedLoggedWorkout(userData.userId, { routineName: 'Pull A', exercises: BARBELL_ROWS_LOGGED });
+	await page.goto('/workouts');
 
 	await prisma.mesocycle.updateMany({ where: { userId: userData.userId }, data: { weeklyRIR: [-1] } });
 	await page.getByLabel('create-workout').click();
@@ -571,7 +575,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 });
 
 test('home unit in lb: bodyweight shown and entered in lb', async ({ page, userData }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.goto('/settings');
 	await page.getByLabel('Home unit pounds').click();
 	await page.waitForTimeout(500);
@@ -973,7 +977,7 @@ test('first workout with a reps-only exercise: no load to enter, every set ticks
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await prisma.exercise.updateMany({
 		where: { userId: userData.userId, name: 'Face pulls' },
 		data: { repsOnly: true }
@@ -1033,7 +1037,7 @@ test('sets: tick in any order, untick, a note for what is missing, and a load pe
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -1090,8 +1094,8 @@ test('sets: tick in any order, untick, a note for what is missing, and a load pe
 	await expectBox(page.locator('[id="Barbell\\ rows-set-3-load"]'), '35');
 });
 
-test('a note about a missing number stays with its set when another set is removed', async ({ page }) => {
-	await createSplitAndMesoForTest(page);
+test('a note about a missing number stays with its set when another set is removed', async ({ page, userData }) => {
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');

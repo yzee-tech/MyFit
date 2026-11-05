@@ -1,7 +1,7 @@
 import { test, expect, deleteUserData } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createMesocycle } from './commonFunctions';
-import { seedRoutinesAndMesocycle } from './seed';
+import { createMesocycle, createTemplateExerciseSplit } from './commonFunctions';
+import { seedRoutines, seedRoutinesAndMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -36,6 +36,7 @@ async function snapshotOf(userId: string) {
 		list: withoutIds({ name: list.name }),
 		routines: list.exerciseSplitDays.map((day) => ({
 			...withoutIds(day),
+			name: day.name,
 			exercises: day.exercises.map((template) => ({
 				...withoutIds(template),
 				exercise: template.exerciseId ? exerciseNameOf.get(template.exerciseId) : null
@@ -83,4 +84,38 @@ test('the seed helpers leave the same rows as setting up through the pages', asy
 		'Push B',
 		'Legs B'
 	]);
+});
+
+test('seeding the template again adds the routines after the ones there, a taken name getting “(2)”, like the page', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+
+	await page.goto('/exercise-splits');
+	await createTemplateExerciseSplit(page);
+	await createTemplateExerciseSplit(page);
+	const throughThePages = await snapshotOf(userId);
+
+	await deleteUserData(userId);
+	await seedRoutines(userId);
+	await seedRoutines(userId);
+	const seeded = await snapshotOf(userId);
+
+	// 12 routines: the second six named "Pull A (2)" and so on, in order after the first six
+	expect(throughThePages.routines.map((routine) => routine.name)).toEqual([
+		'Pull A',
+		'Push A',
+		'Legs A',
+		'Pull B',
+		'Push B',
+		'Legs B',
+		'Pull A (2)',
+		'Push A (2)',
+		'Legs A (2)',
+		'Pull B (2)',
+		'Push B (2)',
+		'Legs B (2)'
+	]);
+	expect(seeded).toEqual(throughThePages);
 });

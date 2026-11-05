@@ -74,3 +74,66 @@ export async function seedRoutinesAndMesocycle(userId: string, name = 'MyMeso') 
 	await seedRoutines(userId);
 	return seedActiveMesocycle(userId, name);
 }
+
+export type SeededSet = { reps: number; load: number; RIR: number };
+
+/**
+ * A finished workout from a routine of My routines, as saving it from the workout pages does (workouts.create):
+ * the routine's exercises named in `exercises` (the others "deleted" in the workout), in the routine's order,
+ * with the routine's details for each and the routine's unit (or `weightUnit` for "Ask each time"). In the running block when there is one (pass
+ * inBlock: false for a workout outside it). It starts now and ends two seconds later unless `startedAt` is
+ * given; `timeZone` is the phone's (the test browser's is UTC)
+ */
+export async function seedLoggedWorkout(
+	userId: string,
+	options: {
+		routineName: string;
+		exercises: Record<string, SeededSet[]>;
+		inBlock?: boolean;
+		userBodyweight?: number;
+		startedAt?: Date;
+		countsForProgression?: boolean;
+		timeZone?: string;
+		/** The gym's unit for a routine set to "Ask each time" (the workout page asks at the start) */
+		weightUnit?: 'KG' | 'LB';
+	}
+) {
+	const caller = callerFor(userId);
+	const routine = (await caller.exerciseSplits.mine())?.exerciseSplitDays.find(
+		(day) => day.name === options.routineName
+	);
+	if (!routine) throw new Error(`No routine called ${options.routineName} in My routines`);
+	const weightUnit = routine.weightUnit === 'ASK' ? options.weightUnit : routine.weightUnit;
+	if (!weightUnit) throw new Error(`${options.routineName} asks for its unit each time: pass weightUnit`);
+	const kept = routine.exercises.filter((template) => template.name in options.exercises);
+	const missing = Object.keys(options.exercises).filter((name) => !kept.some((template) => template.name === name));
+	if (missing.length > 0) throw new Error(`${options.routineName} has no ${missing.join(', ')}`);
+
+	const block =
+		options.inBlock === false
+			? null
+			: await prisma.mesocycle.findFirst({ where: { userId, startDate: { not: null }, endDate: null } });
+	const startedAt = options.startedAt ?? new Date();
+	const { workoutId } = await caller.workouts.create({
+		timeZone: options.timeZone ?? 'UTC',
+		workoutData: {
+			startedAt,
+			...(options.startedAt ? { endedAt: new Date(startedAt.getTime() + 2000) } : {}),
+			routineName: options.routineName,
+			userBodyweight: options.userBodyweight ?? 100,
+			countsForProgression: options.countsForProgression ?? true,
+			...(block ? { workoutOfMesocycle: { mesocycle: { id: block.id } } } : {})
+		},
+		workoutExercises: kept.map(({ id, exerciseSplitDayId, exerciseIndex, sets, ...template }, index) => ({
+			...template,
+			exerciseIndex: index,
+			weightUnit,
+			exerciseNote: null
+		})),
+		workoutExercisesSets: kept.map((template) =>
+			options.exercises[template.name].map((set, setIndex) => ({ ...set, skipped: false, setIndex }))
+		),
+		workoutExercisesMiniSets: kept.map((template) => options.exercises[template.name].map(() => []))
+	});
+	return prisma.workout.findUniqueOrThrow({ where: { id: workoutId } });
+}
