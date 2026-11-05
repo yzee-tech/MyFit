@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '../fixtures';
+import { expect, test } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createMesocycle, createTemplateExerciseSplit, pickRoutine, quickAdd } from './commonFunctions';
+import { pickRoutine, quickAdd } from './commonFunctions';
+import { seedRoutines, seedRoutinesAndMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -13,11 +14,10 @@ const STARTED = new Date('2026-10-20T10:00:00Z');
 const DAY_8 = new Date('2026-10-27T01:00:00Z');
 
 test('dashboard and start page: the 8th day of the block is Week 2, and the label follows the day when the app comes back to the front', async ({
-	page
+	page,
+	userData
 }) => {
-	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
-	await createMesocycle(page, { exerciseSplitCreated: true });
+	await seedRoutinesAndMesocycle(userData.userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
 	await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: STARTED, endDate: null } });
 
@@ -43,9 +43,9 @@ const ERROR = {
 	}
 };
 
-test('exercises page: a failed request ends the wait and says why', async ({ page }) => {
+test('exercises page: a failed request ends the wait and says why', async ({ page, userData }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await page.route(/getWorkoutExercisesWithPreviousData/, (route) => {
 		return route.fulfill({
 			status: 412,
@@ -64,10 +64,8 @@ test('exercises page: a failed request ends the wait and says why', async ({ pag
 	await expect(page.getByText('Fetching exercises')).toHaveCount(0);
 });
 
-test('an in-progress workout keeps its starting week after local midnight and reload', async ({ page }) => {
-	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
-	await createMesocycle(page, { exerciseSplitCreated: true });
+test('an in-progress workout keeps its starting week after local midnight and reload', async ({ page, userData }) => {
+	await seedRoutinesAndMesocycle(userData.userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
 	await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: STARTED, endDate: null } });
 	// Last minute of day 7 in Shanghai: start in Week 1.
@@ -91,9 +89,9 @@ test('an in-progress workout keeps its starting week after local midnight and re
 	expect(saved.workoutData.workoutOfMesocycle.cycleNumber).toBe(1);
 });
 
-test('failed suggestions recover on reload without restarting the workout', async ({ page }) => {
+test('failed suggestions recover on reload without restarting the workout', async ({ page, userData }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await page.route(/getWorkoutExercisesWithPreviousData/, (route) =>
 		route.fulfill({
 			status: 412,
@@ -121,9 +119,9 @@ test('failed suggestions recover on reload without restarting the workout', asyn
 	);
 });
 
-test('no-history routine reload skips suggestions even when their endpoint is offline', async ({ page }) => {
+test('no-history routine reload skips suggestions even when their endpoint is offline', async ({ page, userData }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await page.goto('/workouts/manage/start');
 	await page.getByPlaceholder('Type here').fill('80');
 	await pickRoutine(page, 'Pull A');
@@ -144,9 +142,9 @@ test('no-history routine reload skips suggestions even when their endpoint is of
 	await expect(page.getByText(/Couldn't get your exercises|Failed to fetch/)).toHaveCount(0);
 });
 
-async function prepareRoutine(page: import('../fixtures').Page) {
+async function prepareRoutine(page: import('../fixtures').Page, userId: string) {
+	await seedRoutines(userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await page.goto('/workouts/manage/start');
 	await page.getByPlaceholder('Type here').fill('80');
 	await pickRoutine(page, 'Pull A');
@@ -244,16 +242,16 @@ test('failed suggestions Retry brings back cardio intervals and measures', async
 	expect(state.measures?.Run?.distanceUnit).toBe('KM');
 });
 
-test('failed suggestions Retry recovers without reload', async ({ page }) => {
-	await prepareRoutine(page);
+test('failed suggestions Retry recovers without reload', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	await page.getByRole('button', { name: 'Retry', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises.length).toBe(4);
 	expect((await savedState(page)).suggestionsFailed).toBe(false);
 });
-test('manual addition after failure clears flag and protects list on reload', async ({ page }) => {
-	await prepareRoutine(page);
+test('manual addition after failure clears flag and protects list on reload', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	await quickAdd(page, ['Barbell rows']);
@@ -268,8 +266,8 @@ test('manual addition after failure clears flag and protects list on reload', as
 	expect((await savedState(page)).workoutExercises.map((ex: { name: string }) => ex.name)).toEqual(['Barbell rows']);
 	expect(requests).toBe(0);
 });
-test('successful empty suggestions are loaded and never refetched', async ({ page }) => {
-	await prepareRoutine(page);
+test('successful empty suggestions are loaded and never refetched', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await page.route(/getWorkoutExercisesWithPreviousData/, async (route) => {
 		const response = await route.fetch();
 		const body = await response.json();
@@ -309,8 +307,8 @@ const suggestionRequests = async (page: import('../fixtures').Page) => {
 	return counter;
 };
 
-test('Continue workout after a failed load loads the suggestions again', async ({ page }) => {
-	await prepareRoutine(page);
+test('Continue workout after a failed load loads the suggestions again', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	const started = (await savedState(page)).workoutData.startedAt;
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
@@ -328,7 +326,7 @@ test('Continue after a failed load uses the routine as it is now, not as it was 
 	page,
 	userData
 }) => {
-	await prepareRoutine(page);
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	// Meanwhile one exercise is taken out of the routine
@@ -344,8 +342,8 @@ test('Continue after a failed load uses the routine as it is now, not as it was 
 	expect((await savedState(page)).workoutExercises.map((ex: { name: string }) => ex.name)).not.toContain(removed.name);
 });
 
-test('the workout panel resumes a failed load too', async ({ page }) => {
-	await prepareRoutine(page);
+test('the workout panel resumes a failed load too', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	const started = (await savedState(page)).workoutData.startedAt;
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
@@ -359,8 +357,11 @@ test('the workout panel resumes a failed load too', async ({ page }) => {
 	expect(requests.count).toBe(1);
 });
 
-test('after a failed load, discarding the workout and starting the routine again loads it', async ({ page }) => {
-	await prepareRoutine(page);
+test('after a failed load, discarding the workout and starting the routine again loads it', async ({
+	page,
+	userData
+}) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	await page.getByRole('button', { name: 'Discard workout', exact: true }).click();
@@ -374,9 +375,10 @@ test('after a failed load, discarding the workout and starting the routine again
 });
 
 test('a workout whose list was never saved shows Next, not Continue, and no panel; Next loads it fresh', async ({
-	page
+	page,
+	userData
 }) => {
-	await prepareRoutine(page);
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 	await page.evaluate(() => {
@@ -394,8 +396,11 @@ test('a workout whose list was never saved shows Next, not Continue, and no pane
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 });
 
-test('resuming a loaded workout, from the start page or the panel, sends no suggestions request', async ({ page }) => {
-	await prepareRoutine(page);
+test('resuming a loaded workout, from the start page or the panel, sends no suggestions request', async ({
+	page,
+	userData
+}) => {
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 	const before = (await savedState(page)).workoutExercises;
@@ -412,8 +417,8 @@ test('resuming a loaded workout, from the start page or the panel, sends no sugg
 	expect((await savedState(page)).workoutExercises).toEqual(before);
 });
 
-test('an old resume link without a bodyweight is no error and asks for nothing', async ({ page }) => {
-	await prepareRoutine(page);
+test('an old resume link without a bodyweight is no error and asks for nothing', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 	const requests = await suggestionRequests(page);
@@ -433,7 +438,7 @@ test('resuming after the routine was deleted ends with an empty list, one reques
 	page,
 	userData
 }) => {
-	await prepareRoutine(page);
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
 	await prisma.exerciseSplitDay.deleteMany({ where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } });
@@ -448,16 +453,16 @@ test('resuming after the routine was deleted ends with an empty list, one reques
 	expect((await savedState(page)).workoutExercises).toEqual([]);
 });
 
-test('a fresh start from the start page opens the same link as before', async ({ page }) => {
-	await prepareRoutine(page);
+test('a fresh start from the start page opens the same link as before', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
 	const url = new URL(page.url());
 	expect(url.pathname + url.search).toBe('/workouts/manage/exercises?userBodyweight=80&routine=Pull%20A');
 });
 
-test('delayed old response after discard cannot write into a new routine', async ({ page }) => {
-	await prepareRoutine(page);
+test('delayed old response after discard cannot write into a new routine', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	let release!: () => void;
 	const held = new Promise<void>((r) => (release = r));
 	let requested!: () => void;
@@ -488,8 +493,8 @@ test('delayed old response after discard cannot write into a new routine', async
 	expect(after.repsOnly.obsolete).toBeUndefined();
 	expect(after.workoutData.routineName).toBe('Push A');
 });
-test('legacy saved workout without failure flag preserves exercises and defaults false', async ({ page }) => {
-	await prepareRoutine(page);
+test('legacy saved workout without failure flag preserves exercises and defaults false', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 	await page.evaluate(() => {
@@ -519,8 +524,8 @@ async function switchToBlankWorkout(page: import('../fixtures').Page) {
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
 }
 
-test('starting another workout clears a failed-load flag left by the one before', async ({ page }) => {
-	await prepareRoutine(page);
+test('starting another workout clears a failed-load flag left by the one before', async ({ page, userData }) => {
+	await prepareRoutine(page, userData.userId);
 	await failSuggestions(page);
 	expect((await savedState(page)).suggestionsFailed).toBe(true);
 	await page.unroute(/getWorkoutExercisesWithPreviousData/);
@@ -529,8 +534,11 @@ test('starting another workout clears a failed-load flag left by the one before'
 	expect((await savedState(page)).suggestionsFailed).toBe(false);
 });
 
-test('starting another workout clears the reps-only marks of the one before; Continue keeps them', async ({ page }) => {
-	await prepareRoutine(page);
+test('starting another workout clears the reps-only marks of the one before; Continue keeps them', async ({
+	page,
+	userData
+}) => {
+	await prepareRoutine(page, userData.userId);
 	await page.getByRole('button', { name: 'Next', exact: true }).click();
 	await expect.poll(async () => (await savedState(page)).workoutExercises?.length).toBe(4);
 	await page.evaluate(() => {
@@ -554,9 +562,7 @@ for (const [label, time, week, deload] of [
 	['the first minute of week 6, the deload week', '2026-11-23T16:00:00Z', 6, true]
 ] as const) {
 	test(`the week label and the suggestions agree on the phone's clock: ${label}`, async ({ page, userData }) => {
-		await page.goto('/exercise-splits');
-		await createTemplateExerciseSplit(page);
-		await createMesocycle(page, { exerciseSplitCreated: true });
+		await seedRoutinesAndMesocycle(userData.userId);
 		const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
 		await prisma.mesocycle.update({
 			where: { id: block.id },
@@ -615,10 +621,8 @@ for (const [label, time, week, deload] of [
 }
 
 // The welcome-back card counts the phone's calendar days, like the week label
-async function setUpForWelcomeBack(page: Page, userId: string, lastWorkoutAt: Date) {
-	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
-	await createMesocycle(page, { exerciseSplitCreated: true });
+async function setUpForWelcomeBack(userId: string, lastWorkoutAt: Date) {
+	await seedRoutinesAndMesocycle(userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
 	// A long block that started the same day as the last workout, so no deload week gets in the way
 	await prisma.mesocycle.update({
@@ -642,7 +646,7 @@ test('welcome back counts the phone calendar days: it appears at the first minut
 	page,
 	userData
 }) => {
-	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	await setUpForWelcomeBack(userData.userId, LAST_WORKOUT);
 	// Sun Oct 25 at 23:59 in Shanghai is 6 days since; Mon at 00:00 is 7
 	await page.clock.install({ time: new Date('2026-10-25T15:59:00Z') });
 	await page.goto('/workouts/manage/start');
@@ -655,7 +659,7 @@ test('welcome back counts the phone calendar days: it appears at the first minut
 });
 
 test('welcome back: switched off on the card, the link does not carry the flag', async ({ page, userData }) => {
-	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	await setUpForWelcomeBack(userData.userId, LAST_WORKOUT);
 	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
 	await page.goto('/workouts/manage/start');
 	await expect(page.getByRole('main')).toContainText("It's been 7 days");
@@ -671,7 +675,7 @@ test('welcome back: on by default so the link carries the flag; and the setting 
 	page,
 	userData
 }) => {
-	await setUpForWelcomeBack(page, userData.userId, LAST_WORKOUT);
+	await setUpForWelcomeBack(userData.userId, LAST_WORKOUT);
 	await page.clock.install({ time: new Date('2026-10-26T01:00:00Z') });
 	await page.goto('/workouts/manage/start');
 	await expect(page.getByRole('main')).toContainText("It's been 7 days");

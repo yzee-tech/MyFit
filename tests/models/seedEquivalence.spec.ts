@@ -119,3 +119,34 @@ test('seeding the template again adds the routines after the ones there, a taken
 	]);
 	expect(seeded).toEqual(throughThePages);
 });
+
+test('a seeded block moved to a past start is the block the pages make, moved the same way', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	// As weekPlumbing's tests do it: the block exists, then its start is set to a moment in the past
+	const STARTED = new Date('2026-10-20T10:00:00Z');
+	const backdate = () =>
+		prisma.mesocycle.updateMany({
+			where: { userId },
+			data: { startDate: STARTED, endDate: null, weeklyRIR: [3, 2, 2, 1, 0, -1] }
+		});
+
+	await page.goto('/exercise-splits');
+	await createMesocycle(page);
+	await backdate();
+	const throughThePages = await snapshotOf(userId);
+
+	await deleteUserData(userId);
+	await seedRoutinesAndMesocycle(userId);
+	await backdate();
+	const seeded = await snapshotOf(userId);
+
+	// A real check: the start really is the past moment, on a block that is not just started
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId } });
+	expect(block.startDate?.toISOString()).toBe(STARTED.toISOString());
+	expect(throughThePages.blocks[0].startedJustNow).toBe(false);
+	expect(block.weeklyRIR).toEqual([3, 2, 2, 1, 0, -1]);
+	expect(seeded).toEqual(throughThePages);
+});
