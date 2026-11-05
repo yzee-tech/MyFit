@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { sundayWeek } from '../../src/lib/utils/stats';
-import { createExercises, createMesocycle, quickAdd, saveWorkout } from './commonFunctions';
+import { createExercises, quickAdd, saveWorkout } from './commonFunctions';
+import { seedRoutinesAndMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -16,8 +17,7 @@ async function seedWorkout(userId: string, startedAt: Date) {
 
 test('Dashboard: this week Sunday to Saturday, a check on each day with a workout', async ({ page, userData }) => {
 	const userId = userData.userId;
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userId);
 	await prisma.workout.deleteMany({ where: { userId } });
 
 	// The page's clock stays at midday today, so passing midnight during the test can't move the days
@@ -116,7 +116,7 @@ test('Dashboard chart: Light, Dark and System redraw it in the theme’s colours
 	userData
 }) => {
 	const userId = userData.userId;
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId, endDate: null } });
 	await prisma.workout.deleteMany({ where: { userId } });
 	const exercise = await prisma.exercise.findFirstOrThrow({ where: { userId } });
