@@ -2678,23 +2678,55 @@ test('an older app version saving an exercise keeps its machine, and can’t tur
 	expect(noUnit.status()).toBe(400);
 });
 
-test('the exercise ⋯ menu closes when the list scrolls, instead of sticking to the top', async ({ page }) => {
+test('the exercise ⋯ menu closes when the list scrolls, and the list stays where it was scrolled', async ({ page }) => {
 	await createSplitAndMesoForTest(page);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
 	await page.getByRole('button', { name: 'Next' }).click();
+	const menuButton = page.getByTestId('Pull-ups-menu-button');
+	// The box around the exercise list that scrolls
+	const scroller = await menuButton.evaluateHandle((button) => {
+		for (let el = button.parentElement; el; el = el.parentElement) {
+			if (['auto', 'scroll'].includes(getComputedStyle(el).overflowY)) return el;
+		}
+		return document.scrollingElement ?? document.documentElement;
+	});
+	const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
+
 	// A small scroll that keeps the ⋯ button in view leaves the menu open
-	await page.getByTestId('Pull-ups-menu-button').click();
+	await menuButton.click();
 	await expect(page.getByRole('menu')).toBeVisible();
 	await page.getByTestId('Barbell rows-summary').hover();
 	await page.mouse.wheel(0, 5);
-	await page.waitForTimeout(300);
+	await expect.poll(scrollTop).toBeGreaterThan(0);
+	// The scroll event (which would close the menu) is dispatched before the next frame is drawn. Check the button's
+	// state, not just the menu: a closing menu stays on the page a moment while it fades out
+	await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.getByRole('menu')).toBeVisible();
+
 	// Scrolled away: it closes
 	await page.mouse.wheel(0, 3000);
-	await expect(page.getByTestId('Pull-ups-menu-button')).not.toBeInViewport();
 	await expect(page.getByRole('menu')).toHaveCount(0);
+	// And the list stays where it was scrolled. Closing a menu normally puts the focus back on its button, and
+	// focusing a button scrolls it into view: that must not pull the list back up. The focus follows the close
+	// within a few milliseconds, so watch the list's lowest position over half a second after the close
+	const lowest = await scroller.evaluate(
+		(el) =>
+			new Promise<number>((resolve) => {
+				let min = el.scrollTop;
+				const end = performance.now() + 500;
+				const watch = () => {
+					min = Math.min(min, el.scrollTop);
+					if (performance.now() < end) requestAnimationFrame(watch);
+					else resolve(min);
+				};
+				watch();
+			})
+	);
+	expect(lowest).toBeGreaterThan(5);
+	await expect(menuButton).not.toBeInViewport();
 });
 
 test('a blank workout’s "Weights here" lists the gym’s weights, not a machine’s own levels or weights', async ({

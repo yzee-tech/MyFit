@@ -106,8 +106,10 @@
 	// The open ⋯ menu closes once its button is scrolled out of the exercise list: left open, it would stick to
 	// the top of the screen. A small scroll that keeps the button in view (e.g. to show the whole menu) doesn't
 	let card: HTMLElement | undefined = $state();
+	let closedByScroll = false;
 	$effect(() => {
 		if (!isContextMenuOpen || !card) return;
+		closedByScroll = false;
 		const button = card.querySelector('[data-menu-trigger]');
 		if (!button) return;
 		// The boxes around it that scroll (the list can sit in more than one)
@@ -118,11 +120,22 @@
 		const closeOnceHidden = (e: Event) => {
 			const shown = (e.currentTarget as HTMLElement).getBoundingClientRect();
 			const { top, bottom } = button.getBoundingClientRect();
-			if (top < shown.top || bottom > shown.bottom) isContextMenuOpen = false;
+			if (top < shown.top || bottom > shown.bottom) {
+				closedByScroll = true;
+				isContextMenuOpen = false;
+			}
 		};
 		scrollers.forEach((el) => el.addEventListener('scroll', closeOnceHidden, { passive: true }));
 		return () => scrollers.forEach((el) => el.removeEventListener('scroll', closeOnceHidden));
 	});
+
+	// A closed menu gives the focus back to its button, and focusing the button scrolls the list back up to it:
+	// after a scroll closed the menu that would undo the scroll. Every other way of closing keeps the focus return
+	function focusAfterClose(button?: HTMLElement | null) {
+		if (!closedByScroll) return button ?? null;
+		closedByScroll = false;
+		return null;
+	}
 
 	// A past workout: fix what was logged (the exercise itself, or sets); no planning for it
 	let editingPast = $derived(workoutRunes.editingWorkoutId !== null);
@@ -176,7 +189,11 @@
 					<GripVertical />
 				</div>
 			{:else}
-				<DropdownMenu.Root onOpenChange={(v) => (isContextMenuOpen = v)} open={isContextMenuOpen}>
+				<DropdownMenu.Root
+					closeFocus={focusAfterClose}
+					onOpenChange={(v) => (isContextMenuOpen = v)}
+					open={isContextMenuOpen}
+				>
 					<DropdownMenu.Trigger asChild let:builder>
 						<button use:builder.action {...builder} class="px-0.5 py-0" data-testid="{exercise.name}-menu-button">
 							<MenuIcon class="h-4 w-4" />
