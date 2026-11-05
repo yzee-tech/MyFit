@@ -4,7 +4,6 @@ import {
 	boxNumber,
 	createExercises,
 	createMesocycle,
-	createTemplateExerciseSplit,
 	editRoutine,
 	editWorkoutExercise,
 	expectBox,
@@ -14,7 +13,7 @@ import {
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
-import { seedLoggedWorkout, seedRoutinesAndMesocycle, type SeededSet } from './seed';
+import { seedLoggedWorkout, seedRoutines, seedRoutinesAndMesocycle, type SeededSet } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -291,7 +290,7 @@ test('create a workout with active mesocycle', async ({ page }) => {
 
 test('create workout without using active mesocycle', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell bench press']);
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await pickRoutine(page, 'Blank workout');
 	await page.getByPlaceholder('Type here').click();
@@ -325,8 +324,8 @@ test('create workout without using active mesocycle', async ({ page, userData })
 	);
 });
 
-test('progression carries over between routines that share an exercise', async ({ page }) => {
-	await createSplitAndMesoForTest(page);
+test('progression carries over between routines that share an exercise', async ({ page, userData }) => {
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Legs A');
@@ -358,8 +357,8 @@ test('progression carries over between routines that share an exercise', async (
 	await expectBox(page.locator('#Lunges-set-1-load'), '');
 });
 
-test('edit a workout, then delete it', async ({ page }) => {
-	await createSplitAndMesoForTest(page);
+test('edit a workout, then delete it', async ({ page, userData }) => {
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -425,9 +424,10 @@ test('edit a workout, then delete it', async ({ page }) => {
 });
 
 test('a workout’s changes (exercises deleted, sets and a note edited) leave the block’s routine and My routines as they were', async ({
-	page
+	page,
+	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -1176,7 +1176,7 @@ test('an exercise deleted in a workout stays in My routines, and the mesocycle�
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -1295,8 +1295,8 @@ test('no mesocycle: pick a routine from My routines, suggestions from last time,
 	page,
 	userData
 }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	// Rows done before, outside any routine
 	const rows = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } }
@@ -1361,8 +1361,8 @@ test('workout panel: shown on every screen, resuming keeps its start, a nudge af
 	page,
 	userData
 }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -1985,9 +1985,10 @@ test('Workouts list filter: a link from before picks its blocks by name, shown p
 });
 
 test('a big Add exercise button under the exercises; set 1 typed is copied into later empty sets, which follow it until typed in', async ({
-	page
+	page,
+	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
@@ -2047,8 +2048,8 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 });
 
 /** A workout with Face pulls at 3 sets, set 1 typed (15 kg × 12 @ 2 RIR) so sets 2 and 3 hold copies of it */
-async function facePullsWithCopies(page: Page) {
-	await createSplitAndMesoForTest(page);
+async function facePullsWithCopies(page: Page, userId: string) {
+	await seedSplitAndMesoForTest(page, userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
@@ -2077,8 +2078,8 @@ const switchFacePullsToLb = async (page: Page) => {
 	await expect.poll(() => boxNumber(set1)).not.toBe(before);
 };
 
-test('sets that follow set 1 keep following it after a kg/lb switch', async ({ page }) => {
-	const box = await facePullsWithCopies(page);
+test('sets that follow set 1 keep following it after a kg/lb switch', async ({ page, userData }) => {
+	const box = await facePullsWithCopies(page, userData.userId);
 	await switchFacePullsToLb(page);
 	// The switch itself changed nothing about who follows: still lighter (copies), and set 1 reaches them
 	await expect(box(2, 'load')).toHaveAttribute('data-suggested', 'true');
@@ -2090,7 +2091,7 @@ test('sets that follow set 1 keep following it after a kg/lb switch', async ({ p
 
 test('a measure change on the Exercises page drops every follow to set 1', async ({ page, userData }) => {
 	await createExercises(userData.userId, [{ name: 'Sled push', targetMuscleGroup: 'Quads' }]);
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
@@ -2150,7 +2151,7 @@ test('a weights-to-levels machine switch drops the load follows but keeps the re
 		where: { id: hackSquat.id },
 		data: { machineWeights: [20, 40, 60], machineUnit: 'KG' }
 	});
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
@@ -2186,8 +2187,8 @@ test('a weights-to-levels machine switch drops the load follows but keeps the re
 	await expect(box(2, 'reps')).toHaveAttribute('data-suggested', 'true');
 });
 
-test('sets that follow set 1 keep following it after a drawer Edit of the exercise', async ({ page }) => {
-	const box = await facePullsWithCopies(page);
+test('sets that follow set 1 keep following it after a drawer Edit of the exercise', async ({ page, userData }) => {
+	const box = await facePullsWithCopies(page, userData.userId);
 	// Same exercise, same measure: only a routine note changes. The edit rebuilds the set records, and
 	// who follows set 1 carries to them
 	await page.getByTestId('Face pulls-menu-button').click();
@@ -2202,8 +2203,8 @@ test('sets that follow set 1 keep following it after a drawer Edit of the exerci
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'true');
 });
 
-test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 again', async ({ page }) => {
-	const box = await facePullsWithCopies(page);
+test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 again', async ({ page, userData }) => {
+	const box = await facePullsWithCopies(page, userData.userId);
 	await box(3, 'load').fill('20');
 	await switchFacePullsToLb(page);
 	await box(3, 'load').fill('');
@@ -2216,8 +2217,8 @@ test('a box typed over a copy, then emptied after a kg/lb switch, follows set 1 
 	await expectBox(box(3, 'load'), '40');
 });
 
-test('after a kg/lb switch a box the person typed still does not follow set 1', async ({ page }) => {
-	const box = await facePullsWithCopies(page);
+test('after a kg/lb switch a box the person typed still does not follow set 1', async ({ page, userData }) => {
+	const box = await facePullsWithCopies(page, userData.userId);
 	await box(3, 'load').fill('20');
 	await switchFacePullsToLb(page);
 	const typedLb = await boxNumber(box(3, 'load'));
@@ -2227,8 +2228,8 @@ test('after a kg/lb switch a box the person typed still does not follow set 1', 
 	await expect(box(3, 'load')).toHaveAttribute('data-suggested', 'false');
 });
 
-test('a kg/lb switch with nothing following set 1 changes nothing about who follows', async ({ page }) => {
-	await createSplitAndMesoForTest(page);
+test('a kg/lb switch with nothing following set 1 changes nothing about who follows', async ({ page, userData }) => {
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Blank workout');
@@ -2338,7 +2339,7 @@ test('a workout’s ⋮: Edit, Warm up, History, Delete; Finish removes sets not
 	userData
 }) => {
 	const userId = userData.userId;
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await createExercises(userId, [{ name: 'Quick add curl', targetMuscleGroup: 'Biceps' }]);
 	const routineBefore = await prisma.exerciseSplitDay.findFirstOrThrow({
 		where: { exerciseSplit: { userId }, name: 'Pull A' },
@@ -2539,7 +2540,7 @@ test('a machine with its own weights: set on the exercise, always in its unit, s
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await prisma.weightSet.create({
 		data: { userId: userData.userId, name: 'Building DBs', unit: 'KG', weights: [5, 10, 15] }
 	});
