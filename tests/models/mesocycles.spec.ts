@@ -16,7 +16,8 @@ import { seedActiveMesocycle, seedRoutines } from './seed';
 const prisma = new PrismaClient();
 
 test.beforeEach(async ({ page, userData }, testInfo) => {
-	// "create a mesocycle" owns creating a block, and keeps the whole flow on the pages, template included
+	// "create a mesocycle" owns creating a block, and keeps the whole flow on the pages, template included.
+	// Keyed on its title: keep the two in step (the test has a comment saying so)
 	if (testInfo.title === 'create a mesocycle') {
 		await page.goto('/exercise-splits');
 		await createTemplateExerciseSplit(page);
@@ -28,6 +29,8 @@ test.beforeEach(async ({ page, userData }, testInfo) => {
 	await page.goto('/mesocycles');
 });
 
+// The beforeEach above branches on this exact title: this test owns creating a block and keeps the whole flow on the
+// pages, template included. Renaming it without changing that check would quietly drop that coverage
 test('create a mesocycle', async ({ page }) => {
 	await expect(page.getByRole('main')).toContainText('Active No active mesocycle All No mesocycles found');
 	await page.getByLabel('create-new-mesocycle').click();
