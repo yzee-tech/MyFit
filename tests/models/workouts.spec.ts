@@ -518,7 +518,7 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	// "Ask each time" in My routines, which the mesocycle uses
 	await prisma.exerciseSplitDay.updateMany({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
@@ -617,7 +617,7 @@ test('weight sets: set up in Settings, link to an exercise, suggestions use real
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 
 	// The building gym's dumbbells: 5–10 kg by 1, then 14 and 20
 	await page.goto('/exercise-splits/weight-sets');
@@ -696,7 +696,7 @@ test('weight sets: ask-each-time routine picks the gym’s weights at the start,
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await prisma.exerciseSplitDay.updateMany({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
 		data: { weightUnit: 'ASK' }
@@ -791,7 +791,7 @@ test('levels: a machine that shows levels logs a level, then goes up a level at 
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 
 	// Curls are on a machine that shows levels 1–10: set on the exercise
 	await page.goto('/exercises');
@@ -1122,7 +1122,7 @@ test('add and remove sets in a workout: saved as done, and My routines keeps its
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	const routineBefore = await prisma.exerciseTemplate.findMany({
 		where: { exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } },
 		orderBy: { exerciseIndex: 'asc' }
@@ -1202,9 +1202,10 @@ test('an exercise deleted in a workout stays in My routines, and the mesocycle�
 });
 
 test('workout panel: on Log workout after Back and on every screen, resumes the workout, trash asks first; switching routine asks', async ({
-	page
+	page,
+	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -1409,9 +1410,10 @@ test('workout panel: shown on every screen, resuming keeps its start, a nudge af
 });
 
 test('set row: the remove button is after the tick, hidden on a ticked set, off for the last one, and Undo brings a set back', async ({
-	page
+	page,
+	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
@@ -1454,10 +1456,11 @@ test('set row: the remove button is after the tick, hidden on a ticked set, off 
 });
 
 test('removing a set: one tap only gets the bin ready (red); any other tap, a tick or 3 seconds put it back', async ({
-	page
+	page,
+	userData
 }) => {
 	await page.clock.install();
-	await createSplitAndMesoForTest(page);
+	await seedSplitAndMesoForTest(page, userData.userId);
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await pickRoutine(page, 'Pull A');
