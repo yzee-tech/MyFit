@@ -2,8 +2,6 @@ import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import {
 	createExercises,
-	createMesocycle,
-	createTemplateExerciseSplit,
 	editRoutine,
 	editWorkoutExercise,
 	expectBox,
@@ -13,6 +11,7 @@ import {
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
+import { seedRoutines, seedRoutinesAndMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -28,8 +27,7 @@ test('one exercise, shared by every routine; edited only on the Exercises page, 
 	page,
 	userData
 }) => {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 
 	// Cable lateral raises is in two routines of My routines, which the mesocycle uses
 	const exercise = await prisma.exercise.findUniqueOrThrow({
@@ -77,8 +75,7 @@ async function renameOnExercisesPage(page: Page, from: string, to: string) {
 }
 
 test('renaming an exercise renames it everywhere and keeps its progression', async ({ page, userData }) => {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 
 	// Log barbell rows at 40 kg
 	await page.goto('/workouts');
@@ -161,8 +158,7 @@ test('Exercises page: an exercise outside any routine, added to routines, remove
 	page,
 	userData
 }) => {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 
 	await page.goto('/exercises');
 	await page.getByRole('button', { name: 'New exercise' }).click();
@@ -255,8 +251,7 @@ test('merging a misspelling moves its workouts; deleting an exercise with workou
 	page,
 	userData
 }) => {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 	await createExercises(userData.userId, [{ name: 'Barbel rows', targetMuscleGroup: 'Traps' }]);
 	await logPastWorkout(userData.userId, 'Barbel rows', 35);
 	const misspelt = await prisma.exercise.findUniqueOrThrow({
@@ -319,8 +314,7 @@ test('correcting an exercise’s bodyweight share recounts its past workouts', a
 test('blank workout: pick exercises as you go, suggested from last time', async ({ page, userData }) => {
 	await createExercises(userData.userId, [{ name: 'Barbell rows', targetMuscleGroup: 'Traps' }]);
 	await logPastWorkout(userData.userId, 'Barbell rows', 40);
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
@@ -379,8 +373,7 @@ test('merging when a routine has both exercises: each routine keeps exactly one,
 	page,
 	userData
 }) => {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 	const userId = userData.userId;
 	const byName = (name: string) => prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name } } });
 	const [curls, rows] = await Promise.all([byName('Dumbbell bicep curls'), byName('Barbell rows')]);
@@ -584,8 +577,8 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	page,
 	userData
 }) => {
+	await seedRoutines(userData.userId);
 	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
 	await createExercises(userData.userId, [{ name: 'Sit-ups', targetMuscleGroup: 'Abs' }]);
 
 	// Edit face pulls in the library: 4 sets and a routine note first

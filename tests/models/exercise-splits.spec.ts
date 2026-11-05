@@ -1,13 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
-import {
-	createMesocycle,
-	createTemplateExerciseSplit,
-	deleteRoutine,
-	editRoutine,
-	pickExercise,
-	saveRoutine
-} from './commonFunctions';
-import { seedRoutines } from './seed';
+import { createTemplateExerciseSplit, deleteRoutine, editRoutine, pickExercise, saveRoutine } from './commonFunctions';
+import { seedRoutines, seedRoutinesAndMesocycle } from './seed';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -218,7 +211,8 @@ test('edit one routine: just it changes; a taken name is refused; leaving with c
 });
 
 test('duplicate, move and delete from the card menu, saved straight away', async ({ page, userData }) => {
-	await createTemplateExerciseSplit(page);
+	await seedRoutines(userData.userId);
+	await page.goto('/exercise-splits');
 
 	// The ends can't move further
 	await expect(await menuItem(page, 'Pull A', 'Move up')).toHaveAttribute('data-disabled', '');
@@ -298,7 +292,8 @@ test('the last routine can go: then the empty state, with both ways to start', a
 });
 
 test('changed or deleted on another device while open: asked before overwriting', async ({ page, userData }) => {
-	await createTemplateExerciseSplit(page);
+	await seedRoutines(userData.userId);
+	await page.goto('/exercise-splits');
 
 	// Changed elsewhere: Cancel keeps theirs, Overwrite saves mine
 	await editRoutine(page, 'Pull A');
@@ -352,7 +347,7 @@ test('the current mesocycle uses My routines: a rename, set counts, overrides, a
 	page,
 	userData
 }) => {
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
 
 	// Rename Pull A, 4 sets of rows with their own overload
@@ -447,7 +442,8 @@ test('adding an exercise: set type from My routines, else Independent; reps only
 	page,
 	userData
 }) => {
-	await createTemplateExerciseSplit(page);
+	await seedRoutines(userData.userId);
+	await page.goto('/exercise-splits');
 	await prisma.exercise.create({
 		data: { userId: userData.userId, name: 'Hanging leg raises', targetMuscleGroup: 'Abs', repsOnly: true }
 	});
@@ -481,7 +477,8 @@ test('weight sets live under My routines: from its menu, from a routine being ed
 	page,
 	userData
 }) => {
-	await createTemplateExerciseSplit(page);
+	await seedRoutines(userData.userId);
+	await page.goto('/exercise-splits');
 
 	// From the My routines menu; back to My routines
 	await page.getByLabel('my-routines-options').click();

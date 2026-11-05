@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { createMesocycle } from './commonFunctions';
+import { seedRoutinesAndMesocycle } from './seed';
 import { createId } from '@paralleldrive/cuid2';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
 
@@ -272,7 +272,7 @@ test('a block’s stats: named after the block, a labelled Stats button, sets pe
 	page,
 	userData
 }) => {
-	await createMesocycle(page);
+	await seedRoutinesAndMesocycle(userData.userId);
 	const block = await prisma.mesocycle.findFirstOrThrow({
 		where: { userId: userData.userId, name: 'MyMeso' },
 		orderBy: { startDate: 'desc' }
