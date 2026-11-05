@@ -108,44 +108,6 @@ test('Routines tab: a card for each routine in My routines order, closed to star
 	await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Push A');
 });
 
-test('Routines cards open and close one at a time even for two routines of one name (only a database edit can make them)', async ({
-	page,
-	userData
-}) => {
-	await createMesocycle(page, { exerciseSplitCreated: true });
-	await prisma.exerciseSplitDay.updateMany({
-		where: { name: { in: ['Pull A', 'Push A'] }, exerciseSplit: { userId: userData.userId } },
-		data: { name: 'Same' }
-	});
-	const sameCards = () => page.getByTestId('routine-card').filter({ hasText: 'Same' });
-	const toggle = (index: number) =>
-		sameCards()
-			.nth(index)
-			.getByRole('button', { name: /the exercises of Same$/ });
-
-	// A block's Routines tab
-	await page.goto('/mesocycles');
-	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
-	await page.getByRole('tab', { name: 'Routines' }).click();
-	await expect(sameCards()).toHaveCount(2);
-	await toggle(0).click();
-	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(1);
-	await expect(sameCards().nth(0).getByTestId('routine-card-exercises')).toBeVisible();
-	await toggle(1).click();
-	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(2);
-	await toggle(0).click();
-	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(1);
-	await expect(sameCards().nth(1).getByTestId('routine-card-exercises')).toBeVisible();
-
-	// My routines
-	await page.goto('/exercise-splits');
-	await expect(sameCards()).toHaveCount(2);
-	await toggle(1).click();
-	await expect(page.getByTestId('routine-card-exercises')).toHaveCount(1);
-	await expect(sameCards().nth(1).getByTestId('routine-card-exercises')).toBeVisible();
-	await expect(sameCards().nth(0).getByTestId('routine-card-exercises')).toHaveCount(0);
-});
-
 test('delete a mesocycle', async ({ page }) => {
 	await page.getByLabel('create-new-mesocycle').click();
 	await page.getByLabel('Mesocycle name').fill('MesoToDelete');

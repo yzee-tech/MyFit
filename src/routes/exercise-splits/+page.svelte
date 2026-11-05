@@ -22,7 +22,7 @@
 	type Routine = NonNullable<MyRoutines>['exerciseSplitDays'][number];
 	let myRoutines = $state<MyRoutines | 'loading'>('loading');
 	let routines = $derived(myRoutines === 'loading' ? [] : (myRoutines?.exerciseSplitDays ?? []));
-	/** Routines showing their exercises, by id */
+	/** Routines showing their exercises */
 	let shown: string[] = $state([]);
 	let busy = $state(false);
 
@@ -42,7 +42,7 @@
 		handledTarget = target;
 		const routine = routines.find((other) => other.name === target);
 		if (!routine) return;
-		if (!shown.includes(routine.id)) shown = [...shown, routine.id];
+		if (!shown.includes(routine.name)) shown = [...shown, routine.name];
 		tick().then(() => {
 			const card = document.getElementById(`routine-${routine.id}`);
 			const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -55,8 +55,8 @@
 		return `/exercise-splits/edit?routine=${encodeURIComponent(name)}`;
 	}
 
-	function toggleShown(id: string) {
-		shown = shown.includes(id) ? shown.filter((other) => other !== id) : [...shown, id];
+	function toggleShown(name: string) {
+		shown = shown.includes(name) ? shown.filter((other) => other !== name) : [...shown, name];
 	}
 
 	/**
@@ -87,10 +87,9 @@
 
 	async function deleteRoutine() {
 		const name = deleting?.name;
-		const id = deleting?.id;
 		deleteOpen = false;
-		if (name === undefined || id === undefined) return;
-		shown = shown.filter((other) => other !== id);
+		if (name === undefined) return;
+		shown = shown.filter((other) => other !== name);
 		await change((routines) => routines.filter((routine) => routine.name !== name), `“${name}” deleted`);
 	}
 
@@ -156,8 +155,8 @@
 				<RoutineCard
 					editHref={editLink(routine.name)}
 					{routine}
-					ontoggle={() => toggleShown(routine.id)}
-					shown={shown.includes(routine.id)}
+					ontoggle={() => toggleShown(routine.name)}
+					shown={shown.includes(routine.name)}
 				>
 					{#snippet menu()}
 						<DropdownMenu.Root>

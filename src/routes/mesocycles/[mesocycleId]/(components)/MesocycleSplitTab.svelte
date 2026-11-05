@@ -7,11 +7,11 @@
 	// Read-only, like My routines' cards without their menu: a mesocycle that isn't finished uses My routines,
 	// edited there (each opened routine has its Edit button)
 	const routines = mesocycle.routines ?? [];
-	/** Routines showing their exercises, by id: none to start with */
+	/** Routines showing their exercises: none to start with */
 	let shown: string[] = $state([]);
 
-	function toggleShown(id: string) {
-		shown = shown.includes(id) ? shown.filter((other) => other !== id) : [...shown, id];
+	function toggleShown(name: string) {
+		shown = shown.includes(name) ? shown.filter((other) => other !== name) : [...shown, name];
 	}
 </script>
 
@@ -21,8 +21,8 @@
 			<RoutineCard
 				editHref="/exercise-splits/edit?routine={encodeURIComponent(routine.name)}"
 				{routine}
-				ontoggle={() => toggleShown(routine.id)}
-				shown={shown.includes(routine.id)}
+				ontoggle={() => toggleShown(routine.name)}
+				shown={shown.includes(routine.name)}
 			/>
 		{/each}
 	</div>
