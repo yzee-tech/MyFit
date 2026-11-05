@@ -2,7 +2,6 @@ import { expect, test } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import {
 	createExercises,
-	createMesocycle,
 	createTemplateExerciseSplit,
 	deleteRoutine,
 	editRoutine,
@@ -12,14 +11,21 @@ import {
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
-import { seedActiveMesocycle } from './seed';
+import { seedActiveMesocycle, seedRoutines } from './seed';
 
 const prisma = new PrismaClient();
 
-test.beforeEach(async ({ page }) => {
-	await page.goto('/exercise-splits');
-	await createTemplateExerciseSplit(page);
-	await page.getByRole('link', { name: 'Mesocycles' }).click();
+test.beforeEach(async ({ page, userData }, testInfo) => {
+	// "create a mesocycle" owns creating a block, and keeps the whole flow on the pages, template included
+	if (testInfo.title === 'create a mesocycle') {
+		await page.goto('/exercise-splits');
+		await createTemplateExerciseSplit(page);
+		await page.getByRole('link', { name: 'Mesocycles' }).click();
+		return;
+	}
+	// The others start from My routines holding the template's routines (adding it is tested in exercise-splits.spec)
+	await seedRoutines(userData.userId);
+	await page.goto('/mesocycles');
 });
 
 test('create a mesocycle', async ({ page }) => {
@@ -225,7 +231,8 @@ test('a block starts with My routines as they are when it starts', async ({ page
 
 test('add routines mid-block; trained routines keep their workouts', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell bench press']);
-	await createMesocycle(page, { exerciseSplitCreated: true });
+	await seedActiveMesocycle(userData.userId);
+	await page.goto('/mesocycles');
 	await page.getByRole('link', { name: 'Workouts' }).click();
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
