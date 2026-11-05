@@ -12,6 +12,7 @@ import {
 	saveRoutine,
 	saveWorkout
 } from './commonFunctions';
+import { seedActiveMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -68,9 +69,11 @@ test('create a mesocycle', async ({ page }) => {
 });
 
 test('Routines tab: a card for each routine in My routines order, closed to start; several can be open; Edit opens that routine', async ({
-	page
+	page,
+	userData
 }) => {
-	await createMesocycle(page, { exerciseSplitCreated: true });
+	// The block is only the starting point here: its creation is tested in "create a mesocycle"
+	await seedActiveMesocycle(userData.userId);
 	await page.goto('/mesocycles');
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
 	await page.getByRole('tab', { name: 'Routines' }).click();

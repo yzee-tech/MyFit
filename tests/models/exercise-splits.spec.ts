@@ -7,6 +7,7 @@ import {
 	pickExercise,
 	saveRoutine
 } from './commonFunctions';
+import { seedRoutines } from './seed';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -169,7 +170,9 @@ test('edit one routine: just it changes; a taken name is refused; leaving with c
 	page,
 	userData
 }) => {
-	await createTemplateExerciseSplit(page);
+	// The template's routines are only the starting point here: their adding is tested above
+	await seedRoutines(userData.userId);
+	await page.goto('/exercise-splits');
 	const before = await savedRoutines(userData.userId);
 
 	// A name another routine has
