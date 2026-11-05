@@ -2706,7 +2706,15 @@ test('the exercise ⋯ menu closes when the list scrolls, and the list stays whe
 	await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.getByRole('menu')).toBeVisible();
 
+	// Any other way of closing the menu still gives the focus back to its button (only a scroll skips that)
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('menu')).toHaveCount(0);
+	await expect(menuButton).toBeFocused();
+	await menuButton.click();
+	await expect(page.getByRole('menu')).toBeVisible();
+
 	// Scrolled away: it closes
+	await page.getByTestId('Barbell rows-summary').hover();
 	await page.mouse.wheel(0, 3000);
 	await expect(page.getByRole('menu')).toHaveCount(0);
 	// And the list stays where it was scrolled. Closing a menu normally puts the focus back on its button, and
