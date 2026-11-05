@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createMesocycle, pickRoutine, saveWorkout } from './commonFunctions';
+import { pickRoutine, saveWorkout } from './commonFunctions';
+import { seedRoutinesAndMesocycle } from './seed';
 
 const prisma = new PrismaClient();
 
@@ -8,9 +9,8 @@ const prisma = new PrismaClient();
 const savedWorkout = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes') ?? 'null'));
 
 /** Starts Pull A of the current mesocycle and gets as far as its overview, Pull-ups removed */
-async function pullAToOverview(page: Page) {
-	await page.goto('/exercise-splits');
-	await createMesocycle(page);
+async function pullAToOverview(page: Page, userId: string) {
+	await seedRoutinesAndMesocycle(userId);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -55,7 +55,7 @@ test('a workout saved by an older app version (a position, no routine name) save
 	page,
 	userData
 }) => {
-	await pullAToOverview(page);
+	await pullAToOverview(page, userData.userId);
 	// As an app version from before routineName left it on the phone
 	await page.evaluate(() => {
 		const state = JSON.parse(localStorage.getItem('workoutRunes')!);
@@ -76,10 +76,11 @@ test('a workout saved by an older app version (a position, no routine name) save
 });
 
 test('a newer version going live: the next page change reloads into it, and the workout in progress is still there', async ({
-	page
+	page,
+	userData
 }) => {
 	await page.clock.install();
-	await pullAToOverview(page);
+	await pullAToOverview(page, userData.userId);
 	const before = await savedWorkout(page);
 	expect(before.workoutExercises.map((exercise: { name: string }) => exercise.name)).not.toContain('Pull-ups');
 
