@@ -80,9 +80,19 @@ export type SeededSet = { reps: number; load: number; RIR: number };
 /**
  * A finished workout from a routine of My routines, as saving it from the workout pages does (workouts.create):
  * the routine's exercises named in `exercises` (the others "deleted" in the workout), in the routine's order,
- * with the routine's details for each and the routine's unit (or `weightUnit` for "Ask each time"). In the running block when there is one (pass
- * inBlock: false for a workout outside it). It starts now and ends two seconds later unless `startedAt` is
- * given; `timeZone` is the phone's (the test browser's is UTC)
+ * with the routine's details for each and the routine's unit (or `weightUnit` for "Ask each time"). In the
+ * running block when there is one (pass inBlock: false for a workout outside it). Without `startedAt` it starts
+ * now and ends when the server saves it (no end is sent); with one, the end sent is two seconds after it, which
+ * the server may cap at its own now for a start in the future. `timeZone` is the phone's (the test browser's is
+ * UTC).
+ *
+ * Not a general stand-in for logging through the pages yet; extend it, and its comparison in
+ * seedLoggedWorkout.spec, before a conversion that needs any of these:
+ * - Exercises with their own unit (a LEVEL machine, a weight set, a unit different from the routine's) or a note:
+ *   every exercise gets the routine's unit and no exerciseNote.
+ * - A paused block: the start page defaults countsForProgression to false then; this defaults to true, so pass
+ *   it explicitly.
+ * - Mini-sets and cardio sets (time, distance): only reps, load and RIR sets are made.
  */
 export async function seedLoggedWorkout(
 	userId: string,
