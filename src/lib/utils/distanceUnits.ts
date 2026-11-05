@@ -72,6 +72,64 @@ export function parseDuration(text: string): number | null {
 }
 
 /**
+ * What a time box shows while its digits are typed, like a kitchen timer: they fill from the right, the
+ * last two are seconds, the ones before them minutes, then hours. 45 → 0:45, 1500 → 15:00, 9045 → 90:45
+ * (minutes may pass 59 until the box is left), 10530 → 1:05:30, 123045 → 12:30:45. Anything that isn't a
+ * digit is dropped, leading zeros don't count, and a 7th digit is ignored. No digits gives "".
+ */
+export function formatTimerDigits(text: string): string {
+	const digits = text.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6);
+	if (digits === '') return '';
+	const seconds = digits.slice(-2).padStart(2, '0');
+	if (digits.length <= 4) return `${digits.slice(0, -2) || '0'}:${seconds}`;
+	return `${digits.slice(0, -4)}:${digits.slice(-4, -2)}:${seconds}`;
+}
+
+/**
+ * An edit of a time box's text, as the box should show it afterwards: the timer digits (formatTimerDigits)
+ * and where the caret goes. `raw` is what the box holds after the edit, `caret` where its caret is, `previous`
+ * what it showed before. The caret keeps the number of digits after it, so an edit in the middle stays where
+ * it was made. Deleting only a colon takes the digit beside it instead (the colon would come straight back).
+ * Something with no digit at all (letters) changes nothing, a 7th typed digit is ignored, and digits that are
+ * all zeros give an empty box
+ */
+export function editTimerText(
+	raw: string,
+	caret: number,
+	previous: string,
+	inputType = ''
+): { text: string; caret: number } {
+	const unchanged = { text: previous, caret: previous.length };
+	const countDigits = (text: string) => (text.match(/\d/g) ?? []).length;
+	let digits = raw.replace(/\D/g, '');
+	if (raw !== '' && digits === '') return unchanged;
+	let digitsAfter = countDigits(raw.slice(Math.min(Math.max(caret, 0), raw.length)));
+	const onlyAColonWentAway =
+		(inputType === 'deleteContentBackward' || inputType === 'deleteContentForward') &&
+		previous !== '' &&
+		digits === previous.replace(/\D/g, '');
+	if (onlyAColonWentAway) {
+		const before = digits.length - digitsAfter;
+		if (inputType === 'deleteContentBackward') {
+			if (before === 0) return unchanged;
+			digits = digits.slice(0, before - 1) + digits.slice(before);
+		} else {
+			if (digitsAfter === 0) return unchanged;
+			digits = digits.slice(0, before) + digits.slice(before + 1);
+			digitsAfter -= 1;
+		}
+	}
+	if (digits.replace(/^0+/, '').length > 6 && inputType === 'insertText') return unchanged;
+	const text = formatTimerDigits(digits);
+	let position = text.length;
+	for (let seen = 0; position > 0 && seen < digitsAfter; ) {
+		position--;
+		if (/\d/.test(text[position])) seen++;
+	}
+	return { text, caret: position };
+}
+
+/**
  * How pace is quoted per unit: minutes per km or mile; rowing's per 500 m; per 100 ft. The denominator
  * in metres, and its label
  */

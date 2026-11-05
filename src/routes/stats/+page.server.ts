@@ -8,7 +8,8 @@ export const load = async ({ parent }) => {
 	const exerciseList = prisma.workoutExercise.findMany({
 		where: { workout: { userId: session.user!.id } },
 		select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
-		distinct: ['name']
+		distinct: ['name'],
+		orderBy: { name: 'asc' }
 	});
 
 	return { exerciseList };

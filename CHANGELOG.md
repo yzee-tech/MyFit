@@ -2,6 +2,28 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-04: lists in order, cardio wording, timer-style time box, block routines like My routines
+
+### Changed
+
+- **Lists are in alphabetical order.** The muscle group list when you make an exercise (Custom last), the muscle
+  group filter buttons in Add exercises and the routine exercise picker, the exercise list on Stats › Exercises
+  (its muscle group headings now read "Front delts", not "FrontDelts"), the mesocycle lists in the Workouts filter
+  and on Stats › Exercises (blocks with the same name: newest first), and the routine list on a block's workouts
+  chart. On that chart a running block follows your My routines order; a finished block is A to Z. Lists with an
+  order of their own (set type, weekly effort, the gym's unit) stay as they are.
+- **Cardio exercises in Add exercises say how they are measured** ("Time", "Distance & time in km") instead of
+  "Independent, 8-15 reps", which never applied to them.
+- **Time boxes (cardio) work like a timer.** Type the digits and the colons appear: the last two digits are the
+  seconds. 45 gives 0:45, 1500 gives 15:00, 9045 gives 90:45 (shown as 1:30:45 once you leave the box), 10530 gives
+  1:05:30. Up to 6 digits. This changes one habit: **15 now means 15 seconds** (15 minutes is 1500), and three or
+  more digits are read as minutes and seconds ("900" is 9:00, not 900 minutes). Times you already logged are
+  unchanged.
+- **A block's Routines tab looks like My routines.** One card for each routine, in your My routines order, all
+  closed to start: its name, how many exercises and the unit, and its muscle groups. Tap a name to open its
+  exercises (several can be open); an opened routine has an Edit button that opens it in My routines. The row of
+  routine tabs and the "Edit ›" link are gone.
+
 ## 2026-11-03: faster test runs
 
 ### Changed

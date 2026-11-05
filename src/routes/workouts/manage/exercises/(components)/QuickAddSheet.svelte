@@ -11,6 +11,9 @@
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { convertCamelCaseToNormal } from '$lib/utils';
 	import type { MuscleGroup } from '$lib/utils/prismaEnums';
+	import { sortMuscleGroups } from '$lib/utils/listOrder';
+	import { distanceUnitLabel } from '$lib/utils/distanceUnits';
+	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
@@ -91,7 +94,7 @@
 	let inWorkout = $derived(new Set((workoutRunes.workoutExercises ?? []).map((exercise) => exercise.name)));
 	const muscleGroupOf = (exercise: PickerExercise) =>
 		exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup);
-	let muscleGroups = $derived([...new Set(exercises.map((exercise) => exercise.targetMuscleGroup))]);
+	let muscleGroups = $derived(sortMuscleGroups([...new Set(exercises.map((exercise) => exercise.targetMuscleGroup))]));
 	let groups = $derived(
 		Object.entries(
 			Object.groupBy(
@@ -105,8 +108,15 @@
 		).sort(([a], [b]) => a.localeCompare(b))
 	);
 
-	/** What it starts with: the last time's set type and reps, else its routine's, else Independent 8–15 */
+	/**
+	 * What it starts with: the last time's set type and reps, else its routine's, else Independent 8–15. A
+	 * cardio exercise has neither, so it says how it is measured, as on its own page
+	 */
 	function startsWith(exercise: PickerExercise) {
+		if (isCardioMeasure(exercise.measure)) {
+			const unit = exercise.distanceUnit ? ` in ${distanceUnitLabel(exercise.distanceUnit)}` : '';
+			return `${measureLabel(exercise.measure)}${unit}`;
+		}
 		const { setType, repRangeStart, repRangeEnd } = exercise.routineSettings;
 		const settings = `${setTypeLabel(setType)} · ${repRangeStart}–${repRangeEnd} reps`;
 		const from = { workout: 'Last time', routine: 'Routine', none: 'New' }[exercise.settingsFrom ?? 'none'];
