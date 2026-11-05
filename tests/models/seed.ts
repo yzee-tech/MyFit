@@ -9,6 +9,7 @@ config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { exerciseSplitTemplates } from '../../src/lib/common/exerciseSplitTemplates';
+import type { SplitExerciseTemplateWithoutIdsOrIndex } from '../../src/lib/components/mesocycleAndExerciseSplit/commonTypes';
 import { uniqueRoutineName } from '../../src/lib/utils/routineNames';
 import { suggestWeeklyRIR } from '../../src/lib/utils/workoutUtils';
 
@@ -28,7 +29,7 @@ export async function seedRoutines(userId: string, templateName = 'Pull Push Leg
 	const routines: { name: string; weightUnit: 'KG' | 'LB' | 'ASK'; previousName?: string }[] = existing.map(
 		(routine) => ({ name: routine.name, weightUnit: routine.weightUnit, previousName: routine.name })
 	);
-	const routineExercises = existing.map((routine) =>
+	const routineExercises: SplitExerciseTemplateWithoutIdsOrIndex[][] = existing.map((routine) =>
 		routine.exercises.map(({ id, exerciseSplitDayId, exerciseIndex, ...exercise }) => exercise)
 	);
 	for (const day of template.exerciseSplit.exerciseSplitDays) {
