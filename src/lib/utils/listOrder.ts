@@ -5,6 +5,8 @@ import { convertCamelCaseToNormal } from '../utils';
  * the gym's unit). Whatever a list is built from, sort it here so every list follows the same rule.
  */
 
+// The language is the device's own (undefined) on purpose: exercise, routine and block names are typed by the
+// person, and their own language's rules put accented or non-English names where they expect them
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 /** A to Z by the words shown */
