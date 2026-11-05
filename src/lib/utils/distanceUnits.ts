@@ -86,6 +86,50 @@ export function formatTimerDigits(text: string): string {
 }
 
 /**
+ * An edit of a time box's text, as the box should show it afterwards: the timer digits (formatTimerDigits)
+ * and where the caret goes. `raw` is what the box holds after the edit, `caret` where its caret is, `previous`
+ * what it showed before. The caret keeps the number of digits after it, so an edit in the middle stays where
+ * it was made. Deleting only a colon takes the digit beside it instead (the colon would come straight back).
+ * Something with no digit at all (letters) changes nothing, a 7th typed digit is ignored, and digits that are
+ * all zeros give an empty box
+ */
+export function editTimerText(
+	raw: string,
+	caret: number,
+	previous: string,
+	inputType = ''
+): { text: string; caret: number } {
+	const unchanged = { text: previous, caret: previous.length };
+	const countDigits = (text: string) => (text.match(/\d/g) ?? []).length;
+	let digits = raw.replace(/\D/g, '');
+	if (raw !== '' && digits === '') return unchanged;
+	let digitsAfter = countDigits(raw.slice(Math.min(Math.max(caret, 0), raw.length)));
+	const onlyAColonWentAway =
+		(inputType === 'deleteContentBackward' || inputType === 'deleteContentForward') &&
+		previous !== '' &&
+		digits === previous.replace(/\D/g, '');
+	if (onlyAColonWentAway) {
+		const before = digits.length - digitsAfter;
+		if (inputType === 'deleteContentBackward') {
+			if (before === 0) return unchanged;
+			digits = digits.slice(0, before - 1) + digits.slice(before);
+		} else {
+			if (digitsAfter === 0) return unchanged;
+			digits = digits.slice(0, before) + digits.slice(before + 1);
+			digitsAfter -= 1;
+		}
+	}
+	if (digits.replace(/^0+/, '').length > 6 && inputType === 'insertText') return unchanged;
+	const text = formatTimerDigits(digits);
+	let position = text.length;
+	for (let seen = 0; position > 0 && seen < digitsAfter; ) {
+		position--;
+		if (/\d/.test(text[position])) seen++;
+	}
+	return { text, caret: position };
+}
+
+/**
  * How pace is quoted per unit: minutes per km or mile; rowing's per 500 m; per 100 ft. The denominator
  * in metres, and its label
  */

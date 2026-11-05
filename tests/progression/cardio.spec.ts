@@ -4,6 +4,7 @@ import {
 	distanceStep,
 	distanceUnitLabel,
 	formatDistance,
+	editTimerText,
 	formatDuration,
 	formatPace,
 	formatTimerDigits,
@@ -97,6 +98,33 @@ test('the time box while typing, like a timer: the last two digits are seconds, 
 	expect(parseDuration(formatTimerDigits('235959'))).toBe(86399);
 	expect(parseDuration(formatTimerDigits('240000'))).toBe(86400);
 	expect(parseDuration(formatTimerDigits('240001'))).toBeNull();
+});
+
+test('editing the time box: backspace to empty, the caret keeps its digits, a colon deleted takes the digit beside it', () => {
+	const edit = (raw: string, caret: number, previous: string, inputType = 'insertText') =>
+		editTimerText(raw, caret, previous, inputType);
+	// At the end: typing, and Backspace down to an empty box (zeros left over are an empty box, not letters)
+	expect(edit('0:015', 5, '0:01')).toEqual({ text: '0:15', caret: 4 });
+	expect(edit('0:0', 3, '0:01', 'deleteContentBackward')).toEqual({ text: '', caret: 0 });
+	expect(edit('', 0, '0:01', 'deleteContentBackward')).toEqual({ text: '', caret: 0 });
+	expect(edit('1:5', 3, '1:53', 'deleteContentBackward')).toEqual({ text: '0:15', caret: 4 });
+	// Letters only: nothing changes
+	expect(edit('x', 1, '15:30')).toEqual({ text: '15:30', caret: 5 });
+	expect(edit('15:30x', 6, '15:30')).toEqual({ text: '15:30', caret: 5 });
+	// In the middle: the caret keeps the number of digits after it
+	expect(edit('125:30', 2, '15:30')).toEqual({ text: '1:25:30', caret: 3 });
+	expect(edit('5:30', 0, '15:30', 'deleteContentBackward')).toEqual({ text: '5:30', caret: 0 });
+	// A colon deleted (Backspace after it, Delete before it): the digit beside it goes, the caret stays after
+	expect(edit('1530', 2, '15:30', 'deleteContentBackward')).toEqual({ text: '1:30', caret: 2 });
+	expect(edit('130', 1, '1:30', 'deleteContentBackward')).toEqual({ text: '0:30', caret: 2 });
+	expect(edit('1530', 2, '15:30', 'deleteContentForward')).toEqual({ text: '1:50', caret: 3 });
+	// (a leading 0 shown for the minutes is no digit: taking the 3 beside the colon leaves only zeros: empty)
+	expect(edit('030', 1, '0:30', 'deleteContentForward')).toEqual({ text: '', caret: 0 });
+	// A 7th digit typed anywhere is ignored; pasted digits are cut to six
+	expect(edit('123:30:45', 3, '12:30:45')).toEqual({ text: '12:30:45', caret: 8 });
+	expect(edit('1230451', 7, '', 'insertFromPaste')).toEqual({ text: '12:30:45', caret: 8 });
+	// Typed on, caret at the end: as before
+	expect(edit('1530', 4, '1:5')).toEqual({ text: '15:30', caret: 5 });
 });
 
 test('times: m:ss (h:mm:ss past the hour) out, and m:ss, h:mm:ss or minutes in', () => {

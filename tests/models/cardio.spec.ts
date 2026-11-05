@@ -364,6 +364,73 @@ test('the time box: pasted or autofilled digits, an input method composing, and 
 	await expect(time).toHaveValue('4:50');
 });
 
+test('the time box: Backspace clears the last digit, and an edit in the middle keeps the caret where it was made', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' }
+	]);
+	await startBlankWorkout(page);
+	await quickAdd(page, ['Run']);
+	const time = box(page, 'Run', 1, 'time');
+	const caret = () => time.evaluate((input: HTMLInputElement) => input.selectionStart);
+	const setCaret = (at: number) =>
+		time.evaluate((input: HTMLInputElement, position: number) => input.setSelectionRange(position, position), at);
+
+	// Backspace takes digits off one by one, down to an empty box, and typing starts over
+	await time.click();
+	await time.pressSequentially('15');
+	await expect(time).toHaveValue('0:15');
+	await time.press('Backspace');
+	await expect(time).toHaveValue('0:01');
+	await time.press('Backspace');
+	await expect(time).toHaveValue('');
+	await time.pressSequentially('7');
+	await expect(time).toHaveValue('0:07');
+
+	// Backspace just after a colon takes the digit before the colon, and the caret stays where it was
+	await time.fill('1530');
+	await expect(time).toHaveValue('15:30');
+	await setCaret(3);
+	await time.press('Backspace');
+	await expect(time).toHaveValue('1:30');
+	expect(await caret()).toBe(2);
+	await time.press('Backspace');
+	await expect(time).toHaveValue('0:30');
+	expect(await caret()).toBe(2);
+
+	// Delete just before a colon takes the digit after it
+	await time.fill('1530');
+	await setCaret(2);
+	await time.press('Delete');
+	await expect(time).toHaveValue('1:50');
+	expect(await caret()).toBe(3);
+
+	// A digit deleted in the middle, and one typed in the middle, stay where they were made
+	await time.fill('1530');
+	await setCaret(1);
+	await time.press('Backspace');
+	await expect(time).toHaveValue('5:30');
+	expect(await caret()).toBe(0);
+	await time.fill('1530');
+	await setCaret(1);
+	await time.press('2');
+	await expect(time).toHaveValue('1:25:30');
+	expect(await caret()).toBe(3);
+
+	// A seventh digit typed in the middle is ignored too, and the box is unchanged
+	await time.fill('123045');
+	await expect(time).toHaveValue('12:30:45');
+	await setCaret(3);
+	await time.press('9');
+	await expect(time).toHaveValue('12:30:45');
+
+	// What is left is taken when the box is left
+	await time.blur();
+	await expect(time).toHaveValue('12:30:45');
+});
+
 test('Add exercises says how a cardio exercise is measured, not reps and a set type', async ({ page, userData }) => {
 	await createExercises(userData.userId, [
 		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },

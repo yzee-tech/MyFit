@@ -7,7 +7,7 @@
 		distanceStep,
 		distanceUnitLabel,
 		formatDuration,
-		formatTimerDigits,
+		editTimerText,
 		formatPace,
 		fromMeters,
 		isValidDistanceMeters,
@@ -437,13 +437,15 @@
 	function timeTyping(e: Event, set: WorkoutExerciseSet) {
 		const input = e.currentTarget as HTMLInputElement;
 		if (composing.has(input)) return;
-		const formatted = formatTimerDigits(input.value);
-		if (input.value !== '' && formatted === '') {
-			input.value = lastTimeText.get(input) ?? timeShown(set);
-			return;
-		}
-		input.value = formatted;
-		lastTimeText.set(input, formatted);
+		const edited = editTimerText(
+			input.value,
+			input.selectionStart ?? input.value.length,
+			lastTimeText.get(input) ?? timeShown(set),
+			(e as InputEvent).inputType
+		);
+		input.value = edited.text;
+		input.setSelectionRange(edited.caret, edited.caret);
+		lastTimeText.set(input, edited.text);
 	}
 
 	/**
