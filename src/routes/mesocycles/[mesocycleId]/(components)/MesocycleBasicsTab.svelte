@@ -16,7 +16,13 @@
 
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { trpc } from '$lib/trpc/client';
-	import { formatWeekEffort, getBlockWeekHere, isBlockPaused } from '$lib/utils/workoutUtils';
+	import {
+		browserTimeZone,
+		formatWeekEffort,
+		getBlockWeekHere,
+		isBlockPaused,
+		isPastPlannedWeeks
+	} from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
@@ -39,31 +45,92 @@
 	let currentWeek = $derived(weekNow !== null && weekNow <= mesocycle.weeklyRIR.length ? weekNow : null);
 	// A paused block's week stands still until it is resumed
 	let paused = $derived(isBlockPaused(mesocycle.pauses));
+	// The pause the screen shows open: a tap made on an old screen is refused rather than closing a newer one
+	let openPauseId = $derived(mesocycle.pauses.find((pause) => pause.resumedAt === null)?.id ?? null);
+	// All its planned weeks have run (a paused block stands where its plan ended until it is given another week)
+	let pastPlan = $derived(
+		!!mesocycle.startDate &&
+			!mesocycle.endDate &&
+			!!now.value &&
+			isPastPlannedWeeks(
+				mesocycle.startDate,
+				now.value,
+				browserTimeZone(),
+				mesocycle.pauses,
+				mesocycle.weeklyRIR.length
+			)
+	);
 	let pausingOrResuming = $state(false);
 	let stopConfirmOpen = $state(false);
+
+	/** The block as the server has it now: its weeks, dates and pauses. Whether it could be read */
+	async function refreshMesocycle(): Promise<boolean> {
+		try {
+			const fresh = await trpc().mesocycles.findById.query(mesocycle.id);
+			if (!fresh) return false;
+			mesocycle.weeklyRIR = fresh.weeklyRIR;
+			mesocycle.startDate = fresh.startDate;
+			mesocycle.endDate = fresh.endDate;
+			mesocycle.pauses = fresh.pauses;
+			return true;
+		} catch {
+			// Offline: the screen stays as it was
+			return false;
+		}
+	}
+
+	// A block past its planned weeks is paused where its plan ended, on the phone's days. The block is read again
+	// whether this made the pause or another request already had, and until that answer is on the screen Finish is off:
+	// a Finish sent from a screen that shows the block unpaused would name the wrong pause
+	let reconcileTried = false;
+	let settleState = $state<'idle' | 'settling' | 'ready' | 'error'>('idle');
+	let finishNotReady = $derived(
+		!!mesocycle.startDate && !mesocycle.endDate && pastPlan && !paused && settleState !== 'ready'
+	);
+	async function settleBlock() {
+		settleState = 'settling';
+		try {
+			await trpc().mesocycles.reconcileEndOfPlan.mutate({ timeZone: browserTimeZone() });
+		} catch {
+			settleState = 'error';
+			return;
+		}
+		// Never a false ready: a failed read leaves Finish off and offers another try
+		settleState = (await refreshMesocycle()) ? 'ready' : 'error';
+		if (settleState === 'ready') await invalidate('mesocycles:active');
+	}
+	$effect(() => {
+		if (reconcileTried || paused || !pastPlan) return;
+		reconcileTried = true;
+		settleBlock();
+	});
 
 	async function pauseOrResume() {
 		pausingOrResuming = true;
 		try {
+			const timeZone = browserTimeZone();
 			const { message } = await (paused
-				? trpc().mesocycles.resume.mutate(mesocycle.id)
-				: trpc().mesocycles.pause.mutate(mesocycle.id));
-			const fresh = await trpc().mesocycles.findById.query(mesocycle.id);
-			if (fresh) mesocycle.pauses = fresh.pauses;
+				? trpc().mesocycles.resume.mutate({ id: mesocycle.id, timeZone, openPauseId })
+				: trpc().mesocycles.pause.mutate({ id: mesocycle.id, timeZone }));
+			await refreshMesocycle();
 			await invalidate('mesocycles:active');
 			toast.success(message);
 		} catch (error) {
-			if (error instanceof TRPCClientError) toast.error(error.message);
+			if (error instanceof TRPCClientError) {
+				toast.error(error.message);
+				await refreshMesocycle();
+			}
 		}
 		pausingOrResuming = false;
 	}
 
+	/** Edit and Extend are one page, with a draft of its own; Clone starts a new block from this one's settings */
 	function loadMesocycle(mode: 'edit' | 'clone') {
 		if (mode === 'edit') {
-			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
-		} else if (mode === 'clone') {
-			mesocycleRunes.loadMesocycle({ ...fullMesocycleWithoutIds(mesocycle), startDate: null, endDate: null });
+			goto(`/mesocycles/${mesocycle.id}/edit`);
+			return;
 		}
+		mesocycleRunes.loadMesocycle({ ...fullMesocycleWithoutIds(mesocycle), startDate: null, endDate: null });
 		goto(`/mesocycles/manage/basics`);
 	}
 
@@ -74,7 +141,9 @@
 			const response = await trpc().mesocycles.progressToNextStage.mutate({
 				id: mesocycle.id,
 				startDate: mesocycle.startDate,
-				endDate: mesocycle.endDate
+				endDate: mesocycle.endDate,
+				// Finishing: only the pause this screen shows open (none, if it shows none) is ended with the block
+				...(mesocycle.startDate && !mesocycle.endDate ? { openPauseId, timeZone: browserTimeZone() } : {})
 			});
 			mesocycle.startDate = response.startDate;
 			mesocycle.endDate = response.endDate;
@@ -87,7 +156,10 @@
 			await invalidate('mesocycles:active');
 			toast.success(response.message);
 		} catch (error) {
-			if (error instanceof TRPCClientError) toast.error(error.message);
+			if (error instanceof TRPCClientError) {
+				toast.error(error.message);
+				await refreshMesocycle();
+			}
 		}
 		callingPatchEndpoint = false;
 	}
@@ -116,9 +188,11 @@
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end">
 					<DropdownMenu.Group>
-						<DropdownMenu.Item class="gap-2" onclick={() => loadMesocycle('edit')}>
-							<EditIcon /> Edit
-						</DropdownMenu.Item>
+						{#if !mesocycle.endDate}
+							<DropdownMenu.Item class="gap-2" onclick={() => loadMesocycle('edit')}>
+								<EditIcon /> Edit
+							</DropdownMenu.Item>
+						{/if}
 						<DropdownMenu.Item class="gap-2" onclick={() => loadMesocycle('clone')}>
 							<CloneIcon /> Clone
 						</DropdownMenu.Item>
@@ -160,6 +234,17 @@
 				<span class="text-sm text-muted-foreground">Weekly effort</span>
 				<Badge variant="outline">{mesocycle.weeklyRIR.length} weeks</Badge>
 			</div>
+			{#if pastPlan}
+				<span class="text-sm" data-testid="mesocycle-past-plan">
+					Past its planned weeks: it can be extended with more weeks, or finished.
+				</span>
+			{/if}
+			{#if settleState === 'error' && finishNotReady}
+				<div class="flex items-center justify-between gap-2 text-sm" role="alert">
+					<span>Couldn't check where its plan ended. Check your connection.</span>
+					<Button class="h-auto p-0" onclick={settleBlock} variant="link">Try again</Button>
+				</div>
+			{/if}
 			{#if paused && weekNow !== null}
 				<!-- Past the planned weeks too: it is still paused in that week -->
 				<span class="text-sm" data-testid="mesocycle-paused-week">Week {weekNow} - paused</span>
@@ -204,26 +289,33 @@
 	{#if !mesocycle.endDate}
 		<Card.Footer class="justify-end gap-2">
 			{#if mesocycle.startDate}
-				<Button
-					class="h-[30px] w-[92px] gap-1.5"
-					size="sm"
-					disabled={pausingOrResuming}
-					onclick={pauseOrResume}
-					variant="secondary"
-				>
-					{#if pausingOrResuming}
-						<LoaderCircle class="animate-spin" />
-					{:else if paused}
-						<PlayIcon class="shrink-0" /> Resume
-					{:else}
-						<PauseIcon class="shrink-0" /> Pause
-					{/if}
-				</Button>
+				{#if paused && pastPlan}
+					<!-- Resume waits for another week: it would only be paused again -->
+					<Button class="h-[30px] gap-1.5" size="sm" href="/mesocycles/{mesocycle.id}/edit" variant="secondary">
+						<EditIcon class="shrink-0" /> Extend
+					</Button>
+				{:else}
+					<Button
+						class="h-[30px] w-[92px] gap-1.5"
+						size="sm"
+						disabled={pausingOrResuming}
+						onclick={pauseOrResume}
+						variant="secondary"
+					>
+						{#if pausingOrResuming}
+							<LoaderCircle class="animate-spin" />
+						{:else if paused}
+							<PlayIcon class="shrink-0" /> Resume
+						{:else}
+							<PauseIcon class="shrink-0" /> Pause
+						{/if}
+					</Button>
+				{/if}
 			{/if}
 			<Button
-				class={mesocycle.startDate ? 'h-[30px] w-[92px] gap-1.5' : 'gap-1.5'}
+				class={mesocycle.startDate ? `h-[30px] gap-1.5 ${pastPlan ? '' : 'w-[92px]'}` : 'gap-1.5'}
 				size="sm"
-				disabled={callingPatchEndpoint}
+				disabled={callingPatchEndpoint || finishNotReady}
 				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}
 			>
 				{#if callingPatchEndpoint}
@@ -231,18 +323,20 @@
 				{:else if !mesocycle.startDate}
 					Start mesocycle
 				{:else}
-					<StopIcon class="shrink-0" /> Stop
+					<StopIcon class="shrink-0" /> {pastPlan ? 'Finish block' : 'Stop'}
 				{/if}
 			</Button>
 		</Card.Footer>
 	{/if}
 </Card.Root>
 
-<ResponsiveDialog title="Stop mesocycle?" bind:open={stopConfirmOpen}>
+<ResponsiveDialog title={pastPlan ? 'Finish block?' : 'Stop mesocycle?'} bind:open={stopConfirmOpen}>
 	{#snippet description()}
-		Stopping ends the block and closes the pause.
+		{pastPlan ? 'Finishing' : 'Stopping'} ends the block and closes the pause.
 	{/snippet}
-	<Button class="gap-2" disabled={callingPatchEndpoint} onclick={progressMesocycle}>Stop mesocycle</Button>
+	<Button class="gap-2" disabled={callingPatchEndpoint} onclick={progressMesocycle}
+		>{pastPlan ? 'Finish block' : 'Stop mesocycle'}</Button
+	>
 </ResponsiveDialog>
 
 <ResponsiveDialog title="Delete mesocycle?" bind:open={deleteConfirmDrawerOpen}>

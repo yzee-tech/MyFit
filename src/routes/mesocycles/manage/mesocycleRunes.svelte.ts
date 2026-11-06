@@ -17,7 +17,7 @@ export type FullMesocycleWithoutIds = MesocycleWithoutIds & {
 	mesocycleCyclicSetChanges: Prisma.MesocycleCyclicSetChangeCreateWithoutMesocycleInput[];
 };
 
-/** A block's own settings, to edit or clone: its routines are My routines */
+/** A block's own settings, to clone: its routines are My routines */
 export function fullMesocycleWithoutIds(
 	mesocycle: Mesocycle & { mesocycleCyclicSetChanges: MesocycleCyclicSetChange[] }
 ): FullMesocycleWithoutIds {
@@ -33,16 +33,23 @@ export function fullMesocycleWithoutIds(
 	};
 }
 
-/** Setting up or editing a block: its weeks, weekly effort and progression settings */
+/**
+ * Setting up a new block (or a clone): its weeks, weekly effort and progression settings. A block that exists is
+ * edited on its own page, with a draft of its own: nothing it holds is kept here
+ */
 export function createMesocycleRunes() {
 	let mesocycle: MesocycleWithoutIds = $state(structuredClone(defaultMesocycle));
 	// Automatic set increases are no longer used: kept only so an edit doesn't drop stored ones
 	let mesocycleCyclicSetChanges: Prisma.MesocycleCyclicSetChangeCreateWithoutMesocycleInput[] = $state([]);
-	let editingMesocycleId: string | null = $state(null);
 
 	if (globalThis.localStorage) {
 		const savedState = localStorage.getItem('mesocycleRunes');
-		if (savedState) ({ mesocycle, editingMesocycleId, mesocycleCyclicSetChanges = [] } = JSON.parse(savedState));
+		if (savedState) {
+			const saved = JSON.parse(savedState);
+			// Kept by an app version that edited a block here: that edit is not a new block's to start from
+			if (saved.editingMesocycleId) localStorage.removeItem('mesocycleRunes');
+			else ({ mesocycle, mesocycleCyclicSetChanges = [] } = saved);
+		}
 		// Block setups saved before weekly plans existed
 		const legacyMesocycle = mesocycle as MesocycleWithoutIds & { RIRProgression?: number[] };
 		if (!Array.isArray(legacyMesocycle.weeklyRIR)) {
@@ -56,12 +63,10 @@ export function createMesocycleRunes() {
 	function resetStores() {
 		mesocycle = structuredClone(defaultMesocycle);
 		mesocycleCyclicSetChanges = [];
-		editingMesocycleId = null;
 		saveStoresToLocalStorage();
 	}
 
-	function loadMesocycle(mesocycleData: FullMesocycleWithoutIds, editingId?: string) {
-		editingMesocycleId = editingId ?? null;
+	function loadMesocycle(mesocycleData: FullMesocycleWithoutIds) {
 		const { mesocycleCyclicSetChanges: setChanges, ...onlyMesocycleData } = mesocycleData;
 		mesocycle = onlyMesocycleData;
 		mesocycleCyclicSetChanges = setChanges;
@@ -69,19 +74,10 @@ export function createMesocycleRunes() {
 	}
 
 	function saveStoresToLocalStorage() {
-		localStorage.setItem(
-			'mesocycleRunes',
-			JSON.stringify({ mesocycle, editingMesocycleId, mesocycleCyclicSetChanges })
-		);
+		localStorage.setItem('mesocycleRunes', JSON.stringify({ mesocycle, mesocycleCyclicSetChanges }));
 	}
 
 	return {
-		get editingMesocycleId() {
-			return editingMesocycleId;
-		},
-		set editingMesocycleId(id) {
-			editingMesocycleId = id;
-		},
 		get mesocycle() {
 			return mesocycle;
 		},

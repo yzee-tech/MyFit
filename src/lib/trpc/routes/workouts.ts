@@ -11,7 +11,6 @@ import {
 	getBlockWeek,
 	type BlockPause,
 	isBlockPaused,
-	isInPause,
 	getExerciseVolume,
 	isDeloadWeek,
 	NO_BLOCK_PROGRESSION,
@@ -39,7 +38,6 @@ import {
 	type RoutineWeightUnit,
 	type WeightUnit as WeightUnitType,
 	type Mesocycle,
-	type PrismaPromise,
 	type WorkoutExercise
 } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
@@ -50,6 +48,8 @@ import { createId } from '@paralleldrive/cuid2';
 import { levelSetOf, machineSetOf } from '$lib/utils/weightSets';
 import { userWeightSets } from '$lib/server/weightSets';
 import { z } from 'zod';
+import { blockMembershipForWorkoutInTx, lifecycleTestHooks, reconcileActiveBlock } from '$lib/server/blockLifecycle';
+import { ROUTINES_TRANSACTION_OPTIONS } from '$lib/server/blockCache';
 
 /** What an app version too old to name its routine is told: reopening loads the current version */
 
@@ -93,7 +93,7 @@ export type RoutineOption = {
 
 type ActiveBlockData = {
 	/** With the times it was paused: the week stands still while it is */
-	mesocycle: Mesocycle & { pauses: BlockPause[] };
+	mesocycle: Mesocycle & { pauses: (BlockPause & { id: string })[] };
 	totalWeeks: number;
 	routines: RoutineOption[];
 };
@@ -188,24 +188,6 @@ type WorkoutExercisesWithPreviousData = {
 		userBodyweight: number;
 	};
 };
-
-/** Whether a workout on this date falls in a deload week of the block */
-async function isInDeloadWeek(
-	userId: string,
-	mesocycleId: string,
-	workoutDate: Date | string,
-	timeZone: string | undefined
-) {
-	const mesocycle = await prisma.mesocycle.findFirst({
-		where: { id: mesocycleId, userId },
-		select: { startDate: true, weeklyRIR: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
-	});
-	if (!mesocycle?.startDate) return false;
-	return isDeloadWeek(
-		mesocycle.weeklyRIR,
-		getBlockWeek(mesocycle.startDate, new Date(workoutDate), timeZone, mesocycle.pauses)
-	);
-}
 
 /** How many past performances of an exercise feed its progression */
 const EXERCISE_HISTORY_LENGTH = 8;
@@ -312,6 +294,8 @@ async function findMyRoutineForWorkout(
 	timeZone?: string,
 	now = new Date()
 ) {
+	// A block past its planned weeks is paused where its plan ended before its settings and week are read
+	if (inBlock) await reconcileActiveBlock(userId, timeZone);
 	const [routine, block] = await Promise.all([
 		prisma.exerciseSplitDay.findFirst({
 			where: { exerciseSplit: { userId }, name: routineName },
@@ -519,86 +503,90 @@ export const workouts = t.router({
 		return { message: 'Workout deleted successfully' };
 	}),
 
-	getTodaysWorkoutData: t.procedure.query(async ({ ctx }) => {
-		const [lastWorkout, userSettings] = await Promise.all([
-			prisma.workout.findFirst({
-				where: { userId: ctx.userId },
-				select: { userBodyweight: true, startedAt: true },
-				orderBy: { startedAt: 'desc' }
-			}),
-			prisma.userSettings.findUnique({
-				where: { userId: ctx.userId },
-				select: { welcomeBackEnabled: true, welcomeBackAfterDays: true, homeWeightUnit: true }
-			})
-		]);
+	getTodaysWorkoutData: t.procedure
+		.input(z.strictObject({ timeZone: z.string().optional().catch(undefined) }).optional())
+		.query(async ({ ctx, input }) => {
+			// Only a request that names its timezone can say where the plan ended: the page's own load (the server's) leaves it
+			if (input?.timeZone) await reconcileActiveBlock(ctx.userId, input.timeZone);
+			const [lastWorkout, userSettings] = await Promise.all([
+				prisma.workout.findFirst({
+					where: { userId: ctx.userId },
+					select: { userBodyweight: true, startedAt: true },
+					orderBy: { startedAt: 'desc' }
+				}),
+				prisma.userSettings.findUnique({
+					where: { userId: ctx.userId },
+					select: { welcomeBackEnabled: true, welcomeBackAfterDays: true, homeWeightUnit: true }
+				})
+			]);
 
-		const todaysWorkoutData: TodaysWorkoutData = {
-			workoutExercises: [],
-			userBodyweight: lastWorkout?.userBodyweight ?? null,
-			startedAt: new Date(),
-			endedAt: null,
-			note: null,
-			homeWeightUnit: userSettings?.homeWeightUnit ?? 'KG'
-		};
-
-		// Settings default to on, after 7 days
-		const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
-		const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
-		if (lastWorkout && welcomeBackEnabled) {
-			todaysWorkoutData.welcomeBackCheck = {
-				lastWorkoutStartedAt: lastWorkout.startedAt,
-				afterDays: welcomeBackAfterDays
+			const todaysWorkoutData: TodaysWorkoutData = {
+				workoutExercises: [],
+				userBodyweight: lastWorkout?.userBodyweight ?? null,
+				startedAt: new Date(),
+				endedAt: null,
+				note: null,
+				homeWeightUnit: userSettings?.homeWeightUnit ?? 'KG'
 			};
-		}
 
-		// Routines to pick from are My routines, in a block or not
-		const myRoutines = await prisma.exerciseSplitDay.findMany({
-			where: { exerciseSplit: { userId: ctx.userId } },
-			orderBy: { dayIndex: 'asc' },
-			select: {
-				name: true,
-				weightUnit: true,
-				exercises: {
-					select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
-					orderBy: { exerciseIndex: 'asc' }
-				}
+			// Settings default to on, after 7 days
+			const welcomeBackEnabled = userSettings?.welcomeBackEnabled ?? true;
+			const welcomeBackAfterDays = userSettings?.welcomeBackAfterDays ?? 7;
+			if (lastWorkout && welcomeBackEnabled) {
+				todaysWorkoutData.welcomeBackCheck = {
+					lastWorkoutStartedAt: lastWorkout.startedAt,
+					afterDays: welcomeBackAfterDays
+				};
 			}
-		});
-		const data = await prisma.mesocycle.findFirst({
-			where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
-			include: { pauses: true }
-		});
-		// "Last done": the latest workout from each routine (by name), in this block if there is one
-		const lastDone = await prisma.workout.groupBy({
-			by: ['routineName'],
-			where: {
-				userId: ctx.userId,
-				routineName: { not: null },
-				...(data ? { workoutOfMesocycle: { is: { mesocycleId: data.id } } } : {})
-			},
-			_max: { startedAt: true }
-		});
-		const routines: RoutineOption[] = myRoutines.map((routine) => ({
-			name: routine.name,
-			weightUnit: routine.weightUnit,
-			workoutExercises: routine.exercises,
-			lastDoneAt: lastDone.find((row) => row.routineName === routine.name)?._max.startedAt ?? null
-		}));
-		if (data === null) {
-			todaysWorkoutData.myRoutines = routines;
+
+			// Routines to pick from are My routines, in a block or not
+			const myRoutines = await prisma.exerciseSplitDay.findMany({
+				where: { exerciseSplit: { userId: ctx.userId } },
+				orderBy: { dayIndex: 'asc' },
+				select: {
+					name: true,
+					weightUnit: true,
+					exercises: {
+						select: { name: true, targetMuscleGroup: true, customMuscleGroup: true },
+						orderBy: { exerciseIndex: 'asc' }
+					}
+				}
+			});
+			const data = await prisma.mesocycle.findFirst({
+				where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
+				include: { pauses: true }
+			});
+			// "Last done": the latest workout from each routine (by name), in this block if there is one
+			const lastDone = await prisma.workout.groupBy({
+				by: ['routineName'],
+				where: {
+					userId: ctx.userId,
+					routineName: { not: null },
+					...(data ? { workoutOfMesocycle: { is: { mesocycleId: data.id } } } : {})
+				},
+				_max: { startedAt: true }
+			});
+			const routines: RoutineOption[] = myRoutines.map((routine) => ({
+				name: routine.name,
+				weightUnit: routine.weightUnit,
+				workoutExercises: routine.exercises,
+				lastDoneAt: lastDone.find((row) => row.routineName === routine.name)?._max.startedAt ?? null
+			}));
+			if (data === null) {
+				todaysWorkoutData.myRoutines = routines;
+				return todaysWorkoutData;
+			}
+
+			const mesocycle = data;
+			const totalWeeks = mesocycle.weeklyRIR.length;
+
+			todaysWorkoutData.activeBlock = {
+				mesocycle,
+				totalWeeks,
+				routines
+			};
 			return todaysWorkoutData;
-		}
-
-		const mesocycle = data;
-		const totalWeeks = mesocycle.weeklyRIR.length;
-
-		todaysWorkoutData.activeBlock = {
-			mesocycle,
-			totalWeeks,
-			routines
-		};
-		return todaysWorkoutData;
-	}),
+		}),
 
 	getWorkoutExercisesWithPreviousData: t.procedure
 		.input(
@@ -767,6 +755,7 @@ export const workouts = t.router({
 				where: { userId_name: { userId: ctx.userId, name: input.exerciseName } }
 			});
 			if (!exercise) return null;
+			await reconcileActiveBlock(ctx.userId, input.timeZone);
 			const [history, activeBlock, weightSets] = await Promise.all([
 				getExerciseHistory(ctx.userId, [exercise.id]),
 				prisma.mesocycle.findFirst({
@@ -867,29 +856,10 @@ export const workouts = t.router({
 		};
 
 		const { workoutOfMesocycle } = input.workoutData;
-		// Only one of the user's own blocks
-		const mesocycle = workoutOfMesocycle
-			? await prisma.mesocycle.findFirst({
-					where: { id: workoutOfMesocycle.mesocycle.id, userId: ctx.userId },
-					select: { id: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
-				})
-			: null;
-		if (workoutOfMesocycle && !mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
-		// A workout started while the block was paused is an ordinary one, not part of the block
-		if (workoutOfMesocycle && mesocycle && !isInPause(mesocycle.pauses, startedAt)) {
-			workout.isDeload = await isInDeloadWeek(
-				ctx.userId,
-				workoutOfMesocycle.mesocycle.id,
-				workout.startedAt,
-				input.timeZone
-			);
-			workout.workoutOfMesocycle = {
-				create: { mesocycleId: workoutOfMesocycle.mesocycle.id }
-			};
-		}
 
 		// Exercises as they are: their details change only on the Exercises page
-		const { byName, syncQueries } = await resolveExercises(ctx.userId, withMeasureHints(input), {
+		// (Nothing is restored here, so there are no queries of its own to run with the save)
+		const { byName } = await resolveExercises(ctx.userId, withMeasureHints(input), {
 			restore: false
 		});
 		const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.workoutExercises.map((ex) => ({
@@ -920,15 +890,31 @@ export const workouts = t.router({
 				})
 			);
 
-		const transactionQueries: PrismaPromise<unknown>[] = [
-			prisma.workout.create({ data: workout }),
-			prisma.workoutExercise.createMany({ data: workoutExercises }),
-			prisma.workoutExerciseSet.createMany({ data: workoutExercisesSets }),
-			prisma.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets }),
-			...syncQueries
-		];
-
-		await prisma.$transaction(transactionQueries);
+		// One transaction: the block is locked and its plan-end pause made, the workout's block and week decided, and
+		// the workout written, with nothing able to change the block in between (a Finish waits for the lock)
+		await prisma.$transaction(async (tx) => {
+			if (workoutOfMesocycle) {
+				// Only one of the user's own blocks
+				const membership = await blockMembershipForWorkoutInTx(
+					tx,
+					ctx.userId,
+					workoutOfMesocycle.mesocycle.id,
+					startedAt,
+					input.timeZone
+				);
+				if (!membership.found) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
+				// A workout started while the block was paused is an ordinary one, not part of the block
+				if (membership.inBlock) {
+					workout.isDeload = membership.isDeload;
+					workout.workoutOfMesocycle = { create: { mesocycleId: workoutOfMesocycle.mesocycle.id } };
+				}
+			}
+			await lifecycleTestHooks.beforeWorkoutWrite?.();
+			await tx.workout.create({ data: workout });
+			await tx.workoutExercise.createMany({ data: workoutExercises });
+			await tx.workoutExerciseSet.createMany({ data: workoutExercisesSets });
+			await tx.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets });
+		}, ROUTINES_TRANSACTION_OPTIONS);
 		return { message: 'Workout created successfully', workoutId: workout.id as string };
 	}),
 
@@ -972,18 +958,13 @@ export const workouts = t.router({
 				routineName: existing.routineName
 			};
 
-			const workoutOfMesocycle = await prisma.workoutOfMesocycle.findFirst({
-				where: { workoutId: input.id, workout: { userId: ctx.userId } }
-			});
 			// The week is worked out again only when the start moved (a length-only edit keeps the saved
 			// value); a workout outside a block keeps what it had
 			const startMoved = new Date(input.data.workoutData.startedAt!).getTime() !== existing.startedAt.getTime();
-			workout.isDeload =
-				workoutOfMesocycle && startMoved
-					? await isInDeloadWeek(ctx.userId, workoutOfMesocycle.mesocycleId, workout.startedAt, input.data.timeZone)
-					: existing.isDeload;
+			workout.isDeload = existing.isDeload;
 
-			const { byName, syncQueries } = await resolveExercises(ctx.userId, withMeasureHints(input.data), {
+			// (Nothing is restored here, so there are no queries of its own to run with the save)
+			const { byName } = await resolveExercises(ctx.userId, withMeasureHints(input.data), {
 				restore: false
 			});
 			const workoutExercises: Prisma.WorkoutExerciseUncheckedCreateInput[] = input.data.workoutExercises.map((ex) => ({
@@ -1014,17 +995,30 @@ export const workouts = t.router({
 					})
 				);
 
-			const transactionQueries = [
-				prisma.workout.delete({ where: { id: input.id, userId: ctx.userId } }),
-				prisma.workout.create({ data: workout }),
-				prisma.workoutExercise.createMany({ data: workoutExercises }),
-				prisma.workoutExerciseSet.createMany({ data: workoutExercisesSets }),
-				prisma.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets }),
-				...(workoutOfMesocycle ? [prisma.workoutOfMesocycle.create({ data: workoutOfMesocycle })] : []),
-				...syncQueries
-			];
-
-			await prisma.$transaction(transactionQueries);
+			// One transaction: the workout's block is locked and its plan-end pause made, the week worked out again when
+			// the start moved, and the workout written, with nothing able to change the block in between
+			await prisma.$transaction(async (tx) => {
+				const workoutOfMesocycle = await tx.workoutOfMesocycle.findFirst({
+					where: { workoutId: input.id, workout: { userId: ctx.userId } }
+				});
+				if (workoutOfMesocycle && startMoved) {
+					const membership = await blockMembershipForWorkoutInTx(
+						tx,
+						ctx.userId,
+						workoutOfMesocycle.mesocycleId,
+						new Date(workout.startedAt),
+						input.data.timeZone
+					);
+					workout.isDeload = membership.isDeload;
+				}
+				await lifecycleTestHooks.beforeWorkoutWrite?.();
+				await tx.workout.delete({ where: { id: input.id, userId: ctx.userId } });
+				await tx.workout.create({ data: workout });
+				await tx.workoutExercise.createMany({ data: workoutExercises });
+				await tx.workoutExerciseSet.createMany({ data: workoutExercisesSets });
+				await tx.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets });
+				if (workoutOfMesocycle) await tx.workoutOfMesocycle.create({ data: workoutOfMesocycle });
+			}, ROUTINES_TRANSACTION_OPTIONS);
 			return { message: 'Workout edited successfully' };
 		}),
 

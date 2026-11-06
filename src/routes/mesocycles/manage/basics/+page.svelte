@@ -6,25 +6,13 @@
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 
 	import { goto } from '$app/navigation';
-	import { DELOAD_WEEK, suggestWeeklyRIR } from '$lib/utils/workoutUtils';
+	import { suggestWeeklyRIR } from '$lib/utils/workoutUtils';
+	import { effortOption, effortOptions } from '../effortOptions';
 	import { mesocycleRunes } from '../mesocycleRunes.svelte';
 
 	const MAX_WEEKS = 20;
-	const effortOptions = [
-		{ value: 4, label: '4 RIR' },
-		{ value: 3, label: '3 RIR' },
-		{ value: 2, label: '2 RIR' },
-		{ value: 1, label: '1 RIR' },
-		{ value: 0, label: '0 RIR (failure)' },
-		{ value: DELOAD_WEEK, label: 'Deload' }
-	];
-
 	let weeklyRIR = $state(structuredClone($state.snapshot(mesocycleRunes.mesocycle.weeklyRIR)));
 	let totalWeeks = $state(weeklyRIR.length);
-
-	function getOption(value: number) {
-		return effortOptions.find((option) => option.value === value) ?? effortOptions[1];
-	}
 
 	/** A new length starts from the suggested plan, which can then be adjusted week by week */
 	function changeLength(weeks: number) {
@@ -87,7 +75,7 @@
 					onSelectedChange={(selected) => {
 						if (selected) weeklyRIR[idx] = selected.value;
 					}}
-					selected={getOption(rir)}
+					selected={effortOption(rir)}
 				>
 					<Select.Trigger class="w-40" aria-label="Week {idx + 1} effort">
 						<Select.Value />

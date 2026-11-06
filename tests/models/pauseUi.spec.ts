@@ -257,17 +257,31 @@ test('a block past its planned weeks and paused is "Week 5 - paused" on the dash
 	await expect(page.getByTestId('dashboard-effort-chip')).toHaveCount(0);
 });
 
-test('a block past its planned weeks that is not paused still reads "Block finished" on the dashboard and start page', async ({
-	page,
-	userData
-}) => {
-	const { block } = await seedBlock(userData.userId, { overdue: true });
-	await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
-	await page.goto('/dashboard');
-	// 37 days, no pause: week 6 of 4
-	await expect(page.getByText('Block finished, all 4 weeks done')).toBeVisible();
-	await openStartPage(page);
-	await expect(page.getByText('Block finished')).toBeVisible();
+test.describe('a block past its planned weeks, the phone in UTC', () => {
+	test.use({ timezoneId: 'UTC' });
+
+	test('a block past its planned weeks that is not paused is paused where its plan ended when the dashboard opens', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { overdue: true });
+		await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
+		await page.goto('/dashboard');
+		// 37 days, no pause: it is past its 4 weeks, so the phone has it paused where the plan ended: Week 5, stood still
+		await expect(page.getByText('Week 5 - paused')).toBeVisible();
+		await expect(page.getByText('Block finished')).toHaveCount(0);
+		const pauses = await prisma.mesocyclePause.findMany({ where: { mesocycleId: block.id } });
+		expect(pauses).toHaveLength(1);
+		expect(pauses[0].resumedAt).toBeNull();
+		// Where the plan ended: midnight UTC of the 28th day after the day the seeded block started (the phone is in UTC
+		// here), exactly, and not now
+		const startDay = Math.floor(block.startDate!.getTime() / DAY);
+		expect(pauses[0].pausedAt.toISOString()).toBe(new Date((startDay + 28) * DAY).toISOString());
+		expect(Date.now() - pauses[0].pausedAt.getTime()).toBeGreaterThan(5 * DAY);
+		await openStartPage(page);
+		await expect(page.getByText('Past its planned weeks')).toBeVisible();
+		await expect(page.getByText('Block finished')).toHaveCount(0);
+	});
 });
 
 test('a block past its planned weeks and paused: the mesocycle page and the start page say "Week 5 - paused" and do not claim it is finished', async ({
@@ -291,34 +305,41 @@ test('a block past its planned weeks and paused: the mesocycle page and the star
 	await expect(page.getByRole('button', { name: 'Extend' })).toBeVisible();
 });
 
-test('Extend on the start page opens the block in the mesocycle editor, plan loaded as saved', async ({
+test('Extend on the start page opens the block in its editor, plan loaded as saved, the planned weeks locked', async ({
 	page,
 	userData
 }) => {
-	await seedBlock(userData.userId, { overdue: true });
+	const { block } = await seedBlock(userData.userId, { overdue: true });
 	await openStartPage(page);
 	await expect(page.getByText('Past its planned weeks')).toBeVisible();
 	await page.getByRole('button', { name: 'Extend' }).click();
-	await page.waitForURL('/mesocycles/manage/basics');
+	await page.waitForURL(`/mesocycles/${block.id}/edit`);
 	// The block's own settings are loaded, not a fresh suggestion: its week 4 is 0 RIR, a suggested 4-week plan ends in a deload
 	await expect(page.getByLabel('Mesocycle name')).toHaveValue('MyMeso');
-	await expect(page.getByLabel('Mesocycle duration (weeks)')).toHaveValue('4');
+	await expect(page.getByTestId('edit-weeks').locator('li')).toHaveCount(4);
 	await expect(page.getByLabel('Week 1 effort')).toContainText('3 RIR');
 	await expect(page.getByLabel('Week 4 effort')).toContainText('0 RIR');
+	await expect(page.getByLabel('Week 4 effort')).toBeDisabled();
 });
 
-test('Extend that cannot load the block says so, stays put and can be retried', async ({ page, userData }) => {
-	await seedBlock(userData.userId, { overdue: true });
+test('Extend that cannot load the block says so, can be retried, and opens it once it loads', async ({
+	page,
+	userData
+}) => {
+	const { block } = await seedBlock(userData.userId, { overdue: true });
 	await openStartPage(page);
 	await expect(page.getByText('Past its planned weeks')).toBeVisible();
 	await page.route('**/trpc/mesocycles.findById*', (route) => route.abort());
 	await page.getByRole('button', { name: 'Extend' }).click();
+	await page.waitForURL(`/mesocycles/${block.id}/edit`);
 	await expect(
 		page.getByText("Couldn't open the block for editing. Check your connection and try again.")
 	).toBeVisible();
-	// No navigation, and the editor was not loaded; the button is back for another try
-	await expect(page).not.toHaveURL(/\/mesocycles\/manage\/basics/);
-	await expect(page.getByRole('button', { name: 'Extend' })).toBeEnabled();
+	// Nothing to edit until the block is there; the way back and the retry are
+	await expect(page.getByLabel('Mesocycle name')).toHaveCount(0);
+	await page.unroute('**/trpc/mesocycles.findById*');
+	await page.getByRole('button', { name: 'Try again' }).click();
+	await expect(page.getByLabel('Mesocycle name')).toHaveValue('MyMeso');
 });
 
 test('the detail page switch turns a saved workout off and on, with the tag in the list and on the page', async ({

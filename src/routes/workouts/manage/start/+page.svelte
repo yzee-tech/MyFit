@@ -20,13 +20,14 @@
 		getBlockWeekHere,
 		isBlockPaused,
 		isDeloadWeek,
+		isPastPlannedWeeks,
 		localDaysBetween
 	} from '$lib/utils/workoutUtils';
 	import { useNow } from '$lib/utils/useNow.svelte';
+	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
-	import { fullMesocycleWithoutIds, mesocycleRunes } from '../../../mesocycles/manage/mesocycleRunes.svelte.js';
 	import { exercisesLink } from '../exercisesLink';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
@@ -103,6 +104,46 @@
 	// Whether this workout's lifts are used for progression: on, unless the block is paused (it can be flipped)
 	let countsForProgression = $state(true);
 	let blockFinished = $derived(activeBlock !== undefined && weekNumber !== null && weekNumber > activeBlock.totalWeeks);
+	// A block past its planned weeks is paused where its plan ended, on the phone's days (the page's own load
+	// doesn't know them). One request does both the pausing and the reading, and what it answers is put on the page
+	// itself (not left to the page's streamed load, which can land later): until then the page may show the block
+	// unpaused, and a Finish sent from it would name the wrong pause
+	let reconcileTried = false;
+	let settleState = $state<'idle' | 'settling' | 'ready' | 'error'>('idle');
+	let settleRun = 0;
+	async function settleBlock() {
+		const run = ++settleRun;
+		settleState = 'settling';
+		try {
+			const fresh = await trpc().workouts.getTodaysWorkoutData.query({ timeZone: browserTimeZone() });
+			if (run !== settleRun) return;
+			// A workout being edited meanwhile keeps the page as it is; the card is not shown then, so nothing waits
+			if (workoutRunes.editingWorkoutId !== null) {
+				settleState = 'idle';
+				return;
+			}
+			applyPayload(fresh);
+			settleState = 'ready';
+		} catch {
+			// Never a false ready: Finish stays off and the person can try again
+			if (run === settleRun) settleState = 'error';
+		}
+	}
+	let finishNotReady = $derived(
+		activeBlock !== undefined &&
+			blockFinished &&
+			!blockPaused &&
+			settleState !== 'ready' &&
+			workoutRunes.editingWorkoutId === null
+	);
+	$effect(() => {
+		if (reconcileTried || workoutRunes.editingWorkoutId !== null || !activeBlock?.mesocycle.startDate) return;
+		if (blockPaused || !now.value) return;
+		const { mesocycle, totalWeeks } = activeBlock;
+		if (!isPastPlannedWeeks(mesocycle.startDate!, now.value, browserTimeZone(), mesocycle.pauses, totalWeeks)) return;
+		reconcileTried = true;
+		settleBlock();
+	});
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
 		workoutData === 'loading' ? [] : (workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [])
@@ -124,18 +165,30 @@
 	});
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
+	// Set when the person themselves moves the progression switch (a click or a key on it), never by the page
+	let countsChosen = false;
+	/**
+	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause. The
+	 * progression switch is only ever set here until the person moves it, and what they last chose wins over anything
+	 * else: until then a workout in progress shows the choice it was stored with, and any other follows the block (off
+	 * while it is paused)
+	 */
+	function applyPayload(payload: TodaysWorkoutData) {
+		workoutData = payload;
+		if (countsChosen) return;
+		countsForProgression = inProgress
+			? (workoutRunes.workoutData?.countsForProgression ?? true)
+			: !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
+	}
+
 	$effect(() => {
 		data.workoutData.then((data) => {
-			if (workoutRunes.editingWorkoutId === null) workoutData = data;
-			else workoutData = workoutRunes.workoutData as TodaysWorkoutData;
+			const payload = workoutRunes.editingWorkoutId === null ? data : (workoutRunes.workoutData as TodaysWorkoutData);
+			applyPayload(payload);
 
-			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
-			// Decided when the page is shown: a workout in progress keeps its own choice
-			countsForProgression = inProgress
-				? (workoutRunes.workoutData?.countsForProgression ?? true)
-				: !isBlockPaused(workoutData.activeBlock?.mesocycle.pauses);
-			const options = workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [];
-			if (workoutData.activeBlock !== undefined || options.length > 0) useRoutine = true;
+			userBodyweight = userBodyweight ?? toHomeUnit(payload.userBodyweight);
+			const options = payload.activeBlock?.routines ?? payload.myRoutines ?? [];
+			if (payload.activeBlock !== undefined || options.length > 0) useRoutine = true;
 			// Back from a workout in progress: it stays picked
 			if (inProgress) {
 				useRoutine = options.some((routine) => routine.name === inProgressRoutineName);
@@ -206,7 +259,12 @@
 			// All of the old workout's saved state goes (a failed load, reps-only marks...), not only some of it
 			workoutRunes.resetStores();
 			workoutRunes.workoutData = newWorkoutData;
-		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
+		} else if (workoutRunes.workoutData === null) {
+			workoutRunes.workoutData = newWorkoutData;
+		} else {
+			// Continue keeps the workout's start and exercises, but takes the progression choice shown here
+			workoutRunes.workoutData.countsForProgression = newWorkoutData.countsForProgression;
+		}
 		workoutRunes.saveStoresToLocalStorage();
 
 		goto(
@@ -222,36 +280,36 @@
 		if (!activeBlock) return;
 		finishingBlock = true;
 		const { mesocycle } = activeBlock;
+		const openPauseId = mesocycle.pauses.find((pause) => pause.resumedAt === null)?.id ?? null;
 		try {
 			const { message } = await trpc().mesocycles.progressToNextStage.mutate({
 				id: mesocycle.id,
 				startDate: mesocycle.startDate,
-				endDate: null
+				endDate: null,
+				// Only the pause this screen shows open (none, if it shows none) is ended with the block
+				openPauseId,
+				timeZone: browserTimeZone()
 			});
 			toast.success(message);
 			await invalidate('workouts:start');
 			await goto(`/mesocycles/${mesocycle.id}?completion`);
+		} catch (error) {
+			// Changed elsewhere since this screen loaded: say so, and show the block as it is now
+			if (error instanceof TRPCClientError) {
+				toast.error(error.message);
+				await invalidate('workouts:start');
+			}
 		} finally {
 			finishingBlock = false;
 		}
 	}
 
-	// Extend: open the block in the mesocycle editor, its weeks and settings loaded as saved
+	// Extend: open the block in its editor (it loads the block as it is now)
 	async function extendBlock() {
 		if (!activeBlock) return;
 		extendingBlock = true;
 		try {
-			// The start page's block lacks its stored set changes: fetch it whole, like the Edit menu does
-			const mesocycle = await trpc().mesocycles.findById.query(activeBlock.mesocycle.id);
-			if (!mesocycle) {
-				toast.error('Block not found');
-				return;
-			}
-			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
-			await goto('/mesocycles/manage/basics');
-		} catch {
-			// Offline or the fetch failed: stay put, nothing loaded, free to try again
-			toast.error("Couldn't open the block for editing. Check your connection and try again.");
+			await goto(`/mesocycles/${activeBlock.mesocycle.id}/edit`);
 		} finally {
 			extendingBlock = false;
 		}
@@ -273,20 +331,12 @@
 	{#if activeBlock && blockFinished && workoutRunes.editingWorkoutId === null}
 		<Card.Root class="mb-1">
 			<Card.Header>
-				{#if blockPaused}
-					<!-- Paused past its planned weeks: finishing is still the move, but it is not finished yet -->
-					<Card.Title>Past its planned weeks</Card.Title>
-					<Card.Description>
-						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done, and it is paused. Finish it to see
-						how it went, then start a new one. If you want to keep going, extend it instead.
-					</Card.Description>
-				{:else}
-					<Card.Title>Block finished &nbsp;🎉</Card.Title>
-					<Card.Description>
-						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done. Finish it to see how it went, then
-						start a new one. If you want to keep going, extend it instead.
-					</Card.Description>
-				{/if}
+				<Card.Title>Past its planned weeks</Card.Title>
+				<Card.Description>
+					All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done{blockPaused
+						? ', and it is paused'
+						: ''}. Finish it to see how it went, then start a new one. If you want to keep going, extend it instead.
+				</Card.Description>
 			</Card.Header>
 			<Card.Footer class="flex justify-end gap-1">
 				<Button disabled={extendingBlock} onclick={extendBlock} variant="secondary">
@@ -296,7 +346,7 @@
 						Extend
 					{/if}
 				</Button>
-				<Button disabled={finishingBlock} onclick={finishBlock}>
+				<Button disabled={finishingBlock || finishNotReady} onclick={finishBlock}>
 					{#if finishingBlock}
 						<LoaderCircle class="animate-spin" />
 					{:else}
@@ -304,6 +354,12 @@
 					{/if}
 				</Button>
 			</Card.Footer>
+			{#if settleState === 'error' && finishNotReady}
+				<div class="flex items-center justify-between gap-2 px-6 pb-4 text-sm" role="alert">
+					<span>Couldn't check where its plan ended. Check your connection.</span>
+					<Button onclick={settleBlock} size="sm" variant="secondary">Try again</Button>
+				</div>
+			{/if}
 		</Card.Root>
 	{/if}
 	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined && routines.length === 0}
@@ -464,7 +520,12 @@
 					{/if}
 				</p>
 			</div>
-			<Switch id="counts-for-progression" name="counts-for-progression" bind:checked={countsForProgression} />
+			<Switch
+				id="counts-for-progression"
+				name="counts-for-progression"
+				bind:checked={countsForProgression}
+				on:click={() => (countsChosen = true)}
+			/>
 		</div>
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>

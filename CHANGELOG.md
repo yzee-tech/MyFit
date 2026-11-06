@@ -2,6 +2,73 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-06: one editor for a block's weeks, and a block pauses itself when its plan is over
+
+### Changed
+
+- **Edit and Extend are one page.** Edit on a block (or Extend, when it has run all its weeks) opens one page: the
+  name, a row for each week, and the progression settings, with Cancel and Save. There are no Basics and Progression
+  steps, no duration box and no "Use suggested" when you edit a block. **+ Add week** adds one week like the last one
+  (a Deload copies as a Deload) and never touches the others; the bin removes a week that is still ahead (never the
+  last one left). A block can have up to 52 weeks; a new block still starts at 20 at the most, and a block longer than
+  20 is never cut short. New and Clone work as before.
+- **Save goes back to the list of mesocycles.** On a block past its planned weeks the button that ends it reads
+  **Finish block** (it said Stop).
+- **Your changes wait for Save.** Cancel throws all of them away: nothing is saved, and they are not there when you
+  open the block again, in New, or in another block. If Save fails (no connection, a refusal, an error) you stay on the
+  page with everything you changed and can try again.
+- **Weeks that are done or in progress are locked.** On a running block the weeks up to and including the current one
+  can't be changed or removed; the weeks ahead can. If the week turns while you are editing, Save says which weeks are
+  locked now and keeps your changes; **Restore** puts a locked week back. A finished block can't be edited (Clone
+  still works).
+
+### Added
+
+- **A block pauses itself when its plan is over.** Once a block has run all its planned weeks it is paused at the
+  moment its plan ended, not when you next open the app, and it is never finished for you. A block left for weeks does
+  not count weeks that are not in its plan: it stays at "Past its planned weeks", with Extend and Finish block.
+- **Extend, then Resume.** Adding weeks and saving does not resume the block: Resume is its own step, and it waits
+  until the block has another week to go on into. Finish block ends it and closes the pause.
+- A workout that is saved is written together with its place in the block in one step, so a block can't be finished
+  or changed between the two.
+- A workout you start after the plan ended is an ordinary workout, not part of the block. One you started before it
+  and save later keeps its place.
+
+### Fixed
+
+- **"Force RIR matching" now toggles its own switch.** Its label pointed at "Take last set to failure", so tapping
+  the label changed the other one.
+- **A screen that is out of date can no longer start or finish a block again.** Start and Finish now check the block
+  itself, not what the screen showed: a Start from a screen that saw the block unused, after it was started or even
+  finished on another device, and a repeated or old Finish, are refused with "changed on another device". A finished
+  block keeps its dates and no longer takes back My routines.
+- **A workout belongs to a block only if it began inside it.** One that began before the block started, at or after it
+  was finished, or (for a block finished before it was paused where its plan ended) after the place its plan ended, is
+  an ordinary workout. One that began before the block was finished and is saved later still belongs to it. Editing the
+  start of a workout that is already in a block keeps its place in the block, as before.
+- **Finish is offered only once the page knows the block's real state.** A block past its plan is paused by a request
+  the page sends when it opens. Until the answer was on the screen, Finish was already on offer, and a quick tap named
+  "no pause" while one existed and was refused as "changed on another device". On the start page and on the block
+  page, Finish now waits for that answer to be read and shown (also when another request had already made the pause),
+  and if it can't be read the page says so and offers **Try again** instead of looking ready.
+- **A workout started after the automatic pause is not counted toward progression by default.** The start page's
+  "Counts toward progression" switch now follows the block when the page learns it has been paused (it stayed on); a
+  workout in progress keeps its own choice, and a switch you have turned yourself is left alone.
+- **Nothing you change in the editor is lost while Save is on its way.** The name, the weeks, Add week, the bins and
+  the progression settings are switched off until the answer comes, so what is saved is what was on the screen when
+  you pressed Save; if Save fails they all come back, with everything you changed.
+
+### Known limits
+
+- A pause made by hand on the first day of a week leaves that week open to editing while the block is paused; it locks
+  when you resume.
+- The block's days are counted in the timezone of the phone that notices the plan has ended. Travelling between
+  timezones in that moment can move the end by a day, and the weeks locked while paused with it.
+- Workouts that were already saved in a week after the plan ended keep their link to the block. The week they show
+  now counts from where the plan ended (for example "Week 6" where it said "Week 7").
+
+---
+
 ## 2026-11-05: scrolling with an exercise ⋯ menu open leaves the list where you scrolled it
 
 ### Fixed
