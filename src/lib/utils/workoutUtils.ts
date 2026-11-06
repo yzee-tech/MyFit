@@ -476,6 +476,29 @@ function pausedLocalDays(pauses: BlockPause[] | undefined, now: Date, zone: stri
 }
 
 /**
+ * The days a block has been running, counted in calendar days of the timezone (the phone's) with the days it
+ * spent paused taken out: what the week is made of (7 days a week). A missing, invalid or over-long timezone
+ * counts the days in UTC. An unreadable start or `now` is 0 days. It never throws
+ */
+export function blockActiveDays(
+	startDate: Date | string,
+	now: Date = new Date(),
+	timeZone?: string | null,
+	pauses?: BlockPause[]
+): number {
+	const start = new Date(startDate);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(now.getTime())) return 0;
+	const days = (zone: string) =>
+		localDayNumber(now, zone) - localDayNumber(start, zone) - pausedLocalDays(pauses, now, zone);
+	try {
+		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
+		return days(timeZone);
+	} catch {
+		return days('UTC');
+	}
+}
+
+/**
  * 1-based week of a block, counted in calendar days of the timezone (the phone's): the 8th day
  * since the start day is in Week 2, whatever time the block was started at. Days the block was paused
  * are not counted, so a paused block's week stands still. A missing, empty, invalid or over-long
@@ -487,18 +510,97 @@ export function getBlockWeek(
 	timeZone?: string | null,
 	pauses?: BlockPause[]
 ): number {
-	const start = new Date(startDate);
-	if (Number.isNaN(start.getTime()) || Number.isNaN(now.getTime())) return 1;
-	const days = (zone: string) =>
-		localDayNumber(now, zone) - localDayNumber(start, zone) - pausedLocalDays(pauses, now, zone);
-	let elapsedDays: number;
-	try {
-		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) throw new RangeError('No usable timezone');
-		elapsedDays = days(timeZone);
-	} catch {
-		elapsedDays = days('UTC');
-	}
+	const elapsedDays = blockActiveDays(startDate, now, timeZone, pauses);
 	return Math.max(1, Math.floor(elapsedDays / DAYS_IN_BLOCK_WEEK) + 1);
+}
+
+/**
+ * Whether the block has run all its planned weeks: its days (paused ones out) have reached 7 for each week
+ * of the plan. For a paused block that is where it stands still, so a block paused at the end of its plan is
+ * past its planned weeks until it is given another week
+ */
+export function isPastPlannedWeeks(
+	startDate: Date | string,
+	now: Date,
+	timeZone: string | null | undefined,
+	pauses: BlockPause[] | undefined,
+	plannedWeeks: number
+): boolean {
+	return blockActiveDays(startDate, now, timeZone, pauses) >= plannedWeeks * DAYS_IN_BLOCK_WEEK;
+}
+
+/**
+ * How many weeks of a started block are locked, counted from Week 1: the past weeks and the current one can't
+ * be changed, later weeks can.
+ * - Running: through the week it is in.
+ * - Paused: the weeks with at least one of the block's days in them, `ceil(days / 7)`. Paused at the end of
+ *   its plan that is every planned week, so the weeks added after it stay open however often the plan is
+ *   extended. (A pause on the first day of a week leaves that week open while it is paused: it locks on Resume.)
+ * Never more than the plan has
+ */
+export function lockedWeekCount(
+	startDate: Date | string,
+	now: Date,
+	timeZone: string | null | undefined,
+	pauses: BlockPause[] | undefined,
+	plannedWeeks: number
+): number {
+	const days = Math.max(0, blockActiveDays(startDate, now, timeZone, pauses));
+	const locked = isBlockPaused(pauses)
+		? Math.ceil(days / DAYS_IN_BLOCK_WEEK)
+		: Math.floor(days / DAYS_IN_BLOCK_WEEK) + 1;
+	return Math.min(plannedWeeks, locked);
+}
+
+const DAY_MS = 86400000;
+
+/** The timezone to count days in: the one given, else UTC (as every week calculation does) */
+function usableZone(timeZone: string | null | undefined): string {
+	try {
+		if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) return 'UTC';
+		localDayNumber(new Date(0), timeZone);
+		return timeZone;
+	} catch {
+		return 'UTC';
+	}
+}
+
+/** The first instant of a calendar day (a number of days since 1970, as `localDayNumber` gives) in a timezone */
+function startOfLocalDay(dayNumber: number, zone: string): Date {
+	// Local days start between 14 hours before and 12 hours after that day's UTC midnight
+	let low = dayNumber * DAY_MS - 15 * 60 * 60 * 1000;
+	let high = dayNumber * DAY_MS + 13 * 60 * 60 * 1000;
+	while (low < high) {
+		const mid = Math.floor((low + high) / 2);
+		if (localDayNumber(new Date(mid), zone) >= dayNumber) high = mid;
+		else low = mid + 1;
+	}
+	return new Date(low);
+}
+
+/**
+ * The moment a block's plan ended: the start of the calendar day on which its days (paused ones out) reached
+ * 7 for each planned week. A pause begun there freezes the block at the end of its plan (its week stands at
+ * the one after the last), so a block opened weeks later is still where it ended. Earlier pauses are taken
+ * out of the days; none may reach past this moment. Null if it never gets there
+ */
+export function endOfPlanBoundary(
+	startDate: Date | string,
+	pauses: BlockPause[] | undefined,
+	plannedWeeks: number,
+	timeZone?: string | null
+): Date | null {
+	const start = new Date(startDate);
+	if (Number.isNaN(start.getTime()) || plannedWeeks < 1) return null;
+	const zone = usableZone(timeZone);
+	const startDay = localDayNumber(start, zone);
+	const target = plannedWeeks * DAYS_IN_BLOCK_WEEK;
+	// Each day adds at most one to the days run, and a paused day adds none
+	for (let day = startDay + target; day <= startDay + target + 3660; day++) {
+		const dayStart = startOfLocalDay(day, zone);
+		if (day - startDay - pausedLocalDays(pauses, dayStart, zone) >= target) return dayStart;
+	}
+	return null;
 }
 
 /**
