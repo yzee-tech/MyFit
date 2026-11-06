@@ -257,28 +257,31 @@ test('a block past its planned weeks and paused is "Week 5 - paused" on the dash
 	await expect(page.getByTestId('dashboard-effort-chip')).toHaveCount(0);
 });
 
-test('a block past its planned weeks that is not paused is paused where its plan ended when the dashboard opens', async ({
-	page,
-	userData
-}) => {
-	const { block } = await seedBlock(userData.userId, { overdue: true });
-	await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
-	await page.goto('/dashboard');
-	// 37 days, no pause: it is past its 4 weeks, so the phone has it paused where the plan ended: Week 5, stood still
-	await expect(page.getByText('Week 5 - paused')).toBeVisible();
-	await expect(page.getByText('Block finished')).toHaveCount(0);
-	const pauses = await prisma.mesocyclePause.findMany({ where: { mesocycleId: block.id } });
-	expect(pauses).toHaveLength(1);
-	expect(pauses[0].resumedAt).toBeNull();
-	// Where the plan ended (the 28th day after the start day), not now
-	const startDay = Math.floor((Date.now() - 37 * DAY) / DAY);
-	const planEnd = new Date((startDay + 28) * DAY);
-	const zoneOffset = new Date().getTimezoneOffset() * 60 * 1000;
-	expect(Math.abs(pauses[0].pausedAt.getTime() - (planEnd.getTime() + zoneOffset))).toBeLessThan(DAY);
-	expect(Date.now() - pauses[0].pausedAt.getTime()).toBeGreaterThan(5 * DAY);
-	await openStartPage(page);
-	await expect(page.getByText('Past its planned weeks')).toBeVisible();
-	await expect(page.getByText('Block finished')).toHaveCount(0);
+test.describe('a block past its planned weeks, the phone in UTC', () => {
+	test.use({ timezoneId: 'UTC' });
+
+	test('a block past its planned weeks that is not paused is paused where its plan ended when the dashboard opens', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { overdue: true });
+		await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
+		await page.goto('/dashboard');
+		// 37 days, no pause: it is past its 4 weeks, so the phone has it paused where the plan ended: Week 5, stood still
+		await expect(page.getByText('Week 5 - paused')).toBeVisible();
+		await expect(page.getByText('Block finished')).toHaveCount(0);
+		const pauses = await prisma.mesocyclePause.findMany({ where: { mesocycleId: block.id } });
+		expect(pauses).toHaveLength(1);
+		expect(pauses[0].resumedAt).toBeNull();
+		// Where the plan ended: midnight UTC of the 28th day after the day the seeded block started (the phone is in UTC
+		// here), exactly, and not now
+		const startDay = Math.floor(block.startDate!.getTime() / DAY);
+		expect(pauses[0].pausedAt.toISOString()).toBe(new Date((startDay + 28) * DAY).toISOString());
+		expect(Date.now() - pauses[0].pausedAt.getTime()).toBeGreaterThan(5 * DAY);
+		await openStartPage(page);
+		await expect(page.getByText('Past its planned weeks')).toBeVisible();
+		await expect(page.getByText('Block finished')).toHaveCount(0);
+	});
 });
 
 test('a block past its planned weeks and paused: the mesocycle page and the start page say "Week 5 - paused" and do not claim it is finished', async ({

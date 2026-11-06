@@ -46,6 +46,12 @@ async function seedBlock(
 	return { caller, block };
 }
 
+// Held requests are let go when a test ends, however it ends, so none is left waiting
+const gates: Array<() => void> = [];
+test.afterEach(() => {
+	for (const release of gates.splice(0)) release();
+});
+
 const week = (page: Page, n: number) => page.getByLabel(`Week ${n} effort`);
 const weekRows = (page: Page) => page.getByTestId('edit-weeks').locator('li');
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save', exact: true });
@@ -364,6 +370,7 @@ test.describe('the draft', () => {
 		await expect(weekRows(page)).toHaveCount(5);
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => (release = resolve));
+		gates.push(release);
 		let fail = false;
 		await page.route('**/trpc/mesocycles.editById*', async (route) => {
 			await gate;
@@ -384,11 +391,11 @@ test.describe('the draft', () => {
 		];
 		for (const control of controls) await expect(control).toBeDisabled();
 		await expect(page.getByRole('slider')).toHaveAttribute('aria-disabled', 'true');
-		// Pressing keys on the slider moves nothing
-		await page
-			.getByRole('slider')
-			.press('ArrowRight')
-			.catch(() => undefined);
+		// Pressing keys on the slider moves nothing: focus is put on it by the page itself, so the key goes where it would
+		// for a person, and any error in delivering it fails the test instead of passing as "nothing moved"
+		await page.getByRole('slider').evaluate((element) => (element as HTMLElement).focus());
+		await page.keyboard.press('ArrowRight');
+		await expect(page.getByRole('slider')).toHaveAttribute('aria-disabled', 'true');
 		await expect(page.getByText('2.5%')).toBeVisible();
 		await expect(page).toHaveURL(`/mesocycles/${block.id}/edit`);
 		// It fails: all of it is free again, and the draft is what it was
@@ -414,6 +421,7 @@ test.describe('the draft', () => {
 		await page.getByRole('button', { name: 'Add week' }).click();
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => (release = resolve));
+		gates.push(release);
 		await page.route('**/trpc/mesocycles.editById*', async (route) => {
 			await gate;
 			await route.continue();
@@ -595,7 +603,7 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await expect.poll(async () => (await blockRow(block.id)).pauses.length).toBe(1);
 		const [pause] = (await blockRow(block.id)).pauses;
 		// Paused where the plan ended (midnight, 28 days after the start day), not when it was noticed
-		const startDay = Math.floor((Date.now() - 40 * DAY) / DAY);
+		const startDay = Math.floor(block.startDate!.getTime() / DAY);
 		expect(pause.pausedAt.toISOString()).toBe(new Date((startDay + 28) * DAY).toISOString());
 		expect(pause.resumedAt).toBeNull();
 		expect((await blockRow(block.id)).endDate).toBeNull();
@@ -668,11 +676,20 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await page.getByLabel('create-workout').click();
 		await expect(page.getByText('Past its planned weeks')).toBeVisible();
 		await expect.poll(async () => (await blockRow(block.id)).pauses.length).toBe(1);
+		const before = await blockRow(block.id);
+		// The pause is there and open before Finish; the empty list would also have "nothing open"
+		expect(before.pauses[0].resumedAt).toBeNull();
 		await page.getByRole('button', { name: 'Finish block' }).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
 		const saved = await blockRow(block.id);
 		expect(saved.endDate).not.toBeNull();
-		expect(saved.pauses.filter((p) => p.resumedAt === null)).toHaveLength(0);
+		// The same row, closed at the moment the block ended; the plan itself untouched
+		expect(saved.pauses).toHaveLength(1);
+		expect(saved.pauses[0].id).toBe(before.pauses[0].id);
+		expect(saved.pauses[0].pausedAt.toISOString()).toBe(before.pauses[0].pausedAt.toISOString());
+		expect(saved.pauses[0].resumedAt?.toISOString()).toBe(saved.endDate!.toISOString());
+		expect(saved.weeklyRIR).toEqual(before.weeklyRIR);
+		expect(saved.startDate?.toISOString()).toBe(before.startDate?.toISOString());
 	});
 
 	test('a workout started after the plan ended is an ordinary workout, and the block shows "Past its planned weeks"', async ({
@@ -743,7 +760,7 @@ test.describe('a screen that is out of date', () => {
 	}) => {
 		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, -1], startedDaysAgo: 40 });
 		// Paused where its plan ended
-		const startDay = Math.floor((Date.now() - 40 * DAY) / DAY);
+		const startDay = Math.floor(block.startDate!.getTime() / DAY);
 		const pause = await prisma.mesocyclePause.create({
 			data: { mesocycleId: block.id, pausedAt: new Date((startDay + 28) * DAY) }
 		});
@@ -768,7 +785,7 @@ test.describe('the pause is made when these open', () => {
 		await expect(page.getByTestId('edit-past-plan')).toBeVisible();
 		for (const n of [1, 2, 3, 4]) await expect(week(page, n)).toBeDisabled();
 		expect((await blockRow(block.id)).pauses).toHaveLength(1);
-		const startDay = Math.floor((Date.now() - 40 * DAY) / DAY);
+		const startDay = Math.floor(block.startDate!.getTime() / DAY);
 		expect((await blockRow(block.id)).pauses[0].pausedAt.toISOString()).toBe(
 			new Date((startDay + 28) * DAY).toISOString()
 		);

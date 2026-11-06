@@ -45,6 +45,11 @@ async function seedOverdueBlock(userId: string) {
 
 const state = (id: string) => prisma.mesocycle.findUniqueOrThrow({ where: { id }, include: { pauses: true } });
 
+const heldGates: Array<() => void> = [];
+test.afterEach(() => {
+	for (const release of heldGates.splice(0)) release();
+});
+
 /**
  * Holds every request matching `pattern` until `release()`. It is then let through, or, after `failOnRelease()`,
  * dropped as if the network failed
@@ -52,6 +57,8 @@ const state = (id: string) => prisma.mesocycle.findUniqueOrThrow({ where: { id }
 async function hold(page: Page, pattern: string) {
 	let release!: () => void;
 	const gate = new Promise<void>((resolve) => (release = resolve));
+	// Let go when the test ends, however it ends, so nothing is left waiting
+	heldGates.push(() => release());
 	let fail = false;
 	await page.route(pattern, async (route) => {
 		await gate;
@@ -62,6 +69,23 @@ async function hold(page: Page, pattern: string) {
 		release: () => release(),
 		failOnRelease: () => (fail = true)
 	};
+}
+
+/**
+ * The one pause that ends the plan: at the boundary, still open before Finish, and after it the same row closed at
+ * the moment the block ended (an empty list satisfies "nothing is open", so the row itself is checked)
+ */
+async function expectBoundaryPause(blockId: string, boundary: Date, closed: boolean) {
+	const { pauses, endDate } = await state(blockId);
+	expect(pauses).toHaveLength(1);
+	expect(pauses[0].pausedAt.toISOString()).toBe(boundary.toISOString());
+	if (closed) {
+		expect(endDate).not.toBeNull();
+		expect(pauses[0].resumedAt?.toISOString()).toBe(endDate!.toISOString());
+	} else {
+		expect(pauses[0].resumedAt).toBeNull();
+		expect(endDate).toBeNull();
+	}
 }
 
 const START = '/workouts/manage/start';
@@ -75,7 +99,7 @@ const confirmFinish = async (page: Page) => {
 
 test.describe('the start page: Finish waits until the page has the block as it is now', () => {
 	test('Finish is off while the pause and the fresh read are on their way, then works', async ({ page, userData }) => {
-		const { block } = await seedOverdueBlock(userData.userId);
+		const { block, boundary } = await seedOverdueBlock(userData.userId);
 		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
 		await page.goto(START);
 		await expect(page.getByText('Past its planned weeks')).toBeVisible();
@@ -85,11 +109,16 @@ test.describe('the start page: Finish waits until the page has the block as it i
 		fresh.release();
 		await expect(page.getByText(/and it is paused/)).toBeVisible();
 		await expect(finishOnStart(page)).toBeEnabled();
+		// The pause is really there, at the boundary, before Finish
+		await expectBoundaryPause(block.id, boundary, false);
+		const pauseId = (await state(block.id)).pauses[0].id;
 		await finishOnStart(page).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
-		const after = await state(block.id);
-		expect(after.endDate).not.toBeNull();
-		expect(after.pauses.filter((pause) => pause.resumedAt === null)).toHaveLength(0);
+		await expectBoundaryPause(block.id, boundary, true);
+		// That same row was closed, and the plan was left as it was
+		expect((await state(block.id)).pauses[0].id).toBe(pauseId);
+		expect((await state(block.id)).weeklyRIR).toEqual(block.weeklyRIR);
+		expect((await state(block.id)).startDate?.toISOString()).toBe(block.startDate?.toISOString());
 	});
 
 	test('the pause was made by another request first (the answer says nothing was created): Finish still names it', async ({
@@ -107,17 +136,14 @@ test.describe('the start page: Finish waits until the page has the block as it i
 		await expect(finishOnStart(page)).toBeEnabled();
 		await finishOnStart(page).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
-		const after = await state(block.id);
-		expect(after.endDate).not.toBeNull();
-		expect(after.pauses).toHaveLength(1);
-		expect(after.pauses[0].resumedAt).not.toBeNull();
+		await expectBoundaryPause(block.id, boundary, true);
 	});
 
 	test('the read fails: an error and Try again, never a Finish that looks ready; Try again then works', async ({
 		page,
 		userData
 	}) => {
-		const { block } = await seedOverdueBlock(userData.userId);
+		const { block, boundary } = await seedOverdueBlock(userData.userId);
 		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
 		fresh.failOnRelease();
 		await page.goto(START);
@@ -132,7 +158,7 @@ test.describe('the start page: Finish waits until the page has the block as it i
 		await expect(page.getByRole('alert').filter({ hasText: "Couldn't check where its plan ended" })).toHaveCount(0);
 		await finishOnStart(page).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
-		expect((await state(block.id)).endDate).not.toBeNull();
+		await expectBoundaryPause(block.id, boundary, true);
 	});
 });
 
@@ -141,7 +167,7 @@ test.describe('the block page: the same', () => {
 		page,
 		userData
 	}) => {
-		const { block } = await seedOverdueBlock(userData.userId);
+		const { block, boundary } = await seedOverdueBlock(userData.userId);
 		const pause = await hold(page, '**/trpc/mesocycles.reconcileEndOfPlan*');
 		const read = await hold(page, '**/trpc/mesocycles.findById*');
 		await page.goto(`/mesocycles/${block.id}`);
@@ -150,14 +176,17 @@ test.describe('the block page: the same', () => {
 		pause.release();
 		// The pause is made, but the read of the block is still held: Finish stays off
 		await expect.poll(async () => (await state(block.id)).pauses.length).toBe(1);
+		await expectBoundaryPause(block.id, boundary, false);
 		await expect(finishOnBlock(page)).toBeDisabled();
 		read.release();
 		await expect(page.getByTestId('mesocycle-paused-week')).toBeVisible();
 		await expect(finishOnBlock(page)).toBeEnabled();
+		const pauseId = (await state(block.id)).pauses[0].id;
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
-		const after = await state(block.id);
-		expect(after.pauses.filter((p) => p.resumedAt === null)).toHaveLength(0);
+		await expectBoundaryPause(block.id, boundary, true);
+		expect((await state(block.id)).pauses[0].id).toBe(pauseId);
+		expect((await state(block.id)).weeklyRIR).toEqual(block.weeklyRIR);
 	});
 
 	test('the pause was made by another request first (created: false): the block is read anyway and Finish works', async ({
@@ -174,13 +203,11 @@ test.describe('the block page: the same', () => {
 		await expect(finishOnBlock(page)).toBeEnabled();
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
-		const after = await state(block.id);
-		expect(after.pauses).toHaveLength(1);
-		expect(after.pauses[0].resumedAt).not.toBeNull();
+		await expectBoundaryPause(block.id, boundary, true);
 	});
 
 	test('the read fails: an error and Try again, Finish stays off; Try again then works', async ({ page, userData }) => {
-		const { block } = await seedOverdueBlock(userData.userId);
+		const { block, boundary } = await seedOverdueBlock(userData.userId);
 		const read = await hold(page, '**/trpc/mesocycles.findById*');
 		read.failOnRelease();
 		await page.goto(`/mesocycles/${block.id}`);
@@ -193,6 +220,7 @@ test.describe('the block page: the same', () => {
 		await expect(finishOnBlock(page)).toBeEnabled();
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
+		await expectBoundaryPause(block.id, boundary, true);
 	});
 });
 
@@ -277,6 +305,20 @@ test.describe('what the start page shows once the automatic pause has been appli
 		await expect(switchOf(page)).toBeChecked();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await page.waitForURL(/\/workouts\/manage\/exercises/);
+		// The workout is in progress for the start page only once what the exercises page loads has been saved:
+		// the exercises (they arrive after the URL changes), the choice stored with the workout, and not editing
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const saved = JSON.parse(localStorage.getItem('workoutRunes') ?? 'null');
+					return (
+						(saved?.workoutExercises?.length ?? 0) > 0 &&
+						saved?.workoutData?.countsForProgression === true &&
+						(saved?.editingWorkoutId ?? null) === null
+					);
+				})
+			)
+			.toBe(true);
 		await prisma.mesocycle.update({ where: { id: blockId }, data: { startDate: new Date(Date.now() - 8 * DAY) } });
 	};
 
@@ -286,8 +328,19 @@ test.describe('what the start page shows once the automatic pause has been appli
 	}) => {
 		const { block } = await seedOverdueBlock(userData.userId);
 		await beginWorkoutThenEndPlan(page, block.id);
-		await page.goto(START);
+		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
+		try {
+			await page.goto(START);
+			// In progress is real (not the page without a workout), and nothing has paused the block yet
+			await expect(page.getByRole('button', { name: 'Continue workout' })).toBeVisible();
+			await expect(switchOf(page)).toBeChecked();
+			expect((await state(block.id)).pauses).toHaveLength(0);
+		} finally {
+			fresh.release();
+		}
 		await expect(page.getByText(/and it is paused/)).toBeVisible();
+		expect((await state(block.id)).pauses).toHaveLength(1);
+		// A paused block alone would switch it off: it is on because the workout was saved on
 		await expect(switchOf(page)).toBeChecked();
 	});
 
@@ -298,13 +351,20 @@ test.describe('what the start page shows once the automatic pause has been appli
 		const { block } = await seedOverdueBlock(userData.userId);
 		await beginWorkoutThenEndPlan(page, block.id);
 		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
-		await page.goto(START);
-		// The stored choice, until the person moves the switch
-		await expect(switchOf(page)).toBeChecked();
-		await switchOf(page).click();
-		await expect(switchOf(page)).not.toBeChecked();
-		fresh.release();
+		try {
+			await page.goto(START);
+			await expect(page.getByRole('button', { name: 'Continue workout' })).toBeVisible();
+			// The stored choice, until the person moves the switch; nothing has paused the block yet
+			await expect(switchOf(page)).toBeChecked();
+			expect((await state(block.id)).pauses).toHaveLength(0);
+			await switchOf(page).click();
+			await expect(switchOf(page)).not.toBeChecked();
+		} finally {
+			fresh.release();
+		}
 		await expect(page.getByText(/and it is paused/)).toBeVisible();
+		expect((await state(block.id)).pauses).toHaveLength(1);
+		// The fresh answer for the paused block does not undo what the person just chose over what was stored
 		await expect(switchOf(page)).not.toBeChecked();
 	});
 });
@@ -313,7 +373,7 @@ test('the block page: the pause request itself fails: an error and Try again, Fi
 	page,
 	userData
 }) => {
-	const { block } = await seedOverdueBlock(userData.userId);
+	const { block, boundary } = await seedOverdueBlock(userData.userId);
 	const pause = await hold(page, '**/trpc/mesocycles.reconcileEndOfPlan*');
 	pause.failOnRelease();
 	await page.goto(`/mesocycles/${block.id}`);
@@ -327,4 +387,5 @@ test('the block page: the pause request itself fails: an error and Try again, Fi
 	await expect(finishOnBlock(page)).toBeEnabled();
 	await confirmFinish(page);
 	await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
+	await expectBoundaryPause(block.id, boundary, true);
 });

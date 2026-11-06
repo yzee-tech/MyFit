@@ -4,7 +4,7 @@ import { config } from 'dotenv';
 config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
-import { endOfPlanBoundary, getBlockWeek, isBlockPaused } from '../../src/lib/utils/workoutUtils';
+import { getBlockWeek, isBlockPaused } from '../../src/lib/utils/workoutUtils';
 import { lifecycleTestHooks } from '../../src/lib/server/blockLifecycle';
 import { deleteTestUsers } from '../deleteTestUsers';
 
@@ -100,12 +100,20 @@ test.describe('the pause that ends a plan', () => {
 	test("the day is the request's: Shanghai's midnight, else UTC's", async () => {
 		const shanghai = await seedPerson();
 		await shanghai.caller.mesocycles.reconcileEndOfPlan({ timeZone: SHANGHAI });
-		expect((await pausesOf(shanghai.block.id))[0].pausedAt.toISOString()).toBe(
-			endOfPlanBoundary(OLD_START, [], 5, SHANGHAI)!.toISOString()
-		);
+		// 35 local days from Sep 14 in Shanghai (UTC+8) is Oct 19 at 00:00 there: 16:00 UTC the day before. Written out,
+		// not worked out by the helper the server uses, so a wrong zone or a shared helper bug cannot agree with itself
+		const shanghaiPauses = await pausesOf(shanghai.block.id);
+		expect(shanghaiPauses).toHaveLength(1);
+		expect(shanghaiPauses[0].resumedAt).toBeNull();
+		expect(shanghaiPauses[0].pausedAt.toISOString()).toBe('2026-10-18T16:00:00.000Z');
+		expect((await blockOf(shanghai.block.id)).endDate).toBeNull();
 		const none = await seedPerson();
 		await none.caller.mesocycles.reconcileEndOfPlan({});
-		expect((await pausesOf(none.block.id))[0].pausedAt.toISOString()).toBe(OLD_END.toISOString());
+		const nonePauses = await pausesOf(none.block.id);
+		expect(nonePauses).toHaveLength(1);
+		expect(nonePauses[0].resumedAt).toBeNull();
+		expect(nonePauses[0].pausedAt.toISOString()).toBe('2026-10-19T00:00:00.000Z');
+		expect((await blockOf(none.block.id)).endDate).toBeNull();
 	});
 
 	test('earlier closed pauses are taken out: the plan ends later by the days paused', async () => {
@@ -209,7 +217,10 @@ test.describe('the pause that ends a plan', () => {
 		expect(endDate).not.toBeNull();
 		const pauses = await pausesOf(block.id);
 		expect(pauses).toHaveLength(1);
-		expect(pauses[0].resumedAt).not.toBeNull();
+		// The same pause that was open, closed at the moment the block ended
+		expect(pauses[0].id).toBe(open.id);
+		expect(pauses[0].pausedAt.toISOString()).toBe(open.pausedAt.toISOString());
+		expect(pauses[0].resumedAt?.toISOString()).toBe(endDate!.toISOString());
 		expect(await caller.mesocycles.reconcileEndOfPlan({ timeZone: 'UTC' })).toEqual({ created: false });
 		expect(await pausesOf(block.id)).toHaveLength(1);
 	});
@@ -355,15 +366,18 @@ test.describe('editing a block', () => {
 			id: unused.block.id,
 			mesocycleData: settingsOf(unused.block, Array(52).fill(2))
 		});
+		// 52 weeks is stored as sent; one more, or none, is refused as invalid input and changes nothing
+		expect((await blockOf(unused.block.id)).weeklyRIR).toEqual(Array(52).fill(2));
 		await expect(
 			unused.caller.mesocycles.editById({
 				id: unused.block.id,
 				mesocycleData: settingsOf(unused.block, Array(53).fill(2))
 			})
-		).rejects.toThrow();
+		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		await expect(
 			unused.caller.mesocycles.editById({ id: unused.block.id, mesocycleData: settingsOf(unused.block, []) })
-		).rejects.toThrow();
+		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		expect((await blockOf(unused.block.id)).weeklyRIR).toEqual(Array(52).fill(2));
 
 		const finished = await seedPerson({ endDate: new Date('2026-10-25T00:00:00Z') });
 		await expect(
@@ -371,7 +385,7 @@ test.describe('editing a block', () => {
 				id: finished.block.id,
 				mesocycleData: settingsOf(finished.block, [...PLAN, 1])
 			})
-		).rejects.toThrow(/finished mesocycle cannot be changed/);
+		).rejects.toMatchObject({ code: 'BAD_REQUEST', message: /finished mesocycle cannot be changed/ });
 		expect((await blockOf(finished.block.id)).weeklyRIR).toEqual(PLAN);
 	});
 
@@ -380,8 +394,10 @@ test.describe('editing a block', () => {
 		const stranger = createCaller({ event: {} as never, userId: createId() });
 		await expect(
 			stranger.mesocycles.editById({ id: block.id, mesocycleData: settingsOf(block, [1, 1]) })
-		).rejects.toThrow();
-		expect((await blockOf(block.id)).weeklyRIR).toEqual(PLAN);
+		).rejects.toMatchObject({ code: 'NOT_FOUND' });
+		const unchanged = await blockOf(block.id);
+		expect(unchanged.weeklyRIR).toEqual(PLAN);
+		expect(unchanged.name).toBe(block.name);
 	});
 
 	test('a block paused at the end of its plan: add weeks and save, again and again; the pause stays open; the planned weeks stay locked', async () => {
@@ -428,6 +444,28 @@ test.describe('a workout save holds the block until the workout is written', () 
 		lifecycleTestHooks.beforeWorkoutWrite = undefined;
 	});
 
+	/**
+	 * How many sessions are waiting for a row lock on a block right now (the scratch database's own view). A Finish that
+	 * has reached the lock is one more than before it was sent; waiting a while and seeing it unfinished proves nothing
+	 */
+	const blockLockWaiters = async () =>
+		Number(
+			(
+				await prisma.$queryRaw<{ n: bigint }[]>`
+					SELECT count(*) AS n FROM pg_stat_activity
+					WHERE datname = current_database() AND wait_event_type = 'Lock'
+					AND query LIKE '%FROM "Mesocycle"%FOR UPDATE%'`
+			)[0].n
+		);
+	/** Fails the test (a setup failure, not a pass) if the competitor never gets as far as waiting for the lock */
+	const untilBlockedOnLock = async (before: number) => {
+		const limit = Date.now() + 10000;
+		while ((await blockLockWaiters()) <= before) {
+			if (Date.now() > limit) throw new Error('setup failure: the competing request never waited for the lock');
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+	};
+
 	test('a Finish sent while a workout save is between deciding and writing waits, and the workout is written into the block first', async () => {
 		const { caller, block } = await seedPerson({
 			startedAt: new Date(Date.now() - 10 * DAY),
@@ -435,19 +473,25 @@ test.describe('a workout save holds the block until the workout is written', () 
 		});
 		const { release, atHold } = holdBeforeWrite();
 		const saving = caller.workouts.create(workoutOf(block.id, new Date(Date.now() - 2 * DAY), 'UTC'));
-		await atHold;
-		let finished = false;
-		const finishing = caller.mesocycles
-			.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
-			.then((result) => {
-				finished = true;
-				return result;
-			});
-		// The save has decided the workout is the block's and has not written it: the Finish cannot land here
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		expect(finished).toBe(false);
-		expect((await blockOf(block.id)).endDate).toBeNull();
-		release();
+		let finishing: Promise<unknown> = Promise.resolve();
+		try {
+			await atHold;
+			let finished = false;
+			const waitersBefore = await blockLockWaiters();
+			finishing = caller.mesocycles
+				.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
+				.then((result) => {
+					finished = true;
+					return result;
+				});
+			// The save has decided the workout is the block's and has not written it: the Finish is seen waiting for
+			// the block's lock, so it cannot land here
+			await untilBlockedOnLock(waitersBefore);
+			expect(finished).toBe(false);
+			expect((await blockOf(block.id)).endDate).toBeNull();
+		} finally {
+			release();
+		}
 		const { workoutId } = await saving;
 		await finishing;
 		// Written into the block, then the block finished: never a link onto a block finished in between
@@ -468,17 +512,22 @@ test.describe('a workout save holds the block until the workout is written', () 
 			data: workoutOf(block.id, moved, 'UTC'),
 			endedAt: new Date(moved.getTime() + 3600000)
 		});
-		await atHold;
-		let finished = false;
-		const finishing = caller.mesocycles
-			.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
-			.then((result) => {
-				finished = true;
-				return result;
-			});
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		expect(finished).toBe(false);
-		release();
+		let finishing: Promise<unknown> = Promise.resolve();
+		try {
+			await atHold;
+			let finished = false;
+			const waitersBefore = await blockLockWaiters();
+			finishing = caller.mesocycles
+				.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
+				.then((result) => {
+					finished = true;
+					return result;
+				});
+			await untilBlockedOnLock(waitersBefore);
+			expect(finished).toBe(false);
+		} finally {
+			release();
+		}
 		await editing;
 		await finishing;
 		expect(await prisma.workoutOfMesocycle.findFirst({ where: { workoutId, mesocycleId: block.id } })).not.toBeNull();
@@ -487,12 +536,16 @@ test.describe('a workout save holds the block until the workout is written', () 
 
 	test('a save that fails writes nothing, and makes no pause either', async () => {
 		const { caller, block } = await seedPerson();
+		let reached = false;
 		lifecycleTestHooks.beforeWorkoutWrite = async () => {
+			reached = true;
 			throw new Error('the write failed');
 		};
-		await expect(
-			caller.workouts.create(workoutOf(block.id, new Date('2026-10-25T10:00:00Z'), 'UTC'))
-		).rejects.toThrow();
+		await expect(caller.workouts.create(workoutOf(block.id, new Date('2026-10-25T10:00:00Z'), 'UTC'))).rejects.toThrow(
+			/the write failed/
+		);
+		// It failed at the point where the write is about to happen, not earlier for some other reason
+		expect(reached).toBe(true);
 		expect(await pausesOf(block.id)).toHaveLength(0);
 		expect(await prisma.workout.count({ where: { userId: block.userId } })).toBe(0);
 	});
@@ -513,16 +566,36 @@ test.describe('Finish, Save and manual pauses together', () => {
 	test('Finish and a Save at once: the block ends with nothing left open, and no Save lands on a finished block', async () => {
 		const { caller, block } = await seedPerson();
 		const results = await Promise.allSettled([
-			caller.mesocycles.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null }),
+			caller.mesocycles.progressToNextStage({
+				id: block.id,
+				startDate: block.startDate,
+				endDate: null,
+				timeZone: 'UTC'
+			}),
 			caller.mesocycles.editById({ id: block.id, timeZone: 'UTC', mesocycleData: settingsOf(block, [...PLAN, 1]) })
 		]);
 		expect(results[0].status).toBe('fulfilled');
 		const saved = await blockOf(block.id);
 		expect(saved.endDate).not.toBeNull();
-		expect((await pausesOf(block.id)).filter((pause) => pause.resumedAt === null)).toHaveLength(0);
-		// Either the Save went first (the plan has its extra week) or it was refused: never half of one
-		expect([PLAN.length, PLAN.length + 1]).toContain(saved.weeklyRIR.length);
-		if (results[1].status === 'rejected') expect(saved.weeklyRIR).toEqual(PLAN);
+		// Whatever order they landed in, the pause that ended the plan is the one row, closed when the block ended
+		const pauses = await pausesOf(block.id);
+		expect(pauses).toHaveLength(1);
+		expect(pauses[0].pausedAt.toISOString()).toBe(OLD_END.toISOString());
+		expect(pauses[0].resumedAt?.toISOString()).toBe(saved.endDate!.toISOString());
+		if (results[1].status === 'fulfilled') {
+			// The Save went first: all of it landed, exactly as sent
+			expect(saved.weeklyRIR).toEqual([...PLAN, 1]);
+		} else {
+			// The Save came after the Finish: refused for that reason, and nothing of it landed
+			expect(results[1].reason).toMatchObject({ code: 'BAD_REQUEST', message: /finished mesocycle cannot be changed/ });
+			expect(saved.weeklyRIR).toEqual(PLAN);
+		}
+		expect(saved).toMatchObject({
+			name: block.name,
+			startOverloadPercentage: block.startOverloadPercentage,
+			lastSetToFailure: block.lastSetToFailure,
+			forceRIRMatching: block.forceRIRMatching
+		});
 		// A Save after Finish is refused for certain
 		await expect(
 			caller.mesocycles.editById({ id: block.id, timeZone: 'UTC', mesocycleData: settingsOf(block, [...PLAN, 0, 0]) })
@@ -704,11 +777,18 @@ test.describe('Start and Finish read the block, not the screen', () => {
 			});
 		const results = await Promise.allSettled([finish(), finish()]);
 		expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+		// The other one is refused for the right reason, not by some failure of the database or the network
+		const loser = results.find((result) => result.status === 'rejected') as PromiseRejectedResult;
+		expect(loser.reason).toMatchObject({ code: 'CONFLICT', message: /changed on another device/ });
 		const winner = results.find((result) => result.status === 'fulfilled') as PromiseFulfilledResult<
 			Awaited<ReturnType<typeof finish>>
 		>;
-		expect((await blockOf(block.id)).endDate?.toISOString()).toBe(winner.value.endDate?.toISOString());
-		expect((await pausesOf(block.id)).filter((pause) => pause.resumedAt === null)).toHaveLength(0);
+		const after = await blockOf(block.id);
+		expect(after.endDate?.toISOString()).toBe(winner.value.endDate?.toISOString());
+		expect(after.startDate?.toISOString()).toBe(block.startDate?.toISOString());
+		const pauses = await pausesOf(block.id);
+		expect(pauses).toHaveLength(1);
+		expect(pauses[0].resumedAt?.toISOString()).toBe(after.endDate!.toISOString());
 	});
 
 	test("someone else's block is not found", async () => {
