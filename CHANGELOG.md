@@ -12,6 +12,8 @@ What changed in MyFit, newest first.
   (a Deload copies as a Deload) and never touches the others; the bin removes a week that is still ahead (never the
   last one left). A block can have up to 52 weeks; a new block still starts at 20 at the most, and a block longer than
   20 is never cut short. New and Clone work as before.
+- **Save goes back to the list of mesocycles.** On a block past its planned weeks the button that ends it reads
+  **Finish block** (it said Stop).
 - **Your changes wait for Save.** Cancel throws all of them away: nothing is saved, and they are not there when you
   open the block again, in New, or in another block. If Save fails (no connection, a refusal, an error) you stay on the
   page with everything you changed and can try again.
@@ -27,8 +29,15 @@ What changed in MyFit, newest first.
   not count weeks that are not in its plan: it stays at "Past its planned weeks", with Extend and Finish block.
 - **Extend, then Resume.** Adding weeks and saving does not resume the block: Resume is its own step, and it waits
   until the block has another week to go on into. Finish block ends it and closes the pause.
+- A workout that is saved is written together with its place in the block in one step, so a block can't be finished
+  or changed between the two.
 - A workout you start after the plan ended is an ordinary workout, not part of the block. One you started before it
   and save later keeps its place.
+
+### Fixed
+
+- **"Force RIR matching" now toggles its own switch.** Its label pointed at "Take last set to failure", so tapping
+  the label changed the other one.
 
 ### Known limits
 

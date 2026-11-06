@@ -292,7 +292,7 @@
 				{/if}
 			{/if}
 			<Button
-				class={mesocycle.startDate ? 'h-[30px] w-[92px] gap-1.5' : 'gap-1.5'}
+				class={mesocycle.startDate ? `h-[30px] gap-1.5 ${pastPlan ? '' : 'w-[92px]'}` : 'gap-1.5'}
 				size="sm"
 				disabled={callingPatchEndpoint}
 				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}
