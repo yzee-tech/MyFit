@@ -108,15 +108,29 @@
 	// A block past its planned weeks is paused where its plan ended, on the phone's days (the page's own load
 	// doesn't know them)
 	let reconcileTried = false;
+	// Whether that has been tried and its answer is on the page: until then a block past its plan that this page
+	// shows unpaused is about to be paused, and a Finish sent now would name the wrong pause
+	let reconcileSettled = $state(false);
+	let finishNotReady = $derived(
+		activeBlock !== undefined &&
+			blockFinished &&
+			!blockPaused &&
+			!reconcileSettled &&
+			workoutRunes.editingWorkoutId === null
+	);
 	$effect(() => {
 		if (reconcileTried || workoutRunes.editingWorkoutId !== null || !activeBlock?.mesocycle.startDate) return;
 		if (blockPaused || !now.value) return;
 		const { mesocycle, totalWeeks } = activeBlock;
 		if (!isPastPlannedWeeks(mesocycle.startDate!, now.value, browserTimeZone(), mesocycle.pauses, totalWeeks)) return;
 		reconcileTried = true;
-		reconcileEndOfPlanHere().then((created) => {
-			if (created) invalidate('workouts:start');
-		});
+		reconcileEndOfPlanHere()
+			.then(async () => {
+				// Whether this made the pause or another request already had, the page is read again: it may still show
+				// the block unpaused
+				await invalidate('workouts:start');
+			})
+			.finally(() => (reconcileSettled = true));
 	});
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
@@ -303,7 +317,7 @@
 						Extend
 					{/if}
 				</Button>
-				<Button disabled={finishingBlock} onclick={finishBlock}>
+				<Button disabled={finishingBlock || finishNotReady} onclick={finishBlock}>
 					{#if finishingBlock}
 						<LoaderCircle class="animate-spin" />
 					{:else}
