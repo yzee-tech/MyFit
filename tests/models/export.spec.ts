@@ -5,10 +5,18 @@ import type { Browser, BrowserContext } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { expect, test } from '../fixtures';
+import { deleteTestUsers } from '../deleteTestUsers';
 import { buildCsvExport, buildJsonExport, type ExportData } from '../../src/lib/server/export';
 
 const prisma = new PrismaClient();
 const BASE_URL = 'http://localhost:4173';
+
+// The seeds below use fixed primary keys, so a test's rows must be gone before the same test runs again (a retry, a re-run):
+// every user a test makes is removed when it ends, whether it passed or not
+const createdUserIds: string[] = [];
+test.afterEach(async () => {
+	await deleteTestUsers(prisma, { id: { in: createdUserIds.splice(0) } });
+});
 
 /** A fresh user with a session cookie, so per-user rate limits never collide between tests */
 async function createUserContext(
@@ -16,6 +24,7 @@ async function createUserContext(
 	name = 'Export Tester'
 ): Promise<{ userId: string; context: BrowserContext }> {
 	const userId = createId();
+	createdUserIds.push(userId);
 	const sessionToken = randomUUID();
 	await prisma.session.create({
 		data: {
@@ -315,6 +324,7 @@ test('exports all data as JSON and CSV for a seeded account', async ({ browser }
 
 	// A second user whose data must never leak into the export
 	const otherUserId = createId();
+	createdUserIds.push(otherUserId);
 	await prisma.user.create({
 		data: { id: otherUserId, email: `test-user-${otherUserId}@myfit.com`, emailVerified: null }
 	});

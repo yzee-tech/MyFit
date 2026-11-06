@@ -6,6 +6,7 @@ import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { getBlockWeek, isBlockPaused, isInPause } from '../../src/lib/utils/workoutUtils';
 import { deleteTestUsers } from '../deleteTestUsers';
+import { pgLocks } from '../support/pgLocks';
 
 /**
  * Pausing a mesocycle: its week stands still while it is paused, past workouts keep the week they were done in,
@@ -13,6 +14,7 @@ import { deleteTestUsers } from '../deleteTestUsers';
  * suggestions
  */
 
+const { holderOf, untilBlockedOnHolder } = pgLocks(prisma);
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
 	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
@@ -227,11 +229,13 @@ test.describe('pause and resume on the server', () => {
 					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
 					await tx.mesocycle.update({ where: { id: block.id }, data: { endDate: new Date() } });
 					// The pause starts now: it must wait for the lock, not read the block as it was
+					const holder = await holderOf(block.id);
 					pausing = caller.mesocycles.pause(block.id).then(
 						() => 'paused',
 						(error) => error
 					);
-					await sleep(700);
+					// The pause is seen waiting for this transaction's lock, not guessed to be there after a delay
+					await untilBlockedOnHolder(holder);
 				},
 				{ timeout: 15000, maxWait: 5000 }
 			);
@@ -256,10 +260,12 @@ test.describe('pause and resume on the server', () => {
 				async (tx) => {
 					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
 					await tx.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } });
+					const holder = await holderOf(block.id);
 					stopping = caller.mesocycles
 						.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
 						.then(() => (stopped = true));
-					await sleep(700);
+					// The stop is seen waiting for this transaction's lock; only then is "has it run ahead?" a real question
+					await untilBlockedOnHolder(holder);
 					stoppedWhileHeld = stopped;
 				},
 				{ timeout: 15000, maxWait: 5000 }

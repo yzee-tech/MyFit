@@ -7,6 +7,7 @@ import { createCaller } from '../../src/lib/trpc/router';
 import { getBlockWeek, isBlockPaused } from '../../src/lib/utils/workoutUtils';
 import { lifecycleTestHooks } from '../../src/lib/server/blockLifecycle';
 import { deleteTestUsers } from '../deleteTestUsers';
+import { pgLocks } from '../support/pgLocks';
 
 /**
  * A block that has run all its planned weeks pauses itself where its plan ended (never finishes by itself), on
@@ -14,6 +15,7 @@ import { deleteTestUsers } from '../deleteTestUsers';
  * of the block; an edit never changes a past or current week; Resume waits for another week
  */
 
+const { holderOf, untilBlockedOnHolder } = pgLocks(prisma);
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
 	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
@@ -452,41 +454,6 @@ test.describe('a workout save holds the block until the workout is written', () 
 	test.afterEach(() => {
 		lifecycleTestHooks.beforeWorkoutWrite = undefined;
 	});
-
-	/**
-	 * The transaction that holds this block's row lock right now: the one whose id is on the row as its locker. The held
-	 * save has taken the lock before it reaches the hold, so the id is there; none means the hold is not what it
-	 * should be, which fails the test as a setup failure
-	 */
-	const holderOf = async (blockId: string) => {
-		const [row] = await prisma.$queryRaw<
-			{ holder: string }[]
-		>`SELECT xmax::text AS holder FROM "Mesocycle" WHERE id = ${blockId}`;
-		if (!row || row.holder === '0') throw new Error('setup failure: no transaction holds the block');
-		return row.holder;
-	};
-	/**
-	 * Sessions that are waiting for exactly that transaction to end, and are asking for a row lock on a block: tied to
-	 * this held save, so another worker's lock waits cannot count
-	 */
-	const waitingOnHolder = async (holder: string) =>
-		Number(
-			(
-				await prisma.$queryRaw<{ n: bigint }[]>`
-					SELECT count(*) AS n FROM pg_locks l
-					JOIN pg_stat_activity a ON a.pid = l.pid
-					WHERE l.locktype = 'transactionid' AND l.transactionid = ${holder}::text::xid AND NOT l.granted
-					AND a.query LIKE '%FROM "Mesocycle"%FOR UPDATE%'`
-			)[0].n
-		);
-	/** Fails the test (a setup failure, not a pass) if the competitor never gets as far as waiting on the holder */
-	const untilBlockedOnHolder = async (holder: string) => {
-		const limit = Date.now() + 10000;
-		while ((await waitingOnHolder(holder)) < 1) {
-			if (Date.now() > limit) throw new Error('setup failure: the competing request never waited for the lock');
-			await new Promise((resolve) => setTimeout(resolve, 25));
-		}
-	};
 
 	test('a Finish sent while a workout save is between deciding and writing waits, and the workout is written into the block first', async () => {
 		const { caller, block } = await seedPerson({

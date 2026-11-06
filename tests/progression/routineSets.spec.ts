@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect } from '@playwright/test';
 import { DEFAULT_SETS, routineSetCount } from '../../src/lib/utils/routineSets';
 
 /**
