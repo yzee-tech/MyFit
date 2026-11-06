@@ -23,7 +23,6 @@
 		isPastPlannedWeeks,
 		localDaysBetween
 	} from '$lib/utils/workoutUtils';
-	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
@@ -106,16 +105,30 @@
 	let countsForProgression = $state(true);
 	let blockFinished = $derived(activeBlock !== undefined && weekNumber !== null && weekNumber > activeBlock.totalWeeks);
 	// A block past its planned weeks is paused where its plan ended, on the phone's days (the page's own load
-	// doesn't know them)
+	// doesn't know them). One request does both the pausing and the reading, and what it answers is put on the page
+	// itself (not left to the page's streamed load, which can land later): until then the page may show the block
+	// unpaused, and a Finish sent from it would name the wrong pause
 	let reconcileTried = false;
-	// Whether that has been tried and its answer is on the page: until then a block past its plan that this page
-	// shows unpaused is about to be paused, and a Finish sent now would name the wrong pause
-	let reconcileSettled = $state(false);
+	let settleState = $state<'idle' | 'settling' | 'ready' | 'error'>('idle');
+	let settleRun = 0;
+	async function settleBlock() {
+		const run = ++settleRun;
+		settleState = 'settling';
+		try {
+			const fresh = await trpc().workouts.getTodaysWorkoutData.query({ timeZone: browserTimeZone() });
+			if (run !== settleRun) return;
+			if (workoutRunes.editingWorkoutId === null) workoutData = fresh;
+			settleState = 'ready';
+		} catch {
+			// Never a false ready: Finish stays off and the person can try again
+			if (run === settleRun) settleState = 'error';
+		}
+	}
 	let finishNotReady = $derived(
 		activeBlock !== undefined &&
 			blockFinished &&
 			!blockPaused &&
-			!reconcileSettled &&
+			settleState !== 'ready' &&
 			workoutRunes.editingWorkoutId === null
 	);
 	$effect(() => {
@@ -124,13 +137,7 @@
 		const { mesocycle, totalWeeks } = activeBlock;
 		if (!isPastPlannedWeeks(mesocycle.startDate!, now.value, browserTimeZone(), mesocycle.pauses, totalWeeks)) return;
 		reconcileTried = true;
-		reconcileEndOfPlanHere()
-			.then(async () => {
-				// Whether this made the pause or another request already had, the page is read again: it may still show
-				// the block unpaused
-				await invalidate('workouts:start');
-			})
-			.finally(() => (reconcileSettled = true));
+		settleBlock();
 	});
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
@@ -325,6 +332,12 @@
 					{/if}
 				</Button>
 			</Card.Footer>
+			{#if settleState === 'error' && finishNotReady}
+				<div class="flex items-center justify-between gap-2 px-6 pb-4 text-sm" role="alert">
+					<span>Couldn't check where its plan ended. Check your connection.</span>
+					<Button onclick={settleBlock} size="sm" variant="secondary">Try again</Button>
+				</div>
+			{/if}
 		</Card.Root>
 	{/if}
 	{#if workoutRunes.editingWorkoutId === null && activeBlock === undefined && routines.length === 0}

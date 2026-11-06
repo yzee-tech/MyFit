@@ -46,6 +46,11 @@ What changed in MyFit, newest first.
   was finished, or (for a block finished before it was paused where its plan ended) after the place its plan ended, is
   an ordinary workout. One that began before the block was finished and is saved later still belongs to it. Editing the
   start of a workout that is already in a block keeps its place in the block, as before.
+- **Finish is offered only once the page knows the block's real state.** A block past its plan is paused by a request
+  the page sends when it opens. Until the answer was on the screen, Finish was already on offer, and a quick tap named
+  "no pause" while one existed and was refused as "changed on another device". On the start page and on the block
+  page, Finish now waits for that answer to be read and shown (also when another request had already made the pause),
+  and if it can't be read the page says so and offers **Try again** instead of looking ready.
 - **Nothing you change in the editor is lost while Save is on its way.** The name, the weeks, Add week, the bins and
   the progression settings are switched off until the answer comes, so what is saved is what was on the screen when
   you pressed Save; if Save fails they all come back, with everything you changed.

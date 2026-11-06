@@ -23,7 +23,6 @@
 		isBlockPaused,
 		isPastPlannedWeeks
 	} from '$lib/utils/workoutUtils';
-	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate } from '$app/navigation';
@@ -64,30 +63,46 @@
 	let pausingOrResuming = $state(false);
 	let stopConfirmOpen = $state(false);
 
-	/** The block as the server has it now: its weeks, dates and pauses */
-	async function refreshMesocycle() {
+	/** The block as the server has it now: its weeks, dates and pauses. Whether it could be read */
+	async function refreshMesocycle(): Promise<boolean> {
 		try {
 			const fresh = await trpc().mesocycles.findById.query(mesocycle.id);
-			if (!fresh) return;
+			if (!fresh) return false;
 			mesocycle.weeklyRIR = fresh.weeklyRIR;
 			mesocycle.startDate = fresh.startDate;
 			mesocycle.endDate = fresh.endDate;
 			mesocycle.pauses = fresh.pauses;
+			return true;
 		} catch {
 			// Offline: the screen stays as it was
+			return false;
 		}
 	}
 
-	// A block past its planned weeks is paused where its plan ended, on the phone's days
+	// A block past its planned weeks is paused where its plan ended, on the phone's days. The block is read again
+	// whether this made the pause or another request already had, and until that answer is on the screen Finish is off:
+	// a Finish sent from a screen that shows the block unpaused would name the wrong pause
 	let reconcileTried = false;
+	let settleState = $state<'idle' | 'settling' | 'ready' | 'error'>('idle');
+	let finishNotReady = $derived(
+		!!mesocycle.startDate && !mesocycle.endDate && pastPlan && !paused && settleState !== 'ready'
+	);
+	async function settleBlock() {
+		settleState = 'settling';
+		try {
+			await trpc().mesocycles.reconcileEndOfPlan.mutate({ timeZone: browserTimeZone() });
+		} catch {
+			settleState = 'error';
+			return;
+		}
+		// Never a false ready: a failed read leaves Finish off and offers another try
+		settleState = (await refreshMesocycle()) ? 'ready' : 'error';
+		if (settleState === 'ready') await invalidate('mesocycles:active');
+	}
 	$effect(() => {
 		if (reconcileTried || paused || !pastPlan) return;
 		reconcileTried = true;
-		reconcileEndOfPlanHere().then(async (created) => {
-			if (!created) return;
-			await refreshMesocycle();
-			await invalidate('mesocycles:active');
-		});
+		settleBlock();
 	});
 
 	async function pauseOrResume() {
@@ -224,6 +239,12 @@
 					Past its planned weeks: it can be extended with more weeks, or finished.
 				</span>
 			{/if}
+			{#if settleState === 'error' && finishNotReady}
+				<div class="flex items-center justify-between gap-2 text-sm" role="alert">
+					<span>Couldn't check where its plan ended. Check your connection.</span>
+					<Button class="h-auto p-0" onclick={settleBlock} variant="link">Try again</Button>
+				</div>
+			{/if}
 			{#if paused && weekNow !== null}
 				<!-- Past the planned weeks too: it is still paused in that week -->
 				<span class="text-sm" data-testid="mesocycle-paused-week">Week {weekNow} - paused</span>
@@ -294,7 +315,7 @@
 			<Button
 				class={mesocycle.startDate ? `h-[30px] gap-1.5 ${pastPlan ? '' : 'w-[92px]'}` : 'gap-1.5'}
 				size="sm"
-				disabled={callingPatchEndpoint}
+				disabled={callingPatchEndpoint || finishNotReady}
 				onclick={() => (mesocycle.startDate && paused ? (stopConfirmOpen = true) : progressMesocycle())}
 			>
 				{#if callingPatchEndpoint}
