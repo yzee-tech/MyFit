@@ -90,6 +90,10 @@ async function expectBoundaryPause(blockId: string, boundary: Date, closed: bool
 	return pauses[0].id;
 }
 
+/** The progression choice the workout in progress is saved with (what the exercises page and the save will use) */
+const savedCountsForProgression = (page: Page) =>
+	page.evaluate(() => JSON.parse(localStorage.getItem('workoutRunes')!).workoutData.countsForProgression as boolean);
+
 const START = '/workouts/manage/start';
 const finishOnStart = (page: Page) => page.getByRole('button', { name: 'Finish block' });
 // The block page: its button (the first one named so), and the confirmation a paused block asks for
@@ -347,6 +351,10 @@ test.describe('what the start page shows once the automatic pause has been appli
 		expect((await state(block.id)).pauses).toHaveLength(1);
 		// A paused block alone would switch it off: it is on because the workout was saved on
 		await expect(switchOf(page)).toBeChecked();
+		// Continue keeps it: what is saved for the workout is still on
+		await page.getByRole('button', { name: 'Continue workout' }).click();
+		await page.waitForURL(/\/workouts\/manage\/exercises/);
+		expect(await savedCountsForProgression(page)).toBe(true);
 	});
 
 	test('a workout already in progress: a switch the person turns off while the page is settling stays off', async ({
@@ -371,6 +379,10 @@ test.describe('what the start page shows once the automatic pause has been appli
 		expect((await state(block.id)).pauses).toHaveLength(1);
 		// The fresh answer for the paused block does not undo what the person just chose over what was stored
 		await expect(switchOf(page)).not.toBeChecked();
+		// And Continue saves that choice for the workout, not the one it was stored with before
+		await page.getByRole('button', { name: 'Continue workout' }).click();
+		await page.waitForURL(/\/workouts\/manage\/exercises/);
+		expect(await savedCountsForProgression(page)).toBe(false);
 	});
 });
 

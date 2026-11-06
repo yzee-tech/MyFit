@@ -259,7 +259,12 @@
 			// All of the old workout's saved state goes (a failed load, reps-only marks...), not only some of it
 			workoutRunes.resetStores();
 			workoutRunes.workoutData = newWorkoutData;
-		} else if (workoutRunes.workoutData === null) workoutRunes.workoutData = newWorkoutData;
+		} else if (workoutRunes.workoutData === null) {
+			workoutRunes.workoutData = newWorkoutData;
+		} else {
+			// Continue keeps the workout's start and exercises, but takes the progression choice shown here
+			workoutRunes.workoutData.countsForProgression = newWorkoutData.countsForProgression;
+		}
 		workoutRunes.saveStoresToLocalStorage();
 
 		goto(
