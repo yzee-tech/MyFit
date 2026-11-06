@@ -394,6 +394,7 @@ test.describe('the draft', () => {
 		// Pressing keys on the slider moves nothing: focus is put on it by the page itself, so the key goes where it would
 		// for a person, and any error in delivering it fails the test instead of passing as "nothing moved"
 		await page.getByRole('slider').evaluate((element) => (element as HTMLElement).focus());
+		await expect(page.getByRole('slider')).toBeFocused();
 		await page.keyboard.press('ArrowRight');
 		await expect(page.getByRole('slider')).toHaveAttribute('aria-disabled', 'true');
 		await expect(page.getByText('2.5%')).toBeVisible();

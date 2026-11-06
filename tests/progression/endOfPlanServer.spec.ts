@@ -368,16 +368,25 @@ test.describe('editing a block', () => {
 		});
 		// 52 weeks is stored as sent; one more, or none, is refused as invalid input and changes nothing
 		expect((await blockOf(unused.block.id)).weeklyRIR).toEqual(Array(52).fill(2));
+		// The whole plan (weeks and settings) is what it was after each refusal, not only after both
+		const planOf = async () => {
+			const { name, weeklyRIR, startOverloadPercentage, lastSetToFailure, forceRIRMatching } = await blockOf(
+				unused.block.id
+			);
+			return { name, weeklyRIR, startOverloadPercentage, lastSetToFailure, forceRIRMatching };
+		};
+		const planAfter52 = await planOf();
 		await expect(
 			unused.caller.mesocycles.editById({
 				id: unused.block.id,
 				mesocycleData: settingsOf(unused.block, Array(53).fill(2))
 			})
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		expect(await planOf()).toEqual(planAfter52);
 		await expect(
 			unused.caller.mesocycles.editById({ id: unused.block.id, mesocycleData: settingsOf(unused.block, []) })
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-		expect((await blockOf(unused.block.id)).weeklyRIR).toEqual(Array(52).fill(2));
+		expect(await planOf()).toEqual(planAfter52);
 
 		const finished = await seedPerson({ endDate: new Date('2026-10-25T00:00:00Z') });
 		await expect(
@@ -445,22 +454,35 @@ test.describe('a workout save holds the block until the workout is written', () 
 	});
 
 	/**
-	 * How many sessions are waiting for a row lock on a block right now (the scratch database's own view). A Finish that
-	 * has reached the lock is one more than before it was sent; waiting a while and seeing it unfinished proves nothing
+	 * The transaction that holds this block's row lock right now: the one whose id is on the row as its locker. The held
+	 * save has taken the lock before it reaches the hold, so the id is there; none means the hold is not what it
+	 * should be, which fails the test as a setup failure
 	 */
-	const blockLockWaiters = async () =>
+	const holderOf = async (blockId: string) => {
+		const [row] = await prisma.$queryRaw<
+			{ holder: string }[]
+		>`SELECT xmax::text AS holder FROM "Mesocycle" WHERE id = ${blockId}`;
+		if (!row || row.holder === '0') throw new Error('setup failure: no transaction holds the block');
+		return row.holder;
+	};
+	/**
+	 * Sessions that are waiting for exactly that transaction to end, and are asking for a row lock on a block: tied to
+	 * this held save, so another worker's lock waits cannot count
+	 */
+	const waitingOnHolder = async (holder: string) =>
 		Number(
 			(
 				await prisma.$queryRaw<{ n: bigint }[]>`
-					SELECT count(*) AS n FROM pg_stat_activity
-					WHERE datname = current_database() AND wait_event_type = 'Lock'
-					AND query LIKE '%FROM "Mesocycle"%FOR UPDATE%'`
+					SELECT count(*) AS n FROM pg_locks l
+					JOIN pg_stat_activity a ON a.pid = l.pid
+					WHERE l.locktype = 'transactionid' AND l.transactionid = ${holder}::text::xid AND NOT l.granted
+					AND a.query LIKE '%FROM "Mesocycle"%FOR UPDATE%'`
 			)[0].n
 		);
-	/** Fails the test (a setup failure, not a pass) if the competitor never gets as far as waiting for the lock */
-	const untilBlockedOnLock = async (before: number) => {
+	/** Fails the test (a setup failure, not a pass) if the competitor never gets as far as waiting on the holder */
+	const untilBlockedOnHolder = async (holder: string) => {
 		const limit = Date.now() + 10000;
-		while ((await blockLockWaiters()) <= before) {
+		while ((await waitingOnHolder(holder)) < 1) {
 			if (Date.now() > limit) throw new Error('setup failure: the competing request never waited for the lock');
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}
@@ -477,7 +499,7 @@ test.describe('a workout save holds the block until the workout is written', () 
 		try {
 			await atHold;
 			let finished = false;
-			const waitersBefore = await blockLockWaiters();
+			const holder = await holderOf(block.id);
 			finishing = caller.mesocycles
 				.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
 				.then((result) => {
@@ -486,11 +508,13 @@ test.describe('a workout save holds the block until the workout is written', () 
 				});
 			// The save has decided the workout is the block's and has not written it: the Finish is seen waiting for
 			// the block's lock, so it cannot land here
-			await untilBlockedOnLock(waitersBefore);
+			await untilBlockedOnHolder(holder);
 			expect(finished).toBe(false);
 			expect((await blockOf(block.id)).endDate).toBeNull();
 		} finally {
 			release();
+			// Whatever failed above, nothing is left pending, and the first error is the one reported
+			await Promise.allSettled([saving, finishing]);
 		}
 		const { workoutId } = await saving;
 		await finishing;
@@ -516,17 +540,18 @@ test.describe('a workout save holds the block until the workout is written', () 
 		try {
 			await atHold;
 			let finished = false;
-			const waitersBefore = await blockLockWaiters();
+			const holder = await holderOf(block.id);
 			finishing = caller.mesocycles
 				.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
 				.then((result) => {
 					finished = true;
 					return result;
 				});
-			await untilBlockedOnLock(waitersBefore);
+			await untilBlockedOnHolder(holder);
 			expect(finished).toBe(false);
 		} finally {
 			release();
+			await Promise.allSettled([editing, finishing]);
 		}
 		await editing;
 		await finishing;

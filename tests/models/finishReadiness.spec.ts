@@ -75,9 +75,10 @@ async function hold(page: Page, pattern: string) {
  * The one pause that ends the plan: at the boundary, still open before Finish, and after it the same row closed at
  * the moment the block ended (an empty list satisfies "nothing is open", so the row itself is checked)
  */
-async function expectBoundaryPause(blockId: string, boundary: Date, closed: boolean) {
+async function expectBoundaryPause(blockId: string, boundary: Date, closed: boolean, sameRowAs?: string) {
 	const { pauses, endDate } = await state(blockId);
 	expect(pauses).toHaveLength(1);
+	if (sameRowAs !== undefined) expect(pauses[0].id).toBe(sameRowAs);
 	expect(pauses[0].pausedAt.toISOString()).toBe(boundary.toISOString());
 	if (closed) {
 		expect(endDate).not.toBeNull();
@@ -86,6 +87,7 @@ async function expectBoundaryPause(blockId: string, boundary: Date, closed: bool
 		expect(pauses[0].resumedAt).toBeNull();
 		expect(endDate).toBeNull();
 	}
+	return pauses[0].id;
 }
 
 const START = '/workouts/manage/start';
@@ -130,13 +132,14 @@ test.describe('the start page: Finish waits until the page has the block as it i
 		await page.goto(START);
 		await expect(finishOnStart(page)).toBeDisabled();
 		// Another request makes the pause while this page's request is held
-		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: boundary } });
+		const created = await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: boundary } });
 		fresh.release();
 		await expect(page.getByText(/and it is paused/)).toBeVisible();
 		await expect(finishOnStart(page)).toBeEnabled();
 		await finishOnStart(page).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
-		await expectBoundaryPause(block.id, boundary, true);
+		// The row the other request made is the one Finish closed
+		await expectBoundaryPause(block.id, boundary, true, created.id);
 	});
 
 	test('the read fails: an error and Try again, never a Finish that looks ready; Try again then works', async ({
@@ -156,9 +159,10 @@ test.describe('the start page: Finish waits until the page has the block as it i
 		await page.getByRole('button', { name: 'Try again' }).click();
 		await expect(finishOnStart(page)).toBeEnabled();
 		await expect(page.getByRole('alert').filter({ hasText: "Couldn't check where its plan ended" })).toHaveCount(0);
+		const pauseId = await expectBoundaryPause(block.id, boundary, false);
 		await finishOnStart(page).click();
 		await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
-		await expectBoundaryPause(block.id, boundary, true);
+		await expectBoundaryPause(block.id, boundary, true, pauseId);
 	});
 });
 
@@ -197,13 +201,13 @@ test.describe('the block page: the same', () => {
 		const pause = await hold(page, '**/trpc/mesocycles.reconcileEndOfPlan*');
 		await page.goto(`/mesocycles/${block.id}`);
 		await expect(finishOnBlock(page)).toBeDisabled();
-		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: boundary } });
+		const created = await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: boundary } });
 		pause.release();
 		await expect(page.getByTestId('mesocycle-paused-week')).toBeVisible();
 		await expect(finishOnBlock(page)).toBeEnabled();
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
-		await expectBoundaryPause(block.id, boundary, true);
+		await expectBoundaryPause(block.id, boundary, true, created.id);
 	});
 
 	test('the read fails: an error and Try again, Finish stays off; Try again then works', async ({ page, userData }) => {
@@ -218,9 +222,10 @@ test.describe('the block page: the same', () => {
 		await page.unroute('**/trpc/mesocycles.findById*');
 		await page.getByRole('button', { name: 'Try again' }).click();
 		await expect(finishOnBlock(page)).toBeEnabled();
+		const pauseId = await expectBoundaryPause(block.id, boundary, false);
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
-		await expectBoundaryPause(block.id, boundary, true);
+		await expectBoundaryPause(block.id, boundary, true, pauseId);
 	});
 });
 
@@ -385,7 +390,8 @@ test('the block page: the pause request itself fails: an error and Try again, Fi
 	await page.unroute('**/trpc/mesocycles.reconcileEndOfPlan*');
 	await page.getByRole('button', { name: 'Try again' }).click();
 	await expect(finishOnBlock(page)).toBeEnabled();
+	const pauseId = await expectBoundaryPause(block.id, boundary, false);
 	await confirmFinish(page);
 	await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
-	await expectBoundaryPause(block.id, boundary, true);
+	await expectBoundaryPause(block.id, boundary, true, pauseId);
 });
