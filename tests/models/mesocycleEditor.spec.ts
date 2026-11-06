@@ -289,6 +289,17 @@ test.describe('the draft', () => {
 		await expect(weekRows(page)).toHaveCount(4);
 		await expect(week(page, 3)).toContainText('Deload');
 		expect((await blockRow(block.id)).name).toBe('MyMeso');
+		// An unexpected error from the server: the same, nothing lost
+		await page.unroute('**/trpc/mesocycles.editById*');
+		await page.route('**/trpc/mesocycles.editById*', (route) =>
+			route.fulfill({ status: 500, contentType: 'text/plain', body: 'Something broke' })
+		);
+		await saveButton(page).click();
+		await expect(page.getByTestId('edit-save-error')).toBeVisible();
+		await expect(saveButton(page)).toBeEnabled();
+		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Kept name');
+		await expect(weekRows(page)).toHaveCount(4);
+		expect((await blockRow(block.id)).name).toBe('MyMeso');
 		// A refusal from the server (the name is too long): the message, the draft kept
 		await page.unroute('**/trpc/mesocycles.editById*');
 		await page.getByLabel('Mesocycle name').fill('x'.repeat(101));
@@ -361,6 +372,22 @@ test.describe('locked weeks', () => {
 		expect((await blockRow(block.id)).weeklyRIR).toEqual([3, 2, 1, 4, 4]);
 	});
 
+	test('a block paused by hand locks the weeks through the one it stood in', async ({ page, userData }) => {
+		// Day 20 (Week 3), paused two days ago
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, 0, -1], startedDaysAgo: 20 });
+		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - 2 * DAY) } });
+		await openEditor(page, block.id);
+		await expect(page.getByTestId('edit-paused')).toContainText('Saving does not resume it');
+		for (const n of [1, 2, 3]) await expect(week(page, n)).toBeDisabled();
+		for (const n of [4, 5]) await expect(week(page, n)).toBeEnabled();
+		await setWeek(page, 4, '4 RIR');
+		await saveButton(page).click();
+		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
+		const saved = await blockRow(block.id);
+		expect(saved.weeklyRIR).toEqual([3, 2, 1, 4, -1]);
+		expect(saved.pauses.map((p) => p.resumedAt)).toEqual([null]);
+	});
+
 	test('a Save that comes after the week changed is refused, the draft kept, the locks refreshed, the protected week put back, then it saves', async ({
 		page,
 		userData
@@ -413,6 +440,15 @@ test.describe('New and Clone keep the creation wizard', () => {
 		userData
 	}) => {
 		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 1, 0], startedDaysAgo: 5, name: 'To clone' });
+		// Paused, with a pause behind it too: none of it is copied
+		await prisma.mesocyclePause.create({
+			data: {
+				mesocycleId: block.id,
+				pausedAt: new Date(Date.now() - 4 * DAY),
+				resumedAt: new Date(Date.now() - 3 * DAY)
+			}
+		});
+		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - DAY) } });
 		await page.goto(`/mesocycles/${block.id}`);
 		await page.getByLabel('mesocycle-options').click();
 		await page.getByRole('menuitem', { name: 'Clone' }).click();

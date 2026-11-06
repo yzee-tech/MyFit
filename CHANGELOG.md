@@ -2,6 +2,45 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-06: one editor for a block's weeks, and a block pauses itself when its plan is over
+
+### Changed
+
+- **Edit and Extend are one page.** Edit on a block (or Extend, when it has run all its weeks) opens one page: the
+  name, a row for each week, and the progression settings, with Cancel and Save. There are no Basics and Progression
+  steps, no duration box and no "Use suggested" when you edit a block. **+ Add week** adds one week like the last one
+  (a Deload copies as a Deload) and never touches the others; the bin removes a week that is still ahead (never the
+  last one left). A block can have up to 52 weeks; a new block still starts at 20 at the most, and a block longer than
+  20 is never cut short. New and Clone work as before.
+- **Your changes wait for Save.** Cancel throws all of them away: nothing is saved, and they are not there when you
+  open the block again, in New, or in another block. If Save fails (no connection, a refusal, an error) you stay on the
+  page with everything you changed and can try again.
+- **Weeks that are done or in progress are locked.** On a running block the weeks up to and including the current one
+  can't be changed or removed; the weeks ahead can. If the week turns while you are editing, Save says which weeks are
+  locked now and keeps your changes; **Restore** puts a locked week back. A finished block can't be edited (Clone
+  still works).
+
+### Added
+
+- **A block pauses itself when its plan is over.** Once a block has run all its planned weeks it is paused at the
+  moment its plan ended, not when you next open the app, and it is never finished for you. A block left for weeks does
+  not count weeks that are not in its plan: it stays at "Past its planned weeks", with Extend and Finish block.
+- **Extend, then Resume.** Adding weeks and saving does not resume the block: Resume is its own step, and it waits
+  until the block has another week to go on into. Finish block ends it and closes the pause.
+- A workout you start after the plan ended is an ordinary workout, not part of the block. One you started before it
+  and save later keeps its place.
+
+### Known limits
+
+- A pause made by hand on the first day of a week leaves that week open to editing while the block is paused; it locks
+  when you resume.
+- The block's days are counted in the timezone of the phone that notices the plan has ended. Travelling between
+  timezones in that moment can move the end by a day, and the weeks locked while paused with it.
+- Workouts that were already saved in a week after the plan ended keep their link to the block. The week they show
+  now counts from where the plan ended (for example "Week 6" where it said "Week 7").
+
+---
+
 ## 2026-11-05: scrolling with an exercise ⋯ menu open leaves the list where you scrolled it
 
 ### Fixed

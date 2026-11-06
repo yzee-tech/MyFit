@@ -404,6 +404,67 @@ test.describe('editing a block', () => {
 	});
 });
 
+test.describe('Finish, Save and manual pauses together', () => {
+	const settingsOf = (block: Awaited<ReturnType<typeof blockOf>>, weeklyRIR: number[]) => ({
+		mesocycle: {
+			name: block.name,
+			weeklyRIR,
+			startOverloadPercentage: block.startOverloadPercentage,
+			lastSetToFailure: block.lastSetToFailure,
+			forceRIRMatching: block.forceRIRMatching
+		},
+		mesocycleCyclicSetChanges: []
+	});
+
+	test('Finish and a Save at once: the block ends with nothing left open, and no Save lands on a finished block', async () => {
+		const { caller, block } = await seedPerson();
+		const results = await Promise.allSettled([
+			caller.mesocycles.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null }),
+			caller.mesocycles.editById({ id: block.id, timeZone: 'UTC', mesocycleData: settingsOf(block, [...PLAN, 1]) })
+		]);
+		expect(results[0].status).toBe('fulfilled');
+		const saved = await blockOf(block.id);
+		expect(saved.endDate).not.toBeNull();
+		expect((await pausesOf(block.id)).filter((pause) => pause.resumedAt === null)).toHaveLength(0);
+		// Either the Save went first (the plan has its extra week) or it was refused: never half of one
+		expect([PLAN.length, PLAN.length + 1]).toContain(saved.weeklyRIR.length);
+		if (results[1].status === 'rejected') expect(saved.weeklyRIR).toEqual(PLAN);
+		// A Save after Finish is refused for certain
+		await expect(
+			caller.mesocycles.editById({ id: block.id, timeZone: 'UTC', mesocycleData: settingsOf(block, [...PLAN, 0, 0]) })
+		).rejects.toThrow(/finished mesocycle cannot be changed/);
+	});
+
+	test('a block paused by hand locks the week it was paused in, and the weeks before it', async () => {
+		// Day 20 (Week 3), paused two days ago on day 18
+		const { caller, block } = await seedPerson({
+			startedAt: new Date(Date.now() - 20 * DAY),
+			weeklyRIR: [3, 2, 1, 0, -1]
+		});
+		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - 2 * DAY) } });
+		const edit = (weeklyRIR: number[]) =>
+			caller.mesocycles.editById({ id: block.id, timeZone: 'UTC', mesocycleData: settingsOf(block, weeklyRIR) });
+		await expect(edit([3, 2, 0, 0, -1])).rejects.toThrow(/Weeks 1 to 3/);
+		await edit([3, 2, 1, 4, 4, 4]);
+		expect((await blockOf(block.id)).weeklyRIR).toEqual([3, 2, 1, 4, 4, 4]);
+		// Still paused by hand: saving does not resume it
+		expect((await pausesOf(block.id)).map((pause) => pause.resumedAt)).toEqual([null]);
+	});
+
+	test('editing a workout from the block to a start after the plan ended keeps its link, and does not fail', async () => {
+		const { caller, block } = await seedPerson();
+		const { workoutId } = await caller.workouts.create(workoutOf(block.id, new Date('2026-10-05T10:00:00Z'), 'UTC'));
+		const later = new Date('2026-10-26T10:00:00Z');
+		await caller.workouts.editById({
+			id: workoutId,
+			data: workoutOf(block.id, later, 'UTC'),
+			endedAt: new Date(later.getTime() + 3600000)
+		});
+		expect(await prisma.workoutOfMesocycle.findFirst({ where: { workoutId } })).not.toBeNull();
+		expect(await pausesOf(block.id)).toHaveLength(1);
+	});
+});
+
 test.describe('Resume and Finish', () => {
 	test('a block at the end of its plan is not resumed until it has another week; then it is, and Week 6 is current', async () => {
 		const { caller, block } = await seedPerson();
