@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures';
 import { createMesocycle } from './commonFunctions';
 import { createId } from '@paralleldrive/cuid2';
 import { PrismaClient, type MuscleGroup } from '@prisma/client';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
@@ -392,9 +393,7 @@ test('exercise stats: a block filter is cleared when another exercise is picked,
 			name: 'Hypertrophy',
 			weeklyRIR: [3, 2, 1, 0],
 			startDate: new Date(Date.now() - 20 * DAY),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	try {

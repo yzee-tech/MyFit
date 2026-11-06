@@ -2,20 +2,13 @@ import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createCaller } from '../../src/lib/trpc/router';
 import { createExercises } from './commonFunctions';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
 
 // The days are counted in the phone's timezone: UTC here, so "16 days ago" is day 16 whatever the hour
 test.use({ timezoneId: 'UTC' });
-
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 
 /**
  * A routine and a block with these weeks: not started (`startedDaysAgo` undefined), or started that many days
@@ -27,10 +20,7 @@ async function seedBlock(
 ) {
 	const caller = createCaller({ event: {} as never, userId });
 	await createExercises(userId, [rows.name]);
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = await prisma.mesocycle.create({
 		data: {
 			userId,
@@ -38,9 +28,7 @@ async function seedBlock(
 			weeklyRIR: options.weeklyRIR ?? [3, 2, 1, 0],
 			startDate: options.startedDaysAgo === undefined ? null : new Date(Date.now() - options.startedDaysAgo * DAY),
 			endDate: options.finished ? new Date(Date.now() - DAY) : null,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	return { caller, block };
@@ -223,9 +211,7 @@ test.describe('the draft', () => {
 				userId: userData.userId,
 				name: 'Other block',
 				weeklyRIR: [2, 2],
-				startOverloadPercentage: 2.5,
-				lastSetToFailure: false,
-				forceRIRMatching: false
+				...mesocycleDefaults
 			}
 		});
 		await openEditor(page, block.id);
@@ -273,9 +259,7 @@ test.describe('the draft', () => {
 				userId: userData.userId,
 				name: 'Block B',
 				weeklyRIR: [1, 1, 1],
-				startOverloadPercentage: 2.5,
-				lastSetToFailure: false,
-				forceRIRMatching: false
+				...mesocycleDefaults
 			}
 		});
 		await openEditor(page, a.id);

@@ -6,6 +6,7 @@ import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { deleteTestUsers } from '../deleteTestUsers';
 import { NO_BLOCK_PROGRESSION } from '../../src/lib/utils/workoutUtils';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 /**
  * Workouts from a routine without a block, and how a new workout's times are saved, through the
@@ -17,14 +18,6 @@ test.afterAll(async () => {
 	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
 });
 
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
-
 /** A person with "Pull A" (3 sets of barbell rows) in My routines, and rows done once before */
 async function seedPerson() {
 	const userId = createId();
@@ -34,10 +27,7 @@ async function seedPerson() {
 	const exercise = await prisma.exercise.create({
 		data: { userId, name: rows.name, targetMuscleGroup: rows.targetMuscleGroup }
 	});
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const twoDaysAgo = new Date(Date.now() - 2 * 86400000);
 	await prisma.workout.create({
 		data: {
@@ -97,9 +87,7 @@ test('no block: a routine of My routines gets the same suggestions as an exercis
 	// One set of steady settings for both
 	expect(NO_BLOCK_PROGRESSION).toEqual({
 		weeklyRIR: [2],
-		startOverloadPercentage: 2.5,
-		lastSetToFailure: false,
-		forceRIRMatching: false
+		...mesocycleDefaults
 	});
 });
 
@@ -164,9 +152,7 @@ test('a saved mesocycle workout is named by its routineName, else (saved by an o
 		mesocycle: {
 			name: 'Now',
 			weeklyRIR: [3, 2, 1],
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		},
 		mesocycleCyclicSetChanges: [],
 		startImmediately: true
@@ -210,9 +196,7 @@ test('a block workout from today’s app: named by its routine of My routines, n
 		mesocycle: {
 			name: 'Now',
 			weeklyRIR: [3, 2, 1],
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		},
 		mesocycleCyclicSetChanges: [],
 		startImmediately: true

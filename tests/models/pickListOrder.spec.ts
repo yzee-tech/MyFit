@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createExercises } from './commonFunctions';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 
@@ -92,9 +93,7 @@ async function seedBlock(
 			weeklyRIR: [3, 2, 1, 0],
 			startDate,
 			endDate: options.finished ? new Date(startDate.getTime() + 7 * 86400000) : null,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	const startedAt = new Date(startDate.getTime() + 86400000);

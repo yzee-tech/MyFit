@@ -6,6 +6,7 @@ import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { deleteTestUsers } from '../deleteTestUsers';
 import { historyFromPerformances } from '../../src/lib/trpc/routes/workouts';
+import { mesocycleDefaults } from '../support/blocks';
 
 /** Which past performances feed suggestions, and that a workout only goes in one's own block */
 
@@ -124,9 +125,7 @@ test("a new workout can't go in someone else's block", async () => {
 			name: 'Owner block',
 			weeklyRIR: [3, 2, 1, 0],
 			startDate: new Date(),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	await expect(

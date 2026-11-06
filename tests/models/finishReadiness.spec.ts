@@ -2,18 +2,11 @@ import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createCaller } from '../../src/lib/trpc/router';
 import { createExercises, pickRoutine, saveWorkout } from './commonFunctions';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
 test.use({ timezoneId: 'UTC' });
-
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 
 /**
  * A 1-week block that started 8 days ago and was never paused: it has run all its planned weeks, and the page is
@@ -22,10 +15,7 @@ const rows = {
 async function seedOverdueBlock(userId: string) {
 	const caller = createCaller({ event: {} as never, userId });
 	await createExercises(userId, [rows.name]);
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const startDate = new Date(Date.now() - 8 * DAY);
 	const block = await prisma.mesocycle.create({
 		data: {
@@ -33,9 +23,7 @@ async function seedOverdueBlock(userId: string) {
 			name: 'OneWeekBlock',
 			weeklyRIR: [3],
 			startDate,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	// Where its plan ended: the start of the UTC day 7 days in

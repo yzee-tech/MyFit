@@ -8,6 +8,7 @@ import { getBlockWeek, isBlockPaused } from '../../src/lib/utils/workoutUtils';
 import { lifecycleTestHooks } from '../../src/lib/server/blockLifecycle';
 import { deleteTestUsers } from '../deleteTestUsers';
 import { pgLocks } from '../support/pgLocks';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 /**
  * A block that has run all its planned weeks pauses itself where its plan ended (never finishes by itself), on
@@ -23,13 +24,6 @@ test.afterAll(async () => {
 
 const DAY = 24 * 60 * 60 * 1000;
 const SHANGHAI = 'Asia/Shanghai';
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 // A 5-week block (week 5 a deload) that started on Mon Sep 14 at 10:00 UTC: its plan ended at 00:00 UTC on Mon Oct 19,
 // long before now
 const OLD_START = new Date('2026-09-14T10:00:00Z');
@@ -42,10 +36,7 @@ async function seedPerson(options: { startedAt?: Date | null; weeklyRIR?: number
 	await prisma.user.create({ data: { id: userId, email: `end-plan-${userId}@myfit.com` } });
 	const caller = createCaller({ event: {} as never, userId });
 	await prisma.exercise.create({ data: { userId, name: rows.name, targetMuscleGroup: rows.targetMuscleGroup } });
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = await prisma.mesocycle.create({
 		data: {
 			userId,
@@ -53,9 +44,7 @@ async function seedPerson(options: { startedAt?: Date | null; weeklyRIR?: number
 			weeklyRIR: options.weeklyRIR ?? PLAN,
 			startDate: options.startedAt === undefined ? OLD_START : options.startedAt,
 			endDate: options.endDate ?? null,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	return { userId, caller, block };

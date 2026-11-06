@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 
@@ -152,9 +153,7 @@ test('Workouts calendar: days picked and the filters replace each other, and the
 			weeklyRIR: [3, 2, 1, 0],
 			startDate: hk(10, 1, 9),
 			endDate: hk(10, 20, 9),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	try {
@@ -212,9 +211,7 @@ test('A block’s Workouts tab: its own workouts done, months within the block, 
 			name: 'Hypertrophy',
 			weeklyRIR: [3, 2, 2, 1, 0, -1],
 			startDate: hk(9, 28, 9),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	try {
@@ -408,9 +405,7 @@ test('A block’s Workouts tab: a Showing box while days are picked, with the hi
 			name: 'Hypertrophy',
 			weeklyRIR: [3, 2, 2, 1, 0, -1],
 			startDate: hk(9, 28, 9),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	try {
@@ -480,9 +475,7 @@ test('Dashboard: Get started first while not done, then This week, then the acti
 			name: 'Hypertrophy',
 			weeklyRIR: [3, 2, 1, 0],
 			startDate: new Date(),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	await seedWorkout(userId, new Date(), null);

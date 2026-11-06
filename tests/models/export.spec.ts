@@ -7,6 +7,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { expect, test } from '../fixtures';
 import { deleteTestUsers } from '../deleteTestUsers';
 import { buildCsvExport, buildJsonExport, type ExportData } from '../../src/lib/server/export';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const BASE_URL = 'http://localhost:4173';
@@ -702,9 +703,7 @@ test('orders mesocycles by start date, not by id', async ({ browser }) => {
 	const base = {
 		userId,
 		weeklyRIR: [3, 2, 1],
-		startOverloadPercentage: 2.5,
-		lastSetToFailure: false,
-		forceRIRMatching: false
+		...mesocycleDefaults
 	};
 	// The earlier block has the larger id; a block without a start date comes last
 	await prisma.mesocycle.create({

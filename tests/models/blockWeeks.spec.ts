@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 
@@ -15,9 +16,7 @@ async function seedBlock(userId: string, start: Date | null, end: Date | null = 
 			weeklyRIR: [3, 2, 2, 1, 0, -1],
 			startDate: start,
 			endDate: end,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 }

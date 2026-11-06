@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createExercises, pickRoutine } from './commonFunctions';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
@@ -86,9 +87,7 @@ test('Mesocycles page: the clear button drops the search from the link and shows
 				weeklyRIR: [3, 2, 1, 0],
 				startDate: new Date(Date.now() - daysAgo * DAY),
 				endDate: new Date(Date.now() - (daysAgo - 20) * DAY),
-				startOverloadPercentage: 2.5,
-				lastSetToFailure: false,
-				forceRIRMatching: false
+				...mesocycleDefaults
 			}
 		});
 	}
