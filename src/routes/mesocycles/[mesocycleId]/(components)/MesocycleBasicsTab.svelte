@@ -127,8 +127,8 @@
 				id: mesocycle.id,
 				startDate: mesocycle.startDate,
 				endDate: mesocycle.endDate,
-				// Finishing: only the pause this screen shows open is ended with the block
-				...(mesocycle.startDate && !mesocycle.endDate && openPauseId ? { openPauseId } : {})
+				// Finishing: only the pause this screen shows open (none, if it shows none) is ended with the block
+				...(mesocycle.startDate && !mesocycle.endDate ? { openPauseId, timeZone: browserTimeZone() } : {})
 			});
 			mesocycle.startDate = response.startDate;
 			mesocycle.endDate = response.endDate;
@@ -302,18 +302,20 @@
 				{:else if !mesocycle.startDate}
 					Start mesocycle
 				{:else}
-					<StopIcon class="shrink-0" /> Stop
+					<StopIcon class="shrink-0" /> {pastPlan ? 'Finish block' : 'Stop'}
 				{/if}
 			</Button>
 		</Card.Footer>
 	{/if}
 </Card.Root>
 
-<ResponsiveDialog title="Stop mesocycle?" bind:open={stopConfirmOpen}>
+<ResponsiveDialog title={pastPlan ? 'Finish block?' : 'Stop mesocycle?'} bind:open={stopConfirmOpen}>
 	{#snippet description()}
-		Stopping ends the block and closes the pause.
+		{pastPlan ? 'Finishing' : 'Stopping'} ends the block and closes the pause.
 	{/snippet}
-	<Button class="gap-2" disabled={callingPatchEndpoint} onclick={progressMesocycle}>Stop mesocycle</Button>
+	<Button class="gap-2" disabled={callingPatchEndpoint} onclick={progressMesocycle}
+		>{pastPlan ? 'Finish block' : 'Stop mesocycle'}</Button
+	>
 </ResponsiveDialog>
 
 <ResponsiveDialog title="Delete mesocycle?" bind:open={deleteConfirmDrawerOpen}>

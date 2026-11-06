@@ -205,7 +205,9 @@ export const mesocycles = t.router({
 				startDate: z.date().nullable(),
 				endDate: z.date().nullable(),
 				/** Finishing: the pause the person saw open (none if they saw none), so an old screen's tap is refused */
-				openPauseId: z.string().cuid2().nullable().optional()
+				openPauseId: z.string().cuid2().nullable().optional(),
+				/** Finishing: the phone's timezone, for a block past its plan that is not paused yet */
+				timeZone: z.string().optional().catch(undefined)
 			})
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -224,6 +226,8 @@ export const mesocycles = t.router({
 						throw new TRPCError({ code: 'CONFLICT', message: BLOCK_CHANGED_MESSAGE });
 					}
 				}
+				// A block past its plan is paused where it ended before it is finished, so the days after are not its own
+				if (!starting) await reconcileEndOfPlanInTx(tx, ctx.userId, input.id, input.timeZone);
 				if (starting) {
 					const activeMesocycle = await tx.mesocycle.findFirst({
 						where: { userId: ctx.userId, startDate: { not: null }, endDate: null },

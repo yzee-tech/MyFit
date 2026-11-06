@@ -38,7 +38,7 @@
 		<div class="relative flex items-center justify-between rounded-md border p-2">
 			<Label
 				class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-				for="mesocycle-last-set-to-failure"
+				for="mesocycle-force-RIR-matching"
 			>
 				Force RIR matching
 			</Label>

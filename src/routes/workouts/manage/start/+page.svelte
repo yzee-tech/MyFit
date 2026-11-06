@@ -25,6 +25,7 @@
 	} from '$lib/utils/workoutUtils';
 	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
+	import { TRPCClientError } from '@trpc/client';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
@@ -236,18 +237,25 @@
 		if (!activeBlock) return;
 		finishingBlock = true;
 		const { mesocycle } = activeBlock;
-		const openPauseId = mesocycle.pauses.find((pause) => pause.resumedAt === null)?.id;
+		const openPauseId = mesocycle.pauses.find((pause) => pause.resumedAt === null)?.id ?? null;
 		try {
 			const { message } = await trpc().mesocycles.progressToNextStage.mutate({
 				id: mesocycle.id,
 				startDate: mesocycle.startDate,
 				endDate: null,
-				// Only the pause this screen shows open is ended with the block
-				...(openPauseId ? { openPauseId } : {})
+				// Only the pause this screen shows open (none, if it shows none) is ended with the block
+				openPauseId,
+				timeZone: browserTimeZone()
 			});
 			toast.success(message);
 			await invalidate('workouts:start');
 			await goto(`/mesocycles/${mesocycle.id}?completion`);
+		} catch (error) {
+			// Changed elsewhere since this screen loaded: say so, and show the block as it is now
+			if (error instanceof TRPCClientError) {
+				toast.error(error.message);
+				await invalidate('workouts:start');
+			}
 		} finally {
 			finishingBlock = false;
 		}

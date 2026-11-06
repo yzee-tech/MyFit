@@ -74,30 +74,38 @@ export async function reconcileActiveBlock(userId: string, timeZone?: string | n
 }
 
 /**
- * For a workout being saved: whether it belongs to the block (a workout started while the block was paused is
- * an ordinary one) and whether it fell in a deload week. The block's plan-end pause is made first, in the same
- * transaction, so a workout started after the plan ended is never counted into a week that does not exist.
- * `found` is false when the block is not the person's
+ * Test seam: a workout save calls `beforeWorkoutWrite` after its block and week are decided and before the workout
+ * is written, so a test can hold that moment still and show a Finish cannot land in it. Nothing sets it in the app
  */
-export async function blockMembershipForWorkout(
+export const lifecycleTestHooks: { beforeWorkoutWrite?: () => Promise<void> } = {};
+
+/**
+ * For a workout being saved or moved: whether it belongs to the block (a workout started while the block was
+ * paused is an ordinary one) and whether it fell in a deload week. The block is locked and its plan-end pause
+ * made first, in the caller's transaction, which goes on to write the workout: a workout started after the plan
+ * ended is never counted into a week that does not exist, and nothing changes the block between the decision and
+ * the write. `found` is false when the block is not the person's
+ */
+export async function blockMembershipForWorkoutInTx(
+	tx: Tx,
 	userId: string,
 	mesocycleId: string,
 	startedAt: Date,
 	timeZone: string | undefined
 ): Promise<{ found: boolean; inBlock: boolean; isDeload: boolean }> {
-	return prisma.$transaction(async (tx) => {
-		await reconcileEndOfPlanInTx(tx, userId, mesocycleId, timeZone);
-		const block = await tx.mesocycle.findFirst({
-			where: { id: mesocycleId, userId },
-			select: { startDate: true, weeklyRIR: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
-		});
-		if (!block) return { found: false, inBlock: false, isDeload: false };
-		return {
-			found: true,
-			inBlock: !isInPause(block.pauses, startedAt),
-			isDeload: block.startDate
-				? isDeloadWeek(block.weeklyRIR, getBlockWeek(block.startDate, startedAt, timeZone, block.pauses))
-				: false
-		};
+	await reconcileEndOfPlanInTx(tx, userId, mesocycleId, timeZone);
+	const block = await tx.mesocycle.findFirst({
+		where: { id: mesocycleId, userId },
+		select: { startDate: true, weeklyRIR: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
 	});
+	const decision = block
+		? {
+				found: true,
+				inBlock: !isInPause(block.pauses, startedAt),
+				isDeload: block.startDate
+					? isDeloadWeek(block.weeklyRIR, getBlockWeek(block.startDate, startedAt, timeZone, block.pauses))
+					: false
+			}
+		: { found: false, inBlock: false, isDeload: false };
+	return decision;
 }

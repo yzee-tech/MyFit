@@ -1,6 +1,6 @@
 <script lang="ts">
 	import SearchInput from '$lib/components/SearchInput.svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DefaultInfiniteLoader from '$lib/components/DefaultInfiniteLoader.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -9,6 +9,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
 	import { trpc } from '$lib/trpc/client.js';
+	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import type { Mesocycle } from '@prisma/client';
 	import { onMount } from 'svelte';
 	import type { InfiniteEvent } from 'svelte-infinite-loading';
@@ -22,6 +23,8 @@
 
 	onMount(async () => {
 		activeMesocycle = await data.activeMesocycle;
+		// A block past its planned weeks is paused where its plan ended, on the phone's days
+		if (await reconcileEndOfPlanHere()) await invalidate('mesocycles:active');
 	});
 
 	async function updateSearchParam(e?: Event) {

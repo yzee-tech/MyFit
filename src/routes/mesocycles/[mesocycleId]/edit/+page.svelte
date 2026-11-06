@@ -10,6 +10,7 @@
 	import H3 from '$lib/components/ui/typography/H3.svelte';
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
+	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import {
 		browserTimeZone,
@@ -19,7 +20,7 @@
 		formatWeekEffort
 	} from '$lib/utils/workoutUtils';
 	import { TRPCClientError } from '@trpc/client';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import LockIcon from 'virtual:icons/lucide/lock';
@@ -40,8 +41,9 @@
 		forceRIRMatching: boolean;
 	};
 
-	const mesocycleId = $page.params.mesocycleId as string;
-	const draftKey = `mesocycleEditDraft:${mesocycleId}`;
+	// The block this page is for: it is loaded again if the route is reused for another
+	let mesocycleId = $derived($page.params.mesocycleId as string);
+	let draftKey = $derived(`mesocycleEditDraft:${mesocycleId}`);
 
 	let block = $state<Block | null>(null);
 	let loadState = $state<'loading' | 'ready' | 'missing' | 'failed'>('loading');
@@ -91,8 +93,12 @@
 
 	/** The block as it is now: its weeks and pauses decide which weeks are locked. The draft is left as it is */
 	async function loadBlock() {
+		const id = mesocycleId;
 		try {
-			const fresh = await trpc().mesocycles.findById.query(mesocycleId);
+			// A block past its planned weeks is paused where its plan ended before it is read, on the phone's days
+			await reconcileEndOfPlanHere();
+			const fresh = await trpc().mesocycles.findById.query(id);
+			if (id !== mesocycleId) return;
 			if (!fresh) {
 				loadState = 'missing';
 				return;
@@ -101,11 +107,21 @@
 			draft ??= savedDraft() ?? draftOf(fresh);
 			loadState = 'ready';
 		} catch {
-			if (loadState === 'loading') loadState = 'failed';
+			if (id === mesocycleId && loadState === 'loading') loadState = 'failed';
 		}
 	}
 
-	onMount(loadBlock);
+	// Opened, and again if the route is reused for another block: nothing of the last one is kept
+	$effect(() => {
+		void mesocycleId;
+		untrack(() => {
+			block = null;
+			draft = null;
+			saveError = null;
+			loadState = 'loading';
+			loadBlock();
+		});
+	});
 
 	// Kept while editing, so reloading the page does not lose it
 	$effect(() => {
@@ -191,7 +207,7 @@
 				invalidate('workouts:start'),
 				invalidate('workouts:all')
 			]);
-			await goto(`/mesocycles/${mesocycleId}`);
+			await goto('/mesocycles');
 		} catch (error) {
 			// The whole draft stays, and Save can be tried again; the block is read again, so its locks are as they are now
 			// The server's reason when it answered; a network failure (the client wraps it too) has none to give

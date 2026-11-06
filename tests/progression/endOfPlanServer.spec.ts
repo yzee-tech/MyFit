@@ -5,6 +5,7 @@ config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { endOfPlanBoundary, getBlockWeek, isBlockPaused } from '../../src/lib/utils/workoutUtils';
+import { lifecycleTestHooks } from '../../src/lib/server/blockLifecycle';
 import { deleteTestUsers } from '../deleteTestUsers';
 
 /**
@@ -245,52 +246,58 @@ test.describe('a workout saved after the plan ended', () => {
 		expect(pauses[0].pausedAt.toISOString()).toBe(OLD_END.toISOString());
 	});
 
-	test('a workout already linked to a week after the plan ended keeps its link; only the label it shows is worked out again', async () => {
+	test('a workout already linked to a week after the plan ended keeps its stored rows exactly; only the label it shows is worked out again', async () => {
 		const { caller, block } = await seedPerson();
-		// Saved (before this change) in what was then a Week 7, 9 days after the end
-		const late = await prisma.workout.create({
-			data: {
-				userId: block.userId,
-				startedAt: new Date('2026-10-28T10:00:00Z'),
-				endedAt: new Date('2026-10-28T11:00:00Z'),
-				routineName: 'Pull A',
-				userBodyweight: 80,
-				isDeload: false,
-				countsForProgression: true,
-				workoutOfMesocycle: { create: { mesocycleId: block.id } }
-			}
-		});
-		const early = await prisma.workout.create({
-			data: {
-				userId: block.userId,
-				startedAt: new Date('2026-10-02T10:00:00Z'),
-				endedAt: new Date('2026-10-02T11:00:00Z'),
-				routineName: 'Pull A',
-				userBodyweight: 80,
-				isDeload: false,
-				countsForProgression: true,
-				workoutOfMesocycle: { create: { mesocycleId: block.id } }
-			}
-		});
+		// Workouts saved (before this change) in what was then a Week 7 (9 days after the end) and a Week 3, each with
+		// a note, exercises and sets, and linked to the block
+		const save = async (startedAt: Date, note: string, countsForProgression: boolean) => {
+			const { workoutId } = await caller.workouts.create({
+				...workoutOf(block.id, startedAt, 'UTC'),
+				workoutData: {
+					userBodyweight: 81.5,
+					routineName: 'Pull A',
+					startedAt,
+					note,
+					countsForProgression
+				}
+			});
+			// Linked as the old app did it, whatever the day
+			await prisma.workoutOfMesocycle.create({ data: { workoutId, mesocycleId: block.id } });
+			return workoutId;
+		};
+		const lateId = await save(new Date('2026-10-28T10:00:00Z'), 'a note on the late one', true);
+		const earlyId = await save(new Date('2026-10-02T10:00:00Z'), 'a note on the early one', false);
+		const snapshotOf = (id: string) =>
+			prisma.workout.findUniqueOrThrow({
+				where: { id },
+				include: {
+					workoutOfMesocycle: true,
+					workoutExercises: {
+						orderBy: { id: 'asc' },
+						include: { sets: { orderBy: { id: 'asc' }, include: { miniSets: true } } }
+					}
+				}
+			});
+		const lateBefore = await snapshotOf(lateId);
+		const earlyBefore = await snapshotOf(earlyId);
+		expect(lateBefore.workoutOfMesocycle?.mesocycleId).toBe(block.id);
+		expect(lateBefore.workoutExercises[0].sets).toHaveLength(1);
 		const week = (at: Date, pauses: { pausedAt: Date; resumedAt: Date | null }[]) =>
 			getBlockWeek(block.startDate!, at, 'UTC', pauses);
-		expect(week(late.startedAt, [])).toBe(7);
-		expect(week(early.startedAt, [])).toBe(3);
-		await caller.mesocycles.reconcileEndOfPlan({ timeZone: 'UTC' });
+		expect(week(lateBefore.startedAt, [])).toBe(7);
+		expect(week(earlyBefore.startedAt, [])).toBe(3);
+		// (The saves above made the pause already: take it away, as the legacy block had none, and make it again)
+		await prisma.mesocyclePause.deleteMany({ where: { mesocycleId: block.id } });
+		expect(await caller.mesocycles.reconcileEndOfPlan({ timeZone: 'UTC' })).toEqual({ created: true });
 		const pauses = await pausesOf(block.id);
 		// The one after the plan ended is at the end of it now; the one before keeps its week
-		expect(week(late.startedAt, pauses)).toBe(6);
-		expect(week(early.startedAt, pauses)).toBe(3);
-		// Nothing about either workout was rewritten
-		for (const workout of [late, early]) {
-			const saved = await prisma.workout.findUniqueOrThrow({
-				where: { id: workout.id },
-				include: { workoutOfMesocycle: true }
-			});
-			expect(saved.workoutOfMesocycle?.mesocycleId).toBe(block.id);
-			expect(saved.isDeload).toBe(false);
-			expect(saved.countsForProgression).toBe(true);
-		}
+		expect(week(lateBefore.startedAt, pauses)).toBe(6);
+		expect(week(earlyBefore.startedAt, pauses)).toBe(3);
+		// Every stored row of both is as it was: link, isDeload, countsForProgression, values, note, times, routine name
+		expect(await snapshotOf(lateId)).toEqual(lateBefore);
+		expect(await snapshotOf(earlyId)).toEqual(earlyBefore);
+		expect(earlyBefore.countsForProgression).toBe(false);
+		expect(lateBefore.note).toBe('a note on the late one');
 	});
 });
 
@@ -401,6 +408,93 @@ test.describe('editing a block', () => {
 		// Still one pause, still open: saving never resumes
 		expect(pauses).toHaveLength(1);
 		expect(pauses[0].resumedAt).toBeNull();
+	});
+});
+
+test.describe('a workout save holds the block until the workout is written', () => {
+	/** Holds a save still between the decision about its block and its write, and says when it has got there */
+	function holdBeforeWrite() {
+		let release!: () => void;
+		const released = new Promise<void>((resolve) => (release = resolve));
+		let reached!: () => void;
+		const atHold = new Promise<void>((resolve) => (reached = resolve));
+		lifecycleTestHooks.beforeWorkoutWrite = async () => {
+			reached();
+			await released;
+		};
+		return { release, atHold };
+	}
+	test.afterEach(() => {
+		lifecycleTestHooks.beforeWorkoutWrite = undefined;
+	});
+
+	test('a Finish sent while a workout save is between deciding and writing waits, and the workout is written into the block first', async () => {
+		const { caller, block } = await seedPerson({
+			startedAt: new Date(Date.now() - 10 * DAY),
+			weeklyRIR: [3, 2, 1, 0, -1]
+		});
+		const { release, atHold } = holdBeforeWrite();
+		const saving = caller.workouts.create(workoutOf(block.id, new Date(Date.now() - 2 * DAY), 'UTC'));
+		await atHold;
+		let finished = false;
+		const finishing = caller.mesocycles
+			.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
+			.then((result) => {
+				finished = true;
+				return result;
+			});
+		// The save has decided the workout is the block's and has not written it: the Finish cannot land here
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		expect(finished).toBe(false);
+		expect((await blockOf(block.id)).endDate).toBeNull();
+		release();
+		const { workoutId } = await saving;
+		await finishing;
+		// Written into the block, then the block finished: never a link onto a block finished in between
+		expect(await prisma.workoutOfMesocycle.findFirst({ where: { workoutId, mesocycleId: block.id } })).not.toBeNull();
+		expect((await blockOf(block.id)).endDate).not.toBeNull();
+	});
+
+	test('the same for an edit that moves a workout to another day', async () => {
+		const { caller, block } = await seedPerson({
+			startedAt: new Date(Date.now() - 10 * DAY),
+			weeklyRIR: [3, 2, 1, 0, -1]
+		});
+		const { workoutId } = await caller.workouts.create(workoutOf(block.id, new Date(Date.now() - 3 * DAY), 'UTC'));
+		const moved = new Date(Date.now() - 2 * DAY);
+		const { release, atHold } = holdBeforeWrite();
+		const editing = caller.workouts.editById({
+			id: workoutId,
+			data: workoutOf(block.id, moved, 'UTC'),
+			endedAt: new Date(moved.getTime() + 3600000)
+		});
+		await atHold;
+		let finished = false;
+		const finishing = caller.mesocycles
+			.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
+			.then((result) => {
+				finished = true;
+				return result;
+			});
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		expect(finished).toBe(false);
+		release();
+		await editing;
+		await finishing;
+		expect(await prisma.workoutOfMesocycle.findFirst({ where: { workoutId, mesocycleId: block.id } })).not.toBeNull();
+		expect((await blockOf(block.id)).endDate).not.toBeNull();
+	});
+
+	test('a save that fails writes nothing, and makes no pause either', async () => {
+		const { caller, block } = await seedPerson();
+		lifecycleTestHooks.beforeWorkoutWrite = async () => {
+			throw new Error('the write failed');
+		};
+		await expect(
+			caller.workouts.create(workoutOf(block.id, new Date('2026-10-25T10:00:00Z'), 'UTC'))
+		).rejects.toThrow();
+		expect(await pausesOf(block.id)).toHaveLength(0);
+		expect(await prisma.workout.count({ where: { userId: block.userId } })).toBe(0);
 	});
 });
 
