@@ -7,6 +7,7 @@ import {
 	type WorkoutExerciseInProgress
 } from '../../src/lib/utils/workoutUtils';
 import { boxNumber, editWorkoutExercise, expectBox, expectBoxNot, pickRoutine, quickAdd } from './commonFunctions';
+import { holdFirstResponse } from '../support/holdFirstResponse';
 
 const prisma = new PrismaClient();
 
@@ -1015,19 +1016,7 @@ test('a suggestions answer that arrives after the workout was discarded cannot w
 	userData
 }) => {
 	await setUpLastTime(userData.userId);
-	let release!: () => void;
-	const held = new Promise<void>((resolve) => (release = resolve));
-	let requested!: () => void;
-	const seen = new Promise<void>((resolve) => (requested = resolve));
-	let first = true;
-	await page.route(/suggestSets/, async (route) => {
-		if (!first) return route.continue();
-		first = false;
-		const response = await route.fetch();
-		requested();
-		await held;
-		await route.fulfill({ response });
-	});
+	const { release, seen } = await holdFirstResponse(page, /suggestSets/);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -1060,20 +1049,8 @@ test('a late suggestions answer cannot overwrite the next workout when it has th
 	userData
 }) => {
 	await setUpLastTime(userData.userId);
-	let release!: () => void;
-	const held = new Promise<void>((resolve) => (release = resolve));
-	let requested!: () => void;
-	const seen = new Promise<void>((resolve) => (requested = resolve));
-	let first = true;
-	await page.route(/suggestSets/, async (route) => {
-		if (!first) return route.continue();
-		first = false;
-		// Workout A's answer: Barbell rows is not reps only
-		const response = await route.fetch();
-		requested();
-		await held;
-		await route.fulfill({ response });
-	});
+	// Workout A's answer: Barbell rows is not reps only
+	const { release, seen } = await holdFirstResponse(page, /suggestSets/);
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
 	await page.getByPlaceholder('Type here').fill('100');
@@ -1117,19 +1094,7 @@ test('a reps-only answer that arrives after a past workout was discarded cannot 
 		where: { userId_name: { userId: userData.userId, name: 'Barbell rows' } },
 		data: { repsOnly: true, maxReps: 30 }
 	});
-	let release!: () => void;
-	const held = new Promise<void>((resolve) => (release = resolve));
-	let requested!: () => void;
-	const seen = new Promise<void>((resolve) => (requested = resolve));
-	let first = true;
-	await page.route(/forPicker/, async (route) => {
-		if (!first) return route.continue();
-		first = false;
-		const response = await route.fetch();
-		requested();
-		await held;
-		await route.fulfill({ response });
-	});
+	const { release, seen } = await holdFirstResponse(page, /forPicker/);
 	await page.goto(`/workouts/${workout.id}`);
 	await page.getByLabel('workout-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();

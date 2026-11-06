@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createExercises, editWorkoutExercise, expectBox, pickRoutine, quickAdd, saveWorkout } from './commonFunctions';
+import { holdFirstResponse } from '../support/holdFirstResponse';
 
 const prisma = new PrismaClient();
 
@@ -784,19 +785,7 @@ test('a late suggestions answer for a discarded workout writes no cardio numbers
 		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
 	]);
 	await logPastCardio(userId);
-	let release!: () => void;
-	const held = new Promise<void>((resolve) => (release = resolve));
-	let requested!: () => void;
-	const seen = new Promise<void>((resolve) => (requested = resolve));
-	let first = true;
-	await page.route(/suggestSets/, async (route) => {
-		if (!first) return route.continue();
-		first = false;
-		const response = await route.fetch();
-		requested();
-		await held;
-		await route.fulfill({ response });
-	});
+	const { release, seen } = await holdFirstResponse(page, /suggestSets/);
 	await startBlankWorkout(page);
 	await quickAdd(page, ['Run']);
 	await seen;
