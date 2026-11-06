@@ -1,11 +1,18 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import Badge from '$lib/components/ui/badge/badge.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import Skeleton from '$lib/components/ui/skeleton/skeleton.svelte';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { formatWeekEffort, getBlockWeekHere, isBlockPaused } from '$lib/utils/workoutUtils';
+	import {
+		browserTimeZone,
+		formatWeekEffort,
+		getBlockWeekHere,
+		isBlockPaused,
+		isPastPlannedWeeks
+	} from '$lib/utils/workoutUtils';
+	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { workoutRunes } from '../../workouts/manage/workoutRunes.svelte';
 	import WorkoutProgressionChart from './WorkoutProgressionChart.svelte';
@@ -19,6 +26,24 @@
 
 	// The week is counted on the phone (its clock and timezone), so nothing until the page is up
 	const now = useNow();
+
+	// A block past its planned weeks is paused where its plan ended, on the phone's days (the page's own load
+	// doesn't know them)
+	let reconcileTried = false;
+	$effect(() => {
+		if (reconcileTried || !now.value) return;
+		const today = now.value;
+		todaysWorkoutData.then((data) => {
+			const block = data.activeBlock;
+			if (reconcileTried || !block?.mesocycle.startDate || isBlockPaused(block.mesocycle.pauses)) return;
+			const { mesocycle, totalWeeks } = block;
+			if (!isPastPlannedWeeks(mesocycle.startDate!, today, browserTimeZone(), mesocycle.pauses, totalWeeks)) return;
+			reconcileTried = true;
+			reconcileEndOfPlanHere().then((created) => {
+				if (created) invalidate('workouts:all');
+			});
+		});
+	});
 
 	function createNewWorkout() {
 		if (workoutRunes.editingWorkoutId !== null) workoutRunes.resetStores();
@@ -63,7 +88,7 @@
 						<!-- Before "finished": a block past its planned weeks can still be paused -->
 						Week {weekNumber} - paused · {block.routines.length} routines
 					{:else if weekNumber > block.totalWeeks}
-						Block finished, all {block.totalWeeks} weeks done
+						Past its planned weeks, all {block.totalWeeks} weeks done
 					{:else}
 						Week {weekNumber} of {block.totalWeeks} · {block.routines.length} routines
 					{/if}

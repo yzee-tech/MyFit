@@ -11,7 +11,6 @@ import {
 	getBlockWeek,
 	type BlockPause,
 	isBlockPaused,
-	isInPause,
 	getExerciseVolume,
 	isDeloadWeek,
 	NO_BLOCK_PROGRESSION,
@@ -94,7 +93,7 @@ export type RoutineOption = {
 
 type ActiveBlockData = {
 	/** With the times it was paused: the week stands still while it is */
-	mesocycle: Mesocycle & { pauses: BlockPause[] };
+	mesocycle: Mesocycle & { pauses: (BlockPause & { id: string })[] };
 	totalWeeks: number;
 	routines: RoutineOption[];
 };

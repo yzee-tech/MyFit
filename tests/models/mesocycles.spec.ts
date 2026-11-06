@@ -134,17 +134,17 @@ test('edit a mesocycle', async ({ page }) => {
 	await page.getByRole('link', { name: 'MesoName Unused' }).click();
 	await page.getByLabel('mesocycle-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	// One page: the name, the weeks and the settings together, no steps
 	await page.getByLabel('Mesocycle name').fill('MesoName (edited)');
-	await page.getByRole('button', { name: 'Next' }).click();
 	await page.locator('#mesocycle-force-RIR-matching').click();
 	await page.getByLabel('Take last set to failure').click();
 	await page.locator('span > .absolute').click();
-	await page.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Mesocycle edited successfully' })).toBeVisible({
 		timeout: 10000
 	});
 
-	await page.getByRole('link', { name: 'MesoName (edited) Unused' }).click();
+	// Back on the block
 	await expect(page.locator('h3')).toContainText('MesoName (edited)');
 	await expect(page.getByRole('tabpanel')).toContainText('Weekly effort 5 weeks');
 	await expect(page.getByTestId('mesocycle-weekly-effort').locator('> *')).toHaveText([
@@ -288,7 +288,7 @@ test('finish a block once its weeks are over', async ({ page, userData }) => {
 		data: { startDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) }
 	});
 	await page.reload();
-	await expect(page.getByRole('main')).toContainText('Block finished');
+	await expect(page.getByRole('main')).toContainText('Past its planned weeks');
 	await page.getByRole('button', { name: 'Finish block' }).click();
 	await page.waitForURL(/\/mesocycles\/[a-zA-Z0-9]+(\?completion)/);
 });

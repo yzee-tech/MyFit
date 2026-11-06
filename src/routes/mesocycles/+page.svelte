@@ -14,7 +14,6 @@
 	import type { InfiniteEvent } from 'svelte-infinite-loading';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import SearchIcon from 'virtual:icons/lucide/search';
-	import { mesocycleRunes } from './manage/mesocycleRunes.svelte.js';
 
 	let { data } = $props();
 	let activeMesocycle: Pick<Mesocycle, 'id' | 'name'> | null | 'loading' = $state('loading');
@@ -58,7 +57,6 @@
 	}
 
 	function createNewMesocycle() {
-		if (mesocycleRunes.editingMesocycleId !== null) mesocycleRunes.resetStores();
 		goto('/mesocycles/manage/basics');
 	}
 </script>

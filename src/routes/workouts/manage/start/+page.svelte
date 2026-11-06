@@ -20,13 +20,14 @@
 		getBlockWeekHere,
 		isBlockPaused,
 		isDeloadWeek,
+		isPastPlannedWeeks,
 		localDaysBetween
 	} from '$lib/utils/workoutUtils';
+	import { reconcileEndOfPlanHere } from '$lib/utils/reconcileEndOfPlanHere';
 	import { useNow } from '$lib/utils/useNow.svelte';
 	import { toast } from 'svelte-sonner';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
-	import { fullMesocycleWithoutIds, mesocycleRunes } from '../../../mesocycles/manage/mesocycleRunes.svelte.js';
 	import { exercisesLink } from '../exercisesLink';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import type { WeightUnit } from '$lib/utils/prismaEnums';
@@ -103,6 +104,19 @@
 	// Whether this workout's lifts are used for progression: on, unless the block is paused (it can be flipped)
 	let countsForProgression = $state(true);
 	let blockFinished = $derived(activeBlock !== undefined && weekNumber !== null && weekNumber > activeBlock.totalWeeks);
+	// A block past its planned weeks is paused where its plan ended, on the phone's days (the page's own load
+	// doesn't know them)
+	let reconcileTried = false;
+	$effect(() => {
+		if (reconcileTried || workoutRunes.editingWorkoutId !== null || !activeBlock?.mesocycle.startDate) return;
+		if (blockPaused || !now.value) return;
+		const { mesocycle, totalWeeks } = activeBlock;
+		if (!isPastPlannedWeeks(mesocycle.startDate!, now.value, browserTimeZone(), mesocycle.pauses, totalWeeks)) return;
+		reconcileTried = true;
+		reconcileEndOfPlanHere().then((created) => {
+			if (created) invalidate('workouts:start');
+		});
+	});
 	// The block's routines, else (no block) My routines
 	let routines: RoutineOption[] = $derived(
 		workoutData === 'loading' ? [] : (workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [])
@@ -222,11 +236,14 @@
 		if (!activeBlock) return;
 		finishingBlock = true;
 		const { mesocycle } = activeBlock;
+		const openPauseId = mesocycle.pauses.find((pause) => pause.resumedAt === null)?.id;
 		try {
 			const { message } = await trpc().mesocycles.progressToNextStage.mutate({
 				id: mesocycle.id,
 				startDate: mesocycle.startDate,
-				endDate: null
+				endDate: null,
+				// Only the pause this screen shows open is ended with the block
+				...(openPauseId ? { openPauseId } : {})
 			});
 			toast.success(message);
 			await invalidate('workouts:start');
@@ -236,22 +253,12 @@
 		}
 	}
 
-	// Extend: open the block in the mesocycle editor, its weeks and settings loaded as saved
+	// Extend: open the block in its editor (it loads the block as it is now)
 	async function extendBlock() {
 		if (!activeBlock) return;
 		extendingBlock = true;
 		try {
-			// The start page's block lacks its stored set changes: fetch it whole, like the Edit menu does
-			const mesocycle = await trpc().mesocycles.findById.query(activeBlock.mesocycle.id);
-			if (!mesocycle) {
-				toast.error('Block not found');
-				return;
-			}
-			mesocycleRunes.loadMesocycle(fullMesocycleWithoutIds(mesocycle), mesocycle.id);
-			await goto('/mesocycles/manage/basics');
-		} catch {
-			// Offline or the fetch failed: stay put, nothing loaded, free to try again
-			toast.error("Couldn't open the block for editing. Check your connection and try again.");
+			await goto(`/mesocycles/${activeBlock.mesocycle.id}/edit`);
 		} finally {
 			extendingBlock = false;
 		}
@@ -273,20 +280,12 @@
 	{#if activeBlock && blockFinished && workoutRunes.editingWorkoutId === null}
 		<Card.Root class="mb-1">
 			<Card.Header>
-				{#if blockPaused}
-					<!-- Paused past its planned weeks: finishing is still the move, but it is not finished yet -->
-					<Card.Title>Past its planned weeks</Card.Title>
-					<Card.Description>
-						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done, and it is paused. Finish it to see
-						how it went, then start a new one. If you want to keep going, extend it instead.
-					</Card.Description>
-				{:else}
-					<Card.Title>Block finished &nbsp;🎉</Card.Title>
-					<Card.Description>
-						All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done. Finish it to see how it went, then
-						start a new one. If you want to keep going, extend it instead.
-					</Card.Description>
-				{/if}
+				<Card.Title>Past its planned weeks</Card.Title>
+				<Card.Description>
+					All {activeBlock.totalWeeks} weeks of {activeBlock.mesocycle.name} are done{blockPaused
+						? ', and it is paused'
+						: ''}. Finish it to see how it went, then start a new one. If you want to keep going, extend it instead.
+				</Card.Description>
 			</Card.Header>
 			<Card.Footer class="flex justify-end gap-1">
 				<Button disabled={extendingBlock} onclick={extendBlock} variant="secondary">
