@@ -165,24 +165,20 @@
 	});
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
-	// Whether the person has moved the progression switch off what the page itself last chose
-	let lastCountsDefault: boolean | null = null;
+	// Set when the person themselves moves the progression switch (a click or a key on it), never by the page
+	let countsChosen = false;
 	/**
-	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause: the
-	 * progression switch then follows the block (off while it is paused), unless a workout is in progress (it keeps
-	 * its own choice) or the person has already turned the switch themselves
+	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause. A
+	 * workout in progress keeps its own stored choice; otherwise the progression switch follows the block (off while it
+	 * is paused) for as long as the person has not moved it
 	 */
 	function applyPayload(payload: TodaysWorkoutData) {
 		workoutData = payload;
 		if (inProgress) {
 			countsForProgression = workoutRunes.workoutData?.countsForProgression ?? true;
-			lastCountsDefault = countsForProgression;
-			return;
+		} else if (!countsChosen) {
+			countsForProgression = !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
 		}
-		const defaultNow = !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
-		const turnedByPerson = lastCountsDefault !== null && countsForProgression !== lastCountsDefault;
-		if (!turnedByPerson) countsForProgression = defaultNow;
-		lastCountsDefault = defaultNow;
 	}
 
 	$effect(() => {
@@ -519,7 +515,12 @@
 					{/if}
 				</p>
 			</div>
-			<Switch id="counts-for-progression" name="counts-for-progression" bind:checked={countsForProgression} />
+			<Switch
+				id="counts-for-progression"
+				name="counts-for-progression"
+				bind:checked={countsForProgression}
+				on:click={() => (countsChosen = true)}
+			/>
 		</div>
 	{/if}
 	<Button class="mt-auto" type="submit" form="user-bodyweight-form" disabled={!canStart || $navigating !== null}>
