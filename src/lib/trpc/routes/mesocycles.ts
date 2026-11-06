@@ -217,6 +217,19 @@ export const mesocycles = t.router({
 			const starting = !input.startDate;
 			const updatedMesocycle = await withRoutinesTransaction(async (tx) => {
 				await lockMesocycle(tx, ctx.userId, input.id);
+				// The block's own dates decide what can happen; the screen's dates only say what the person meant to do.
+				// A screen that is out of date (the block was started or finished on another device) is refused, and
+				// nothing about a finished block is rewritten
+				const current = await tx.mesocycle.findFirst({
+					where: { id: input.id, userId: ctx.userId },
+					select: { startDate: true, endDate: true }
+				});
+				if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+				const canStart = !current.startDate && !current.endDate;
+				const canFinish = !!current.startDate && !current.endDate;
+				if (starting ? !canStart : !canFinish) {
+					throw new TRPCError({ code: 'CONFLICT', message: BLOCK_CHANGED_MESSAGE });
+				}
 				if (!starting && input.openPauseId !== undefined) {
 					const open = await tx.mesocyclePause.findFirst({
 						where: { mesocycleId: input.id, mesocycle: { userId: ctx.userId }, resumedAt: null },

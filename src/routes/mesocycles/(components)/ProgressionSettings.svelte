@@ -9,8 +9,14 @@
 	let {
 		lastSetToFailure = $bindable(),
 		forceRIRMatching = $bindable(),
-		startOverloadPercentage = $bindable()
-	}: { lastSetToFailure: boolean; forceRIRMatching: boolean; startOverloadPercentage: number } = $props();
+		startOverloadPercentage = $bindable(),
+		disabled = false
+	}: {
+		lastSetToFailure: boolean;
+		forceRIRMatching: boolean;
+		startOverloadPercentage: number;
+		disabled?: boolean;
+	} = $props();
 </script>
 
 <Card.Root>
@@ -27,7 +33,12 @@
 			>
 				Take last set to failure
 			</Label>
-			<Switch id="mesocycle-last-set-to-failure" name="mesocycle-last-set-to-failure" bind:checked={lastSetToFailure} />
+			<Switch
+				id="mesocycle-last-set-to-failure"
+				name="mesocycle-last-set-to-failure"
+				{disabled}
+				bind:checked={lastSetToFailure}
+			/>
 			<InfoPopover
 				ariaLabel="mesocycle-last-set-to-failure-info"
 				triggerClasses="absolute -right-0.5 -top-2.5 focus:outline-none"
@@ -42,7 +53,12 @@
 			>
 				Force RIR matching
 			</Label>
-			<Switch id="mesocycle-force-RIR-matching" name="mesocycle-force-RIR-matching" bind:checked={forceRIRMatching} />
+			<Switch
+				id="mesocycle-force-RIR-matching"
+				name="mesocycle-force-RIR-matching"
+				{disabled}
+				bind:checked={forceRIRMatching}
+			/>
 			<InfoPopover
 				ariaLabel="mesocycle-force-RIR-matching-info"
 				triggerClasses="absolute -right-0.5 -top-2.5 focus:outline-none"
@@ -58,6 +74,7 @@
 				</span>
 			</div>
 			<Slider
+				{disabled}
 				max={10}
 				min={0}
 				onValueChange={(value) => (startOverloadPercentage = value[0])}

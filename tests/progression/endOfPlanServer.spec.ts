@@ -632,3 +632,182 @@ test.describe('Resume and Finish', () => {
 		expect((await blockOf(block.id)).endDate).not.toBeNull();
 	});
 });
+
+test.describe('Start and Finish read the block, not the screen', () => {
+	const startedAndFinished = async () => {
+		const { caller, block, userId } = await seedPerson({ startedAt: null });
+		const started = await caller.mesocycles.progressToNextStage({ id: block.id, startDate: null, endDate: null });
+		const finished = await caller.mesocycles.progressToNextStage({
+			id: block.id,
+			startDate: started.startDate,
+			endDate: null,
+			openPauseId: null
+		});
+		return { caller, block, userId, started, finished };
+	};
+
+	test('a Start from a screen that saw the block unused, after another device started and finished it, changes nothing and reattaches no routines', async () => {
+		const { caller, block, finished } = await startedAndFinished();
+		const before = await blockOf(block.id);
+		expect(before.endDate).not.toBeNull();
+		expect(before.exerciseSplitId).toBeNull();
+		await expect(
+			caller.mesocycles.progressToNextStage({ id: block.id, startDate: null, endDate: null })
+		).rejects.toThrow(/changed on another device/);
+		const after = await blockOf(block.id);
+		expect(after.startDate?.toISOString()).toBe(before.startDate?.toISOString());
+		expect(after.endDate?.toISOString()).toBe(finished.endDate?.toISOString());
+		expect(after.exerciseSplitId).toBeNull();
+	});
+
+	test('a Start from a screen that saw the block unused, after another device only started it, is refused and the start date stays', async () => {
+		const { caller, block } = await seedPerson({ startedAt: null });
+		const first = await caller.mesocycles.progressToNextStage({ id: block.id, startDate: null, endDate: null });
+		await expect(
+			caller.mesocycles.progressToNextStage({ id: block.id, startDate: null, endDate: null })
+		).rejects.toThrow(/changed on another device/);
+		expect((await blockOf(block.id)).startDate?.toISOString()).toBe(first.startDate?.toISOString());
+	});
+
+	test('a repeated or old Finish is refused and the first end date stays (the old screen saw no pause, and still says so)', async () => {
+		const { caller, block, started, finished } = await startedAndFinished();
+		for (const openPauseId of [null, undefined]) {
+			await expect(
+				caller.mesocycles.progressToNextStage({
+					id: block.id,
+					startDate: started.startDate,
+					endDate: null,
+					openPauseId
+				})
+			).rejects.toThrow(/changed on another device/);
+		}
+		expect((await blockOf(block.id)).endDate?.toISOString()).toBe(finished.endDate?.toISOString());
+	});
+
+	test('a Finish for a block that was never started is refused', async () => {
+		const { caller, block } = await seedPerson({ startedAt: null });
+		await expect(
+			caller.mesocycles.progressToNextStage({ id: block.id, startDate: new Date(), endDate: null, openPauseId: null })
+		).rejects.toThrow(/changed on another device/);
+		const after = await blockOf(block.id);
+		expect([after.startDate, after.endDate]).toEqual([null, null]);
+	});
+
+	test('two Finishes at once: one ends the block, the other is refused, and the end date is the first one', async () => {
+		const { caller, block } = await seedPerson();
+		const finish = () =>
+			caller.mesocycles.progressToNextStage({
+				id: block.id,
+				startDate: block.startDate,
+				endDate: null,
+				timeZone: 'UTC'
+			});
+		const results = await Promise.allSettled([finish(), finish()]);
+		expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+		const winner = results.find((result) => result.status === 'fulfilled') as PromiseFulfilledResult<
+			Awaited<ReturnType<typeof finish>>
+		>;
+		expect((await blockOf(block.id)).endDate?.toISOString()).toBe(winner.value.endDate?.toISOString());
+		expect((await pausesOf(block.id)).filter((pause) => pause.resumedAt === null)).toHaveLength(0);
+	});
+
+	test("someone else's block is not found", async () => {
+		const { block } = await seedPerson({ startedAt: null });
+		const { caller: other } = await seedPerson();
+		await expect(
+			other.mesocycles.progressToNextStage({ id: block.id, startDate: null, endDate: null })
+		).rejects.toThrow(/not found/i);
+	});
+});
+
+test.describe("a workout is the block's only if it began inside the block", () => {
+	const linked = async (workoutId: string) =>
+		(await prisma.workoutOfMesocycle.findFirst({ where: { workoutId } })) !== null;
+
+	test("at the Finish instant and after it: ordinary; during the pause: ordinary; before Finish, saved late: the block's", async () => {
+		const { caller, block } = await seedPerson();
+		await caller.mesocycles.reconcileEndOfPlan({ timeZone: 'UTC' });
+		const { endDate } = await caller.mesocycles.progressToNextStage({
+			id: block.id,
+			startDate: block.startDate,
+			endDate: null,
+			timeZone: 'UTC'
+		});
+		expect(endDate).not.toBeNull();
+		const end = endDate!;
+		const save = async (startedAt: Date) =>
+			(await caller.workouts.create(workoutOf(block.id, startedAt, 'UTC'))).workoutId;
+		expect(await linked(await save(end))).toBe(false);
+		expect(await linked(await save(new Date(end.getTime() + 3600000)))).toBe(false);
+		// Inside the pause the plan's end left, before Finish
+		expect(await linked(await save(new Date('2026-10-25T10:00:00Z')))).toBe(false);
+		// Began in the deload week, saved after Finish
+		const late = await save(new Date('2026-10-15T10:00:00Z'));
+		expect(await linked(late)).toBe(true);
+		expect((await prisma.workout.findUniqueOrThrow({ where: { id: late } })).isDeload).toBe(true);
+		// Nothing about the block moved
+		expect((await blockOf(block.id)).endDate?.toISOString()).toBe(end.toISOString());
+	});
+
+	test('before the block started, or on a block never started: ordinary', async () => {
+		const { caller, block } = await seedPerson();
+		const early = await caller.workouts.create(workoutOf(block.id, new Date(OLD_START.getTime() - DAY), 'UTC'));
+		expect(await linked(early.workoutId)).toBe(false);
+		const exactly = await caller.workouts.create(workoutOf(block.id, OLD_START, 'UTC'));
+		expect(await linked(exactly.workoutId)).toBe(true);
+		const unused = await seedPerson({ startedAt: null });
+		const unusedSave = await unused.caller.workouts.create(workoutOf(unused.block.id, new Date(), 'UTC'));
+		expect(await linked(unusedSave.workoutId)).toBe(false);
+	});
+
+	test('a screen that still shows the block running, after another device finished it: the workout is not linked', async () => {
+		const { caller, block } = await seedPerson({
+			startedAt: new Date(Date.now() - 10 * DAY),
+			weeklyRIR: [3, 2, 1, 0, -1]
+		});
+		await caller.mesocycles.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null });
+		const { workoutId } = await caller.workouts.create(workoutOf(block.id, new Date(Date.now() + 60000), 'UTC'));
+		expect(await linked(workoutId)).toBe(false);
+	});
+
+	// A block finished before this release, never paused where its plan ended (planned weeks ran Sep 14 to Oct 19)
+	const legacyFinished = (endDate: Date) => seedPerson({ endDate });
+
+	test("a finished block that was never paused at its plan end: a new save after that place is ordinary, before it the block's", async () => {
+		const { caller, block } = await legacyFinished(new Date('2026-11-01T00:00:00Z'));
+		expect(await pausesOf(block.id)).toHaveLength(0);
+		const before = await caller.workouts.create(workoutOf(block.id, new Date('2026-10-15T10:00:00Z'), 'UTC'));
+		const after = await caller.workouts.create(workoutOf(block.id, new Date('2026-10-25T10:00:00Z'), 'UTC'));
+		expect(await linked(before.workoutId)).toBe(true);
+		expect(await linked(after.workoutId)).toBe(false);
+		// Nothing is written to a finished block to decide it
+		expect(await pausesOf(block.id)).toHaveLength(0);
+	});
+
+	test('editing a start keeps the link whatever the bounds say, and the deload comes from the calendar', async () => {
+		// Finished mid-way through the deload week (Oct 14); Oct 16 is after it
+		const { caller, block } = await legacyFinished(new Date('2026-10-14T00:00:00Z'));
+		const { workoutId } = await caller.workouts.create(workoutOf(block.id, new Date('2026-10-05T10:00:00Z'), 'UTC'));
+		expect(await linked(workoutId)).toBe(true);
+		const later = new Date('2026-10-16T10:00:00Z');
+		await caller.workouts.editById({
+			id: workoutId,
+			data: workoutOf(block.id, later, 'UTC'),
+			endedAt: new Date(later.getTime() + 3600000)
+		});
+		expect(await linked(workoutId)).toBe(true);
+		const saved = await prisma.workout.findUniqueOrThrow({ where: { id: workoutId } });
+		const stored = await blockOf(block.id);
+		// Oct 16 is in Week 5, the deload week, by the calendar: not forced off because it is after the end
+		expect(saved.isDeload).toBe(true);
+		expect(getBlockWeek(stored.startDate!, later, 'UTC', [])).toBe(5);
+		// And moved past the place the plan ended: still linked, the calendar still decides
+		const muchLater = new Date('2026-10-26T10:00:00Z');
+		await caller.workouts.editById({
+			id: workoutId,
+			data: workoutOf(block.id, muchLater, 'UTC'),
+			endedAt: new Date(muchLater.getTime() + 3600000)
+		});
+		expect(await linked(workoutId)).toBe(true);
+	});
+});

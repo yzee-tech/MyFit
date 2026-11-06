@@ -83,9 +83,9 @@
 		}
 	}
 
-	function clearDraft() {
+	function clearDraft(key: string = draftKey) {
 		try {
-			sessionStorage.removeItem(draftKey);
+			sessionStorage.removeItem(key);
 		} catch {
 			// Nothing was kept
 		}
@@ -183,11 +183,14 @@
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!block || !draft || saving) return;
+		// The block this Save is for, held for the whole request: the page can move to another block meanwhile
+		const id = mesocycleId;
+		const key = draftKey;
 		saving = true;
 		saveError = null;
 		try {
 			const response = await trpc().mesocycles.editById.mutate({
-				id: mesocycleId,
+				id,
 				timeZone: browserTimeZone(),
 				mesocycleData: {
 					mesocycle: $state.snapshot(draft),
@@ -197,17 +200,17 @@
 					)
 				}
 			});
-			clearDraft();
-			draft = null;
+			clearDraft(key);
+			if (id === mesocycleId) draft = null;
 			toast.success(response.message);
 			await Promise.all([
 				invalidate('mesocycles:all'),
-				invalidate(`mesocycles:${mesocycleId}`),
+				invalidate(`mesocycles:${id}`),
 				invalidate('mesocycles:active'),
 				invalidate('workouts:start'),
 				invalidate('workouts:all')
 			]);
-			await goto('/mesocycles');
+			if (id === mesocycleId) await goto('/mesocycles');
 		} catch (error) {
 			// The whole draft stays, and Save can be tried again; the block is read again, so its locks are as they are now
 			// The server's reason when it answered; a network failure (the client wraps it too) has none to give
@@ -216,7 +219,7 @@
 					? error.message
 					: "Couldn't save. Check your connection and try again. Your changes are kept.";
 			toast.error(saveError);
-			await loadBlock();
+			if (id === mesocycleId) await loadBlock();
 		} finally {
 			saving = false;
 		}
@@ -250,110 +253,115 @@
 		<Button class="mt-2" href="/mesocycles/{mesocycleId}" variant="secondary">Back</Button>
 	{:else}
 		<form class="flex grow flex-col gap-2" onsubmit={save}>
-			{#if pastPlan}
-				<p class="rounded-lg border bg-card p-3 text-sm" data-testid="edit-past-plan">
-					It has run all its {block.weeklyRIR.length} planned weeks. Add the weeks you want, then Save.
-					{#if paused}Saving does not resume it: Resume is a separate step.{/if}
-				</p>
-			{:else if paused}
-				<p class="rounded-lg border bg-card p-3 text-sm" data-testid="edit-paused">
-					It is paused. Saving does not resume it.
-				</p>
-			{/if}
-
-			<div class="flex w-full flex-col gap-1.5">
-				<Label for="mesocycle-name">Mesocycle name</Label>
-				<Input id="mesocycle-name" placeholder="Type here" required bind:value={draft.name} />
-			</div>
-
-			<H3>Weekly effort</H3>
-			<p class="text-sm text-muted-foreground">
-				How many reps to keep in reserve (RIR) each week. A deload week keeps last week's weights with half the sets.
-				{#if locked > 0}
-					{locked === 1 ? 'Week 1 is' : `Weeks 1 to ${locked} are`} past or in progress, so
-					{locked === 1 ? 'it' : 'they'} can't be changed.
+			<!-- While a Save is on its way nothing can be changed: what is sent is what is saved, and the draft is cleared on
+			     success. Save and Cancel are outside it and turn themselves off while it runs -->
+			<fieldset class="contents" data-testid="edit-fields" disabled={saving}>
+				{#if pastPlan}
+					<p class="rounded-lg border bg-card p-3 text-sm" data-testid="edit-past-plan">
+						It has run all its {block.weeklyRIR.length} planned weeks. Add the weeks you want, then Save.
+						{#if paused}Saving does not resume it: Resume is a separate step.{/if}
+					</p>
+				{:else if paused}
+					<p class="rounded-lg border bg-card p-3 text-sm" data-testid="edit-paused">
+						It is paused. Saving does not resume it.
+					</p>
 				{/if}
-			</p>
-			<ol class="flex flex-col gap-1" data-testid="edit-weeks">
-				{#each draft.weeklyRIR as rir, idx}
-					{@const isLocked = idx < locked}
-					<li
-						class="flex items-center justify-between gap-2 rounded-lg border bg-card px-4 py-2"
-						data-locked={isLocked}
-					>
-						<span class="flex items-center gap-1.5 font-medium">
-							Week {idx + 1}
-							{#if isLocked}<LockIcon
-									class="size-3.5 text-muted-foreground"
-									aria-label="Week {idx + 1} is locked"
-								/>{/if}
-						</span>
-						<div class="flex items-center gap-1">
-							{#if isLocked && block.weeklyRIR[idx] !== rir}
-								<Button
-									aria-label="Restore week {idx + 1}"
-									class="h-auto p-0"
-									onclick={() => (draft!.weeklyRIR[idx] = block!.weeklyRIR[idx])}
-									type="button"
-									variant="link"
-								>
-									Restore {formatWeekEffort(block.weeklyRIR, idx + 1)}
-								</Button>
-							{/if}
-							<Select.Root
-								disabled={isLocked}
-								onSelectedChange={(selected) => {
-									if (selected && !isLocked) draft!.weeklyRIR[idx] = selected.value;
-								}}
-								selected={effortOption(rir)}
-							>
-								<Select.Trigger class="w-40" aria-label="Week {idx + 1} effort">
-									<Select.Value />
-								</Select.Trigger>
-								<Select.Content>
-									{#each effortOptions as option}
-										<Select.Item value={option.value}>{option.label}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-							{#if !isLocked && weeks > 1}
-								<Button
-									aria-label="Delete week {idx + 1}"
-									onclick={() => deleteWeek(idx)}
-									size="icon"
-									type="button"
-									variant="ghost"
-								>
-									<DeleteIcon class="size-4" />
-								</Button>
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ol>
-			<Button class="gap-1.5" disabled={weeks >= MAX_WEEKS} onclick={addWeek} type="button" variant="secondary">
-				<PlusIcon class="size-4" /> Add week
-			</Button>
-			{#if weeks >= MAX_WEEKS}
-				<p class="text-sm text-muted-foreground">A mesocycle can have up to {MAX_WEEKS} weeks.</p>
-			{/if}
 
-			<ProgressionSettings
-				bind:lastSetToFailure={draft.lastSetToFailure}
-				bind:forceRIRMatching={draft.forceRIRMatching}
-				bind:startOverloadPercentage={draft.startOverloadPercentage}
-			/>
+				<div class="flex w-full flex-col gap-1.5">
+					<Label for="mesocycle-name">Mesocycle name</Label>
+					<Input id="mesocycle-name" placeholder="Type here" required bind:value={draft.name} />
+				</div>
 
-			{#if saveError}
-				<p class="rounded-lg border border-destructive p-3 text-sm" data-testid="edit-save-error" role="alert">
-					{saveError}
-					{#if lockedChanged}
-						<Button class="h-auto p-0" onclick={restoreLockedWeeks} type="button" variant="link">
-							Put the locked weeks back
-						</Button>
+				<H3>Weekly effort</H3>
+				<p class="text-sm text-muted-foreground">
+					How many reps to keep in reserve (RIR) each week. A deload week keeps last week's weights with half the sets.
+					{#if locked > 0}
+						{locked === 1 ? 'Week 1 is' : `Weeks 1 to ${locked} are`} past or in progress, so
+						{locked === 1 ? 'it' : 'they'} can't be changed.
 					{/if}
 				</p>
-			{/if}
+				<ol class="flex flex-col gap-1" data-testid="edit-weeks">
+					{#each draft.weeklyRIR as rir, idx}
+						{@const isLocked = idx < locked}
+						<li
+							class="flex items-center justify-between gap-2 rounded-lg border bg-card px-4 py-2"
+							data-locked={isLocked}
+						>
+							<span class="flex items-center gap-1.5 font-medium">
+								Week {idx + 1}
+								{#if isLocked}<LockIcon
+										class="size-3.5 text-muted-foreground"
+										aria-label="Week {idx + 1} is locked"
+									/>{/if}
+							</span>
+							<div class="flex items-center gap-1">
+								{#if isLocked && block.weeklyRIR[idx] !== rir}
+									<Button
+										aria-label="Restore week {idx + 1}"
+										class="h-auto p-0"
+										onclick={() => (draft!.weeklyRIR[idx] = block!.weeklyRIR[idx])}
+										type="button"
+										variant="link"
+									>
+										Restore {formatWeekEffort(block.weeklyRIR, idx + 1)}
+									</Button>
+								{/if}
+								<Select.Root
+									disabled={isLocked || saving}
+									onSelectedChange={(selected) => {
+										if (selected && !isLocked) draft!.weeklyRIR[idx] = selected.value;
+									}}
+									selected={effortOption(rir)}
+								>
+									<Select.Trigger class="w-40" aria-label="Week {idx + 1} effort">
+										<Select.Value />
+									</Select.Trigger>
+									<Select.Content>
+										{#each effortOptions as option}
+											<Select.Item value={option.value}>{option.label}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+								{#if !isLocked && weeks > 1}
+									<Button
+										aria-label="Delete week {idx + 1}"
+										onclick={() => deleteWeek(idx)}
+										size="icon"
+										type="button"
+										variant="ghost"
+									>
+										<DeleteIcon class="size-4" />
+									</Button>
+								{/if}
+							</div>
+						</li>
+					{/each}
+				</ol>
+				<Button class="gap-1.5" disabled={weeks >= MAX_WEEKS} onclick={addWeek} type="button" variant="secondary">
+					<PlusIcon class="size-4" /> Add week
+				</Button>
+				{#if weeks >= MAX_WEEKS}
+					<p class="text-sm text-muted-foreground">A mesocycle can have up to {MAX_WEEKS} weeks.</p>
+				{/if}
+
+				<ProgressionSettings
+					bind:lastSetToFailure={draft.lastSetToFailure}
+					bind:forceRIRMatching={draft.forceRIRMatching}
+					bind:startOverloadPercentage={draft.startOverloadPercentage}
+					disabled={saving}
+				/>
+
+				{#if saveError}
+					<p class="rounded-lg border border-destructive p-3 text-sm" data-testid="edit-save-error" role="alert">
+						{saveError}
+						{#if lockedChanged}
+							<Button class="h-auto p-0" onclick={restoreLockedWeeks} type="button" variant="link">
+								Put the locked weeks back
+							</Button>
+						{/if}
+					</p>
+				{/if}
+			</fieldset>
 
 			<div class="mt-auto grid grid-cols-2 gap-1">
 				<Button disabled={saving} onclick={cancel} type="button" variant="secondary">Cancel</Button>

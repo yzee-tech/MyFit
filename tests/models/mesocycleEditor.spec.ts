@@ -353,6 +353,80 @@ test.describe('the draft', () => {
 		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Kept name');
 	});
 
+	test('while a Save is on its way nothing can be changed (name, weeks, Add, trash, switches, slider), so no edit is lost; a failure frees it all with the draft kept', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, 0] });
+		await openEditor(page, block.id);
+		await page.getByLabel('Mesocycle name').fill('Sent name');
+		await page.getByRole('button', { name: 'Add week' }).click();
+		await expect(weekRows(page)).toHaveCount(5);
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		let fail = false;
+		await page.route('**/trpc/mesocycles.editById*', async (route) => {
+			await gate;
+			if (fail) await route.fulfill({ status: 500, contentType: 'text/plain', body: 'Something broke' });
+			else await route.continue();
+		});
+		await saveButton(page).click();
+		// Everything that can change the draft is off, Cancel too; the request is not answered yet
+		const controls = [
+			page.getByLabel('Mesocycle name'),
+			week(page, 4),
+			week(page, 5),
+			page.getByRole('button', { name: 'Add week' }),
+			page.getByRole('button', { name: 'Delete week 5' }),
+			page.locator('#mesocycle-last-set-to-failure'),
+			page.locator('#mesocycle-force-RIR-matching'),
+			cancelButton(page)
+		];
+		for (const control of controls) await expect(control).toBeDisabled();
+		await expect(page.getByRole('slider')).toHaveAttribute('aria-disabled', 'true');
+		// Pressing keys on the slider moves nothing
+		await page
+			.getByRole('slider')
+			.press('ArrowRight')
+			.catch(() => undefined);
+		await expect(page.getByText('2.5%')).toBeVisible();
+		await expect(page).toHaveURL(`/mesocycles/${block.id}/edit`);
+		// It fails: all of it is free again, and the draft is what it was
+		fail = true;
+		release();
+		await expect(page.getByTestId('edit-save-error')).toBeVisible();
+		for (const control of controls) await expect(control).toBeEnabled();
+		await expect(page.getByRole('slider')).not.toHaveAttribute('aria-disabled', 'true');
+		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Sent name');
+		await expect(weekRows(page)).toHaveCount(5);
+		expect((await blockRow(block.id)).name).toBe('MyMeso');
+		await page.getByLabel('Mesocycle name').fill('Edited after the failure');
+		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Edited after the failure');
+	});
+
+	test('a Save that goes through saves exactly what was on the screen when it was pressed', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, 0] });
+		await openEditor(page, block.id);
+		await page.getByLabel('Mesocycle name').fill('Sent name');
+		await page.getByRole('button', { name: 'Add week' }).click();
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		await page.route('**/trpc/mesocycles.editById*', async (route) => {
+			await gate;
+			await route.continue();
+		});
+		await saveButton(page).click();
+		await expect(page.getByLabel('Mesocycle name')).toBeDisabled();
+		release();
+		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
+		await page.waitForURL('/mesocycles');
+		const saved = await blockRow(block.id);
+		expect([saved.name, saved.weeklyRIR]).toEqual(['Sent name', [3, 2, 1, 0, 0]]);
+	});
+
 	test('an edit kept by an older app version does not start a new block', async ({ page, userData }) => {
 		await seedBlock(userData.userId);
 		await page.addInitScript(() => {

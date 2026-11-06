@@ -80,11 +80,16 @@ export async function reconcileActiveBlock(userId: string, timeZone?: string | n
 export const lifecycleTestHooks: { beforeWorkoutWrite?: () => Promise<void> } = {};
 
 /**
- * For a workout being saved or moved: whether it belongs to the block (a workout started while the block was
- * paused is an ordinary one) and whether it fell in a deload week. The block is locked and its plan-end pause
- * made first, in the caller's transaction, which goes on to write the workout: a workout started after the plan
- * ended is never counted into a week that does not exist, and nothing changes the block between the decision and
- * the write. `found` is false when the block is not the person's
+ * For a workout being saved or moved: whether it may belong to the block and whether it fell in a deload week. The
+ * block is locked and its plan-end pause made first, in the caller's transaction, which goes on to write the
+ * workout: a workout started after the plan ended is never counted into a week that does not exist, and nothing
+ * changes the block between the decision and the write. `found` is false when the block is not the person's
+ *
+ * `inBlock` is whether a NEW link may be made: the block has started, the workout began at or after its start and
+ * (once it is finished) before its end, it began outside every pause, and it began before the place its plan ended
+ * (derived here for a finished block that was never paused there). A workout saved late, but begun before the
+ * block was finished, still belongs to it. `isDeload` is the plan's calendar for that start and does not depend on
+ * `inBlock`: an edit that moves a workout keeps its link whatever this says and only reads `isDeload`
  */
 export async function blockMembershipForWorkoutInTx(
 	tx: Tx,
@@ -96,16 +101,28 @@ export async function blockMembershipForWorkoutInTx(
 	await reconcileEndOfPlanInTx(tx, userId, mesocycleId, timeZone);
 	const block = await tx.mesocycle.findFirst({
 		where: { id: mesocycleId, userId },
-		select: { startDate: true, weeklyRIR: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
+		select: { startDate: true, endDate: true, weeklyRIR: true, pauses: { select: { pausedAt: true, resumedAt: true } } }
 	});
-	const decision = block
-		? {
-				found: true,
-				inBlock: !isInPause(block.pauses, startedAt),
-				isDeload: block.startDate
-					? isDeloadWeek(block.weeklyRIR, getBlockWeek(block.startDate, startedAt, timeZone, block.pauses))
-					: false
-			}
-		: { found: false, inBlock: false, isDeload: false };
-	return decision;
+	if (!block) return { found: false, inBlock: false, isDeload: false };
+	const at = new Date(startedAt).getTime();
+	let inBlock =
+		!!block.startDate &&
+		at >= new Date(block.startDate).getTime() &&
+		(!block.endDate || at < new Date(block.endDate).getTime()) &&
+		!isInPause(block.pauses, startedAt);
+	if (inBlock && block.startDate && block.endDate) {
+		// Finished before it was ever paused where its plan ended: that place is still where its plan ended
+		const boundary = endOfPlanBoundary(block.startDate, block.pauses, block.weeklyRIR.length, timeZone);
+		const paused = block.pauses.some(
+			(pause) => new Date(pause.pausedAt).getTime() >= (boundary?.getTime() ?? Infinity)
+		);
+		if (boundary && !paused && at >= boundary.getTime()) inBlock = false;
+	}
+	return {
+		found: true,
+		inBlock,
+		isDeload: block.startDate
+			? isDeloadWeek(block.weeklyRIR, getBlockWeek(block.startDate, startedAt, timeZone, block.pauses))
+			: false
+	};
 }

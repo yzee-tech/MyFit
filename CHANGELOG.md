@@ -38,6 +38,17 @@ What changed in MyFit, newest first.
 
 - **"Force RIR matching" now toggles its own switch.** Its label pointed at "Take last set to failure", so tapping
   the label changed the other one.
+- **A screen that is out of date can no longer start or finish a block again.** Start and Finish now check the block
+  itself, not what the screen showed: a Start from a screen that saw the block unused, after it was started or even
+  finished on another device, and a repeated or old Finish, are refused with "changed on another device". A finished
+  block keeps its dates and no longer takes back My routines.
+- **A workout belongs to a block only if it began inside it.** One that began before the block started, at or after it
+  was finished, or (for a block finished before it was paused where its plan ended) after the place its plan ended, is
+  an ordinary workout. One that began before the block was finished and is saved later still belongs to it. Editing the
+  start of a workout that is already in a block keeps its place in the block, as before.
+- **Nothing you change in the editor is lost while Save is on its way.** The name, the weeks, Add week, the bins and
+  the progression settings are switched off until the answer comes, so what is saved is what was on the screen when
+  you pressed Save; if Save fails they all come back, with everything you changed.
 
 ### Known limits
 
