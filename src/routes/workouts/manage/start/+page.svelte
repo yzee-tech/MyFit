@@ -117,7 +117,12 @@
 		try {
 			const fresh = await trpc().workouts.getTodaysWorkoutData.query({ timeZone: browserTimeZone() });
 			if (run !== settleRun) return;
-			if (workoutRunes.editingWorkoutId === null) applyPayload(fresh);
+			// A workout being edited meanwhile keeps the page as it is; the card is not shown then, so nothing waits
+			if (workoutRunes.editingWorkoutId !== null) {
+				settleState = 'idle';
+				return;
+			}
+			applyPayload(fresh);
 			settleState = 'ready';
 		} catch {
 			// Never a false ready: Finish stays off and the person can try again

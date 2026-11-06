@@ -45,27 +45,33 @@ async function seedOverdueBlock(userId: string) {
 
 const state = (id: string) => prisma.mesocycle.findUniqueOrThrow({ where: { id }, include: { pauses: true } });
 
-/** Holds every request to this procedure until `release()`; `answer` says how to let it go */
+/**
+ * Holds every request matching `pattern` until `release()`. It is then let through, or, after `failOnRelease()`,
+ * dropped as if the network failed
+ */
 async function hold(page: Page, pattern: string) {
 	let release!: () => void;
 	const gate = new Promise<void>((resolve) => (release = resolve));
 	let fail = false;
-	let calls = 0;
 	await page.route(pattern, async (route) => {
-		calls++;
 		await gate;
 		if (fail) await route.abort();
 		else await route.continue();
 	});
 	return {
 		release: () => release(),
-		failOnRelease: () => (fail = true),
-		calls: () => calls
+		failOnRelease: () => (fail = true)
 	};
 }
 
 const START = '/workouts/manage/start';
 const finishOnStart = (page: Page) => page.getByRole('button', { name: 'Finish block' });
+// The block page: its button (the first one named so), and the confirmation a paused block asks for
+const finishOnBlock = (page: Page) => page.getByRole('button', { name: 'Finish block' }).first();
+const confirmFinish = async (page: Page) => {
+	await finishOnBlock(page).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Finish block' }).click();
+};
 
 test.describe('the start page: Finish waits until the page has the block as it is now', () => {
 	test('Finish is off while the pause and the fresh read are on their way, then works', async ({ page, userData }) => {
@@ -131,12 +137,6 @@ test.describe('the start page: Finish waits until the page has the block as it i
 });
 
 test.describe('the block page: the same', () => {
-	const finishOnBlock = (page: Page) => page.getByRole('button', { name: 'Finish block' }).first();
-	const confirmFinish = async (page: Page) => {
-		await finishOnBlock(page).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Finish block' }).click();
-	};
-
 	test('Finish is off until both the pause request and the fresh read have answered, each held on its own', async ({
 		page,
 		userData
@@ -253,16 +253,14 @@ test('the block page: the pause request itself fails: an error and Try again, Fi
 	const pause = await hold(page, '**/trpc/mesocycles.reconcileEndOfPlan*');
 	pause.failOnRelease();
 	await page.goto(`/mesocycles/${block.id}`);
-	const finish = page.getByRole('button', { name: 'Finish block' }).first();
-	await expect(finish).toBeDisabled();
+	await expect(finishOnBlock(page)).toBeDisabled();
 	pause.release();
 	await expect(page.getByRole('alert').filter({ hasText: "Couldn't check where its plan ended" })).toBeVisible();
-	await expect(finish).toBeDisabled();
+	await expect(finishOnBlock(page)).toBeDisabled();
 	expect((await state(block.id)).pauses).toHaveLength(0);
 	await page.unroute('**/trpc/mesocycles.reconcileEndOfPlan*');
 	await page.getByRole('button', { name: 'Try again' }).click();
-	await expect(finish).toBeEnabled();
-	await finish.click();
-	await page.getByRole('dialog').getByRole('button', { name: 'Finish block' }).click();
+	await expect(finishOnBlock(page)).toBeEnabled();
+	await confirmFinish(page);
 	await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
 });
