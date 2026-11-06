@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createCaller } from '../../src/lib/trpc/router';
-import { createExercises } from './commonFunctions';
+import { createExercises, pickRoutine, saveWorkout } from './commonFunctions';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
@@ -194,4 +194,75 @@ test.describe('the block page: the same', () => {
 		await confirmFinish(page);
 		await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
 	});
+});
+
+test.describe('what the start page shows once the automatic pause has been applied', () => {
+	const switchOf = (page: Page) => page.getByRole('switch', { name: 'Counts toward progression' });
+	const openStart = async (page: Page) => {
+		await page.goto('/workouts');
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('80');
+	};
+
+	test('the progression switch is off for the now-paused block, and an ordinary workout is saved as not counting', async ({
+		page,
+		userData
+	}) => {
+		await seedOverdueBlock(userData.userId);
+		await openStart(page);
+		await expect(page.getByText(/and it is paused/)).toBeVisible();
+		await pickRoutine(page, 'Pull A');
+		await expect(switchOf(page)).not.toBeChecked();
+		await expect(page.getByTestId('counts-for-progression-help')).toContainText('Off since mesocycle is paused.');
+		await page.getByRole('button', { name: 'Next' }).click();
+		await page.waitForURL(/\/workouts\/manage\/exercises/);
+		for (const set of [1, 2, 3]) {
+			await page.locator(`[id="Barbell\\ rows-set-${set}-load"]`).fill('50');
+			await page.locator(`[id="Barbell\\ rows-set-${set}-reps"]`).fill('12');
+			await page.locator(`[id="Barbell\\ rows-set-${set}-RIR"]`).fill('2');
+			await page.getByTestId(`Barbell rows-set-${set}-action`).click();
+		}
+		await page.getByRole('button', { name: 'Next' }).click();
+		await saveWorkout(page);
+		const saved = await prisma.workout.findFirstOrThrow({
+			where: { userId: userData.userId },
+			orderBy: { startedAt: 'desc' },
+			include: { workoutOfMesocycle: true }
+		});
+		expect(saved.countsForProgression).toBe(false);
+		expect(saved.workoutOfMesocycle).toBeNull();
+	});
+
+	test('what was typed while the page was still settling is kept', async ({ page, userData }) => {
+		await seedOverdueBlock(userData.userId);
+		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
+		await page.goto('/workouts');
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('85');
+		fresh.release();
+		await expect(page.getByText(/and it is paused/)).toBeVisible();
+		await expect(page.getByPlaceholder('Type here')).toHaveValue('85');
+	});
+});
+
+test('the block page: the pause request itself fails: an error and Try again, Finish stays off; Try again then works', async ({
+	page,
+	userData
+}) => {
+	const { block } = await seedOverdueBlock(userData.userId);
+	const pause = await hold(page, '**/trpc/mesocycles.reconcileEndOfPlan*');
+	pause.failOnRelease();
+	await page.goto(`/mesocycles/${block.id}`);
+	const finish = page.getByRole('button', { name: 'Finish block' }).first();
+	await expect(finish).toBeDisabled();
+	pause.release();
+	await expect(page.getByRole('alert').filter({ hasText: "Couldn't check where its plan ended" })).toBeVisible();
+	await expect(finish).toBeDisabled();
+	expect((await state(block.id)).pauses).toHaveLength(0);
+	await page.unroute('**/trpc/mesocycles.reconcileEndOfPlan*');
+	await page.getByRole('button', { name: 'Try again' }).click();
+	await expect(finish).toBeEnabled();
+	await finish.click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Finish block' }).click();
+	await expect.poll(async () => (await state(block.id)).endDate !== null).toBe(true);
 });

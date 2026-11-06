@@ -51,6 +51,9 @@ What changed in MyFit, newest first.
   "no pause" while one existed and was refused as "changed on another device". On the start page and on the block
   page, Finish now waits for that answer to be read and shown (also when another request had already made the pause),
   and if it can't be read the page says so and offers **Try again** instead of looking ready.
+- **A workout started after the automatic pause is not counted toward progression by default.** The start page's
+  "Counts toward progression" switch now follows the block when the page learns it has been paused (it stayed on); a
+  workout in progress keeps its own choice, and a switch you have turned yourself is left alone.
 - **Nothing you change in the editor is lost while Save is on its way.** The name, the weeks, Add week, the bins and
   the progression settings are switched off until the answer comes, so what is saved is what was on the screen when
   you pressed Save; if Save fails they all come back, with everything you changed.

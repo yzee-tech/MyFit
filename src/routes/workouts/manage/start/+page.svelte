@@ -117,7 +117,7 @@
 		try {
 			const fresh = await trpc().workouts.getTodaysWorkoutData.query({ timeZone: browserTimeZone() });
 			if (run !== settleRun) return;
-			if (workoutRunes.editingWorkoutId === null) workoutData = fresh;
+			if (workoutRunes.editingWorkoutId === null) applyPayload(fresh);
 			settleState = 'ready';
 		} catch {
 			// Never a false ready: Finish stays off and the person can try again
@@ -160,18 +160,34 @@
 	});
 	let canStart = $derived(userBodyweight !== null && (!useRoutine || selectedRoutine !== undefined));
 
+	// Whether the person has moved the progression switch off what the page itself last chose
+	let lastCountsDefault: boolean | null = null;
+	/**
+	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause: the
+	 * progression switch then follows the block (off while it is paused), unless a workout is in progress (it keeps
+	 * its own choice) or the person has already turned the switch themselves
+	 */
+	function applyPayload(payload: TodaysWorkoutData) {
+		workoutData = payload;
+		if (inProgress) {
+			countsForProgression = workoutRunes.workoutData?.countsForProgression ?? true;
+			lastCountsDefault = countsForProgression;
+			return;
+		}
+		const defaultNow = !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
+		const turnedByPerson = lastCountsDefault !== null && countsForProgression !== lastCountsDefault;
+		if (!turnedByPerson) countsForProgression = defaultNow;
+		lastCountsDefault = defaultNow;
+	}
+
 	$effect(() => {
 		data.workoutData.then((data) => {
-			if (workoutRunes.editingWorkoutId === null) workoutData = data;
-			else workoutData = workoutRunes.workoutData as TodaysWorkoutData;
+			const payload = workoutRunes.editingWorkoutId === null ? data : (workoutRunes.workoutData as TodaysWorkoutData);
+			applyPayload(payload);
 
-			userBodyweight = userBodyweight ?? toHomeUnit(workoutData.userBodyweight);
-			// Decided when the page is shown: a workout in progress keeps its own choice
-			countsForProgression = inProgress
-				? (workoutRunes.workoutData?.countsForProgression ?? true)
-				: !isBlockPaused(workoutData.activeBlock?.mesocycle.pauses);
-			const options = workoutData.activeBlock?.routines ?? workoutData.myRoutines ?? [];
-			if (workoutData.activeBlock !== undefined || options.length > 0) useRoutine = true;
+			userBodyweight = userBodyweight ?? toHomeUnit(payload.userBodyweight);
+			const options = payload.activeBlock?.routines ?? payload.myRoutines ?? [];
+			if (payload.activeBlock !== undefined || options.length > 0) useRoutine = true;
 			// Back from a workout in progress: it stays picked
 			if (inProgress) {
 				useRoutine = options.some((routine) => routine.name === inProgressRoutineName);
