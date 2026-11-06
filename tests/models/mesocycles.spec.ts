@@ -144,7 +144,9 @@ test('edit a mesocycle', async ({ page }) => {
 		timeout: 10000
 	});
 
-	// Back on the block
+	// Back on the list
+	await page.waitForURL('/mesocycles');
+	await page.getByRole('link', { name: 'MesoName (edited) Unused' }).click();
 	await expect(page.locator('h3')).toContainText('MesoName (edited)');
 	await expect(page.getByRole('tabpanel')).toContainText('Weekly effort 5 weeks');
 	await expect(page.getByTestId('mesocycle-weekly-effort').locator('> *')).toHaveText([

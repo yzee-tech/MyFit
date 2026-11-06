@@ -92,6 +92,21 @@ test.describe('one direct editor', () => {
 		await expect(page.locator('[data-locked="true"]')).toHaveCount(0);
 	});
 
+	test('each progression label toggles its own switch', async ({ page, userData }) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1] });
+		await openEditor(page, block.id);
+		const lastSet = page.locator('#mesocycle-last-set-to-failure');
+		const forceRIR = page.locator('#mesocycle-force-RIR-matching');
+		await expect(lastSet).not.toBeChecked();
+		await expect(forceRIR).not.toBeChecked();
+		await page.getByLabel('Force RIR matching').click();
+		await expect(forceRIR).toBeChecked();
+		await expect(lastSet).not.toBeChecked();
+		await page.getByLabel('Take last set to failure').click();
+		await expect(lastSet).toBeChecked();
+		await expect(forceRIR).toBeChecked();
+	});
+
 	test('Save changes the name, the weeks and the settings in one go, and goes back to the block', async ({
 		page,
 		userData
@@ -104,7 +119,9 @@ test.describe('one direct editor', () => {
 		await page.locator('#mesocycle-force-RIR-matching').click();
 		await saveButton(page).click();
 		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
-		await page.waitForURL(`/mesocycles/${block.id}`);
+		// A successful Save goes back to the list
+		await page.waitForURL('/mesocycles');
+		await page.goto(`/mesocycles/${block.id}`);
 		await expect(page.getByTestId('mesocycle-weekly-effort').locator('> *')).toHaveText([
 			'W1: 3 RIR',
 			'W2: 4 RIR',
@@ -279,6 +296,17 @@ test.describe('the draft', () => {
 		await page.getByLabel('Mesocycle name').fill('Kept name');
 		await setWeek(page, 3, 'Deload');
 		await page.getByRole('button', { name: 'Add week' }).click();
+		// The progression settings are part of the draft: both switches, and the overload slider (2.5% to 3.5%)
+		await page.getByLabel('Take last set to failure').click();
+		await page.getByLabel('Force RIR matching').click();
+		await page.getByRole('slider').focus();
+		for (let press = 0; press < 4; press++) await page.keyboard.press('ArrowRight');
+		await expect(page.getByText('3.5%')).toBeVisible();
+		const settingsKept = async () => {
+			await expect(page.locator('#mesocycle-last-set-to-failure')).toBeChecked();
+			await expect(page.locator('#mesocycle-force-RIR-matching')).toBeChecked();
+			await expect(page.getByText('3.5%')).toBeVisible();
+		};
 		// Network failure
 		await page.route('**/trpc/mesocycles.editById*', (route) => route.abort());
 		await saveButton(page).click();
@@ -288,6 +316,7 @@ test.describe('the draft', () => {
 		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Kept name');
 		await expect(weekRows(page)).toHaveCount(4);
 		await expect(week(page, 3)).toContainText('Deload');
+		await settingsKept();
 		expect((await blockRow(block.id)).name).toBe('MyMeso');
 		// An unexpected error from the server: the same, nothing lost
 		await page.unroute('**/trpc/mesocycles.editById*');
@@ -299,6 +328,7 @@ test.describe('the draft', () => {
 		await expect(saveButton(page)).toBeEnabled();
 		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Kept name');
 		await expect(weekRows(page)).toHaveCount(4);
+		await settingsKept();
 		expect((await blockRow(block.id)).name).toBe('MyMeso');
 		// A refusal from the server (the name is too long): the message, the draft kept
 		await page.unroute('**/trpc/mesocycles.editById*');
@@ -307,13 +337,17 @@ test.describe('the draft', () => {
 		await expect(page.getByTestId('edit-save-error')).toBeVisible();
 		await expect(page.getByLabel('Mesocycle name')).toHaveValue('x'.repeat(101));
 		await expect(weekRows(page)).toHaveCount(4);
+		await settingsKept();
 		expect((await blockRow(block.id)).name).toBe('MyMeso');
 		// Retry with a good name
 		await page.getByLabel('Mesocycle name').fill('Kept name');
 		await saveButton(page).click();
 		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
-		await page.waitForURL(`/mesocycles/${block.id}`);
-		expect((await blockRow(block.id)).weeklyRIR).toEqual([3, 2, -1, -1]);
+		await page.waitForURL('/mesocycles');
+		await page.goto(`/mesocycles/${block.id}`);
+		const saved = await blockRow(block.id);
+		expect(saved.weeklyRIR).toEqual([3, 2, -1, -1]);
+		expect([saved.lastSetToFailure, saved.forceRIRMatching, saved.startOverloadPercentage]).toEqual([true, true, 3.5]);
 		// Cleared: opened again it is the saved block
 		await page.goto(`/mesocycles/${block.id}/edit`);
 		await expect(page.getByLabel('Mesocycle name')).toHaveValue('Kept name');
@@ -506,7 +540,8 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await setWeek(page, 5, '2 RIR');
 		await saveButton(page).click();
 		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
-		await page.waitForURL(`/mesocycles/${block.id}`);
+		await page.waitForURL('/mesocycles');
+		await page.goto(`/mesocycles/${block.id}`);
 		// Saved, and still paused: saving did not resume it
 		let saved = await blockRow(block.id);
 		expect(saved.weeklyRIR).toEqual([3, 2, 1, -1, 2]);
@@ -520,7 +555,8 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await page.getByRole('button', { name: 'Add week' }).click();
 		await saveButton(page).click();
 		await expect(savedToast(page)).toBeVisible({ timeout: 10000 });
-		await page.waitForURL(`/mesocycles/${block.id}`);
+		await page.waitForURL('/mesocycles');
+		await page.goto(`/mesocycles/${block.id}`);
 		saved = await blockRow(block.id);
 		expect(saved.weeklyRIR).toEqual([3, 2, 1, -1, 2, 2]);
 		expect(saved.pauses.map((p) => p.resumedAt)).toEqual([null]);
@@ -534,7 +570,7 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await expect(page.locator('[data-current="true"]')).toHaveText('W5: 2 RIR');
 	});
 
-	test('on the block page, before it is extended: Extend and Stop, no Resume; and a Resume sent anyway is refused', async ({
+	test('on the block page, before it is extended: Extend and Finish block, no Resume; and a Resume sent anyway is refused', async ({
 		page,
 		userData
 	}) => {
@@ -544,7 +580,8 @@ test.describe('Extend: a block past its planned weeks', () => {
 		await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Extend' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Resume', exact: true })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Finish block' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
 		await expect(caller.mesocycles.resume({ id: block.id, timeZone: 'UTC' })).rejects.toThrow(/planned weeks/);
 		expect((await blockRow(block.id)).pauses.map((p) => p.resumedAt)).toEqual([null]);
 		await page.getByRole('link', { name: 'Extend' }).click();
@@ -585,5 +622,88 @@ test.describe('Extend: a block past its planned weeks', () => {
 		expect((await blockRow(block.id)).pauses).toHaveLength(1);
 		await page.goto('/dashboard');
 		await expect(page.getByText('Week 5 - paused')).toBeVisible();
+	});
+});
+
+test.describe('a screen that is out of date', () => {
+	test('Stop on a screen that saw the block running, after a pause landed elsewhere: refused, nothing ended, the pause stays open', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, 0, -1], startedDaysAgo: 10 });
+		await page.goto(`/mesocycles/${block.id}`);
+		await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+		await expect(page.getByTestId('mesocycle-paused-badge')).toHaveCount(0);
+		// Another device paused it
+		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - 60 * 1000) } });
+		await page.getByRole('button', { name: 'Stop', exact: true }).click();
+		await expect(page.getByText('changed on another device')).toBeVisible();
+		const saved = await blockRow(block.id);
+		expect(saved.endDate).toBeNull();
+		expect(saved.pauses.map((pause) => pause.resumedAt)).toEqual([null]);
+		// The screen shows the block as it is now
+		await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
+	});
+
+	test('Stop on a screen that saw the block paused, after it was resumed elsewhere: refused, nothing ended', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, 0, -1], startedDaysAgo: 10 });
+		const pause = await prisma.mesocyclePause.create({
+			data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - DAY) }
+		});
+		await page.goto(`/mesocycles/${block.id}`);
+		await expect(page.getByTestId('mesocycle-paused-badge')).toBeVisible();
+		await prisma.mesocyclePause.update({ where: { id: pause.id }, data: { resumedAt: new Date() } });
+		await page.getByRole('button', { name: 'Stop', exact: true }).click();
+		await page.getByRole('button', { name: 'Stop mesocycle' }).click();
+		await expect(page.getByText('changed on another device')).toBeVisible();
+		expect((await blockRow(block.id)).endDate).toBeNull();
+		await expect(page.getByTestId('mesocycle-paused-badge')).toHaveCount(0);
+	});
+
+	test('Finish block on the start page, after the pause it showed was ended elsewhere: refused, nothing ended', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, -1], startedDaysAgo: 40 });
+		// Paused where its plan ended
+		const startDay = Math.floor((Date.now() - 40 * DAY) / DAY);
+		const pause = await prisma.mesocyclePause.create({
+			data: { mesocycleId: block.id, pausedAt: new Date((startDay + 28) * DAY) }
+		});
+		await page.goto('/workouts');
+		await page.getByLabel('create-workout').click();
+		await expect(page.getByRole('button', { name: 'Finish block' })).toBeVisible();
+		await prisma.mesocyclePause.update({ where: { id: pause.id }, data: { resumedAt: new Date() } });
+		await page.getByRole('button', { name: 'Finish block' }).click();
+		await expect(page.getByText('changed on another device')).toBeVisible();
+		expect((await blockRow(block.id)).endDate).toBeNull();
+		await expect(page).toHaveURL(/\/workouts\/manage\/start/);
+	});
+});
+
+test.describe('the pause is made when these open', () => {
+	test('the editor, opened straight on a block past its plan: the planned weeks are locked and the pause is there', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, -1], startedDaysAgo: 40 });
+		await page.goto(`/mesocycles/${block.id}/edit`);
+		await expect(page.getByTestId('edit-past-plan')).toBeVisible();
+		for (const n of [1, 2, 3, 4]) await expect(week(page, n)).toBeDisabled();
+		expect((await blockRow(block.id)).pauses).toHaveLength(1);
+		const startDay = Math.floor((Date.now() - 40 * DAY) / DAY);
+		expect((await blockRow(block.id)).pauses[0].pausedAt.toISOString()).toBe(
+			new Date((startDay + 28) * DAY).toISOString()
+		);
+	});
+
+	test('the list of mesocycles', async ({ page, userData }) => {
+		const { block } = await seedBlock(userData.userId, { weeklyRIR: [3, 2, 1, -1], startedDaysAgo: 40 });
+		await page.goto('/mesocycles');
+		await expect.poll(async () => (await blockRow(block.id)).pauses.length).toBe(1);
+		expect((await blockRow(block.id)).endDate).toBeNull();
 	});
 });
