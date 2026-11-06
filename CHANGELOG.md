@@ -2,6 +2,19 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-05: scrolling with an exercise ⋯ menu open leaves the list where you scrolled it
+
+### Fixed
+
+- **The exercise ⋯ menu no longer pulls the list back up.** The menu already closed when its button scrolled out of
+  view, but closing it gave the focus back to the button, and the browser scrolled the list back up to show it,
+  undoing your scroll. Closing the menu by scrolling now leaves the list where you scrolled it. Closing it any other
+  way (Escape, picking an item, tapping outside) still puts the focus back on the button.
+- The test for this now checks that the list stays where it was scrolled. The old test only passed when it happened
+  to look during the few milliseconds before the list jumped back, so it failed about 3 runs in 55.
+
+---
+
 ## 2026-11-04: lists in order, cardio wording, timer-style time box, block routines like My routines
 
 ### Changed
