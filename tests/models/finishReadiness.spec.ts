@@ -266,23 +266,46 @@ test.describe('what the start page shows once the automatic pause has been appli
 		await expect(switchOf(page)).toBeChecked();
 	});
 
-	test('a workout already in progress keeps the choice it was saved with when the page learns the block is paused', async ({
-		page,
-		userData
-	}) => {
-		const { block } = await seedOverdueBlock(userData.userId);
-		// Still running, in its week: the workout is begun with the switch on, and kept that way on this device
-		await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: new Date(Date.now() - 3 * DAY) } });
+	/**
+	 * A workout begun with the switch on, in the block's only week, and kept on this device; then its plan ends, with
+	 * nothing having paused the block yet
+	 */
+	const beginWorkoutThenEndPlan = async (page: Page, blockId: string) => {
+		await prisma.mesocycle.update({ where: { id: blockId }, data: { startDate: new Date(Date.now() - 3 * DAY) } });
 		await openStart(page);
 		await pickRoutine(page, 'Pull A');
 		await expect(switchOf(page)).toBeChecked();
 		await page.getByRole('button', { name: 'Next' }).click();
 		await page.waitForURL(/\/workouts\/manage\/exercises/);
-		// Its plan has now ended, and nothing has paused it yet
-		await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: new Date(Date.now() - 8 * DAY) } });
+		await prisma.mesocycle.update({ where: { id: blockId }, data: { startDate: new Date(Date.now() - 8 * DAY) } });
+	};
+
+	test('a workout already in progress keeps the choice it was saved with when the page learns the block is paused', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedOverdueBlock(userData.userId);
+		await beginWorkoutThenEndPlan(page, block.id);
 		await page.goto(START);
 		await expect(page.getByText(/and it is paused/)).toBeVisible();
 		await expect(switchOf(page)).toBeChecked();
+	});
+
+	test('a workout already in progress: a switch the person turns off while the page is settling stays off', async ({
+		page,
+		userData
+	}) => {
+		const { block } = await seedOverdueBlock(userData.userId);
+		await beginWorkoutThenEndPlan(page, block.id);
+		const fresh = await hold(page, '**/trpc/workouts.getTodaysWorkoutData*');
+		await page.goto(START);
+		// The stored choice, until the person moves the switch
+		await expect(switchOf(page)).toBeChecked();
+		await switchOf(page).click();
+		await expect(switchOf(page)).not.toBeChecked();
+		fresh.release();
+		await expect(page.getByText(/and it is paused/)).toBeVisible();
+		await expect(switchOf(page)).not.toBeChecked();
 	});
 });
 

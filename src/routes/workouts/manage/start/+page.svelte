@@ -168,17 +168,17 @@
 	// Set when the person themselves moves the progression switch (a click or a key on it), never by the page
 	let countsChosen = false;
 	/**
-	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause. A
-	 * workout in progress keeps its own stored choice; otherwise the progression switch follows the block (off while it
-	 * is paused) for as long as the person has not moved it
+	 * Every payload the page shows goes through here, the streamed one and the one read after the automatic pause. The
+	 * progression switch is only ever set here until the person moves it, and what they last chose wins over anything
+	 * else: until then a workout in progress shows the choice it was stored with, and any other follows the block (off
+	 * while it is paused)
 	 */
 	function applyPayload(payload: TodaysWorkoutData) {
 		workoutData = payload;
-		if (inProgress) {
-			countsForProgression = workoutRunes.workoutData?.countsForProgression ?? true;
-		} else if (!countsChosen) {
-			countsForProgression = !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
-		}
+		if (countsChosen) return;
+		countsForProgression = inProgress
+			? (workoutRunes.workoutData?.countsForProgression ?? true)
+			: !isBlockPaused(payload.activeBlock?.mesocycle.pauses);
 	}
 
 	$effect(() => {
