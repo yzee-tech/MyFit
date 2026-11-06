@@ -6,6 +6,8 @@ import { Prisma } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ensureMyRoutines, withRoutinesTransaction } from '$lib/server/blockCache';
+import { lockMesocycle, reconcileActiveBlock, reconcileEndOfPlanInTx } from '$lib/server/blockLifecycle';
+import { isPastPlannedWeeks, lockedWeekCount } from '$lib/utils/workoutUtils';
 
 /**
  * A block's own settings. A block is a training period: its routines are My routines, so nothing
@@ -38,13 +40,24 @@ const getActiveMesocycle = async (userId: string) => {
 };
 
 /**
- * Takes the block's row lock until the transaction ends. Pausing, resuming and stopping all write the block's
- * end date and pauses, so they wait for each other here; a plain transaction would not do that (each would
- * read the block as it was before the other committed)
+ * A step on a block (pause, resume): its id (an app from before the other two sends only that), the timezone the
+ * block's days are counted in (the phone's), and, for resuming, the pause the person saw open, so a tap made on
+ * an old screen never closes a newer pause
  */
-async function lockMesocycle(tx: Prisma.TransactionClient, userId: string, mesocycleId: string) {
-	await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${mesocycleId} AND "userId" = ${userId} FOR UPDATE`;
-}
+const zodBlockStepInput = z.union([
+	z
+		.string()
+		.cuid2()
+		.transform((id) => ({ id, timeZone: undefined, openPauseId: undefined })),
+	z.strictObject({
+		id: z.string().cuid2(),
+		timeZone: z.string().optional().catch(undefined),
+		openPauseId: z.string().cuid2().nullable().optional()
+	})
+]);
+
+const BLOCK_CHANGED_MESSAGE =
+	'This block was changed on another device. It has been refreshed: have a look and try again.';
 
 export const mesocycles = t.router({
 	findById: t.procedure.input(z.string().cuid2()).query(async ({ input, ctx }) => {
@@ -123,9 +136,47 @@ export const mesocycles = t.router({
 	}),
 
 	editById: t.procedure
-		.input(z.strictObject({ id: z.string().cuid2(), mesocycleData: zodMesocycleEditInput }))
+		.input(
+			z.strictObject({
+				id: z.string().cuid2(),
+				mesocycleData: zodMesocycleEditInput,
+				/** The phone's timezone, to tell which weeks are past or current */
+				timeZone: z.string().optional().catch(undefined)
+			})
+		)
 		.mutation(async ({ input, ctx }) => {
 			await prisma.$transaction(async (tx) => {
+				// The block is locked and its plan-end pause made first: the weeks that can't be changed are
+				// worked out from the block as it is now, not as the editor saw it
+				await reconcileEndOfPlanInTx(tx, ctx.userId, input.id, input.timeZone);
+				const block = await tx.mesocycle.findFirst({
+					where: { id: input.id, userId: ctx.userId },
+					select: {
+						startDate: true,
+						endDate: true,
+						weeklyRIR: true,
+						pauses: { select: { pausedAt: true, resumedAt: true } }
+					}
+				});
+				if (!block) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
+				if (block.endDate) {
+					throw new TRPCError({ code: 'BAD_REQUEST', message: 'A finished mesocycle cannot be changed' });
+				}
+				const locked = block.startDate
+					? lockedWeekCount(block.startDate, new Date(), input.timeZone, block.pauses, block.weeklyRIR.length)
+					: 0;
+				const weeklyRIR = input.mesocycleData.mesocycle.weeklyRIR;
+				const lockedChanged = block.weeklyRIR.slice(0, locked).some((rir, index) => weeklyRIR[index] !== rir);
+				if (weeklyRIR.length < locked || lockedChanged) {
+					throw new TRPCError({
+						code: 'CONFLICT',
+						message: `${locked === 1 ? 'Week 1 is' : `Weeks 1 to ${locked} are`} past or in progress, so ${
+							locked === 1 ? 'it' : 'they'
+						} can't be changed or removed. Put ${locked === 1 ? 'it' : 'them'} back as ${
+							locked === 1 ? 'it was' : 'they were'
+						} and save again; your other changes are kept.`
+					});
+				}
 				const mesocycle = await tx.mesocycle.update({
 					where: { id: input.id, userId: ctx.userId },
 					data: { ...input.mesocycleData.mesocycle },
@@ -152,7 +203,9 @@ export const mesocycles = t.router({
 			z.strictObject({
 				id: z.string().cuid2(),
 				startDate: z.date().nullable(),
-				endDate: z.date().nullable()
+				endDate: z.date().nullable(),
+				/** Finishing: the pause the person saw open (none if they saw none), so an old screen's tap is refused */
+				openPauseId: z.string().cuid2().nullable().optional()
 			})
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -162,6 +215,15 @@ export const mesocycles = t.router({
 			const starting = !input.startDate;
 			const updatedMesocycle = await withRoutinesTransaction(async (tx) => {
 				await lockMesocycle(tx, ctx.userId, input.id);
+				if (!starting && input.openPauseId !== undefined) {
+					const open = await tx.mesocyclePause.findFirst({
+						where: { mesocycleId: input.id, mesocycle: { userId: ctx.userId }, resumedAt: null },
+						select: { id: true }
+					});
+					if ((open?.id ?? null) !== input.openPauseId) {
+						throw new TRPCError({ code: 'CONFLICT', message: BLOCK_CHANGED_MESSAGE });
+					}
+				}
 				if (starting) {
 					const activeMesocycle = await tx.mesocycle.findFirst({
 						where: { userId: ctx.userId, startDate: { not: null }, endDate: null },
@@ -197,13 +259,14 @@ export const mesocycles = t.router({
 	 * Pauses a started block that isn't finished: its week count stands still until it is resumed. Pausing a paused
 	 * block does nothing, so two devices (or a double tap) can't make two pauses
 	 */
-	pause: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+	pause: t.procedure.input(zodBlockStepInput).mutation(async ({ input, ctx }) => {
 		try {
 			return await prisma.$transaction(async (tx) => {
-				// Behind a stop (or a resume) that is in flight: the block is read after it commits
-				await lockMesocycle(tx, ctx.userId, input);
+				// Behind a stop (or a resume) that is in flight: the block is read after it commits. A block past its
+				// plan is paused already, where its plan ended
+				await reconcileEndOfPlanInTx(tx, ctx.userId, input.id, input.timeZone);
 				const mesocycle = await tx.mesocycle.findFirst({
-					where: { id: input, userId: ctx.userId },
+					where: { id: input.id, userId: ctx.userId },
 					select: { startDate: true, endDate: true, pauses: { where: { resumedAt: null }, select: { id: true } } }
 				});
 				if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
@@ -211,7 +274,7 @@ export const mesocycles = t.router({
 					throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a mesocycle in progress can be paused' });
 				}
 				if (mesocycle.pauses.length > 0) return { message: 'Mesocycle already paused' };
-				await tx.mesocyclePause.create({ data: { mesocycleId: input, pausedAt: new Date() } });
+				await tx.mesocyclePause.create({ data: { mesocycleId: input.id, pausedAt: new Date() } });
 				return { message: 'Mesocycle paused' };
 			});
 		} catch (error) {
@@ -223,22 +286,56 @@ export const mesocycles = t.router({
 		}
 	}),
 
-	/** Ends a block's open pause; a block that isn't paused is left as it is */
-	resume: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
+	/**
+	 * Ends a block's open pause; a block that isn't paused is left as it is. Only the pause the person saw open is
+	 * ended (when they say which), and a block that has run all its planned weeks is not resumed until it has been
+	 * given another: it would only be paused again straight away
+	 */
+	resume: t.procedure.input(zodBlockStepInput).mutation(async ({ input, ctx }) => {
 		return prisma.$transaction(async (tx) => {
-			await lockMesocycle(tx, ctx.userId, input);
+			await reconcileEndOfPlanInTx(tx, ctx.userId, input.id, input.timeZone);
 			const mesocycle = await tx.mesocycle.findFirst({
-				where: { id: input, userId: ctx.userId },
-				select: { id: true }
+				where: { id: input.id, userId: ctx.userId },
+				select: {
+					startDate: true,
+					weeklyRIR: true,
+					pauses: { select: { id: true, pausedAt: true, resumedAt: true } }
+				}
 			});
 			if (!mesocycle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
-			const { count } = await tx.mesocyclePause.updateMany({
-				where: { mesocycleId: input, resumedAt: null },
-				data: { resumedAt: new Date() }
-			});
-			return { message: count > 0 ? 'Mesocycle resumed' : 'Mesocycle was not paused' };
+			const open = mesocycle.pauses.find((pause) => pause.resumedAt === null);
+			if (input.openPauseId !== undefined && (open?.id ?? null) !== input.openPauseId) {
+				throw new TRPCError({ code: 'CONFLICT', message: BLOCK_CHANGED_MESSAGE });
+			}
+			if (!open) return { message: 'Mesocycle was not paused' };
+			if (
+				mesocycle.startDate &&
+				isPastPlannedWeeks(
+					mesocycle.startDate,
+					new Date(),
+					input.timeZone,
+					mesocycle.pauses,
+					mesocycle.weeklyRIR.length
+				)
+			) {
+				throw new TRPCError({
+					code: 'BAD_REQUEST',
+					message: 'It has run all its planned weeks. Extend it with another week first, or finish it.'
+				});
+			}
+			await tx.mesocyclePause.update({ where: { id: open.id }, data: { resumedAt: new Date() } });
+			return { message: 'Mesocycle resumed' };
 		});
 	}),
+
+	/**
+	 * Pauses the person's block where its plan ended, if it has run all its planned weeks: called by the app with the
+	 * phone's timezone when a block's screen opens. The block's pages are loaded by the server, which doesn't know
+	 * the phone's days
+	 */
+	reconcileEndOfPlan: t.procedure
+		.input(z.strictObject({ timeZone: z.string().optional().catch(undefined) }))
+		.mutation(async ({ input, ctx }) => ({ created: await reconcileActiveBlock(ctx.userId, input.timeZone) })),
 
 	/** The active block's latest workouts done */
 	getWorkouts: t.procedure.query(async ({ ctx }) => {
