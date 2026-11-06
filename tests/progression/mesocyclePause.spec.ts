@@ -158,9 +158,14 @@ test.describe('pause and resume on the server', () => {
 	test('the database itself refuses a second open pause for a block, but allows a closed one', async () => {
 		const { block } = await seedPerson();
 		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } });
-		await expect(
-			prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } })
-		).rejects.toMatchObject({ code: 'P2002' });
+		const refused = await prisma.mesocyclePause
+			.create({ data: { mesocycleId: block.id, pausedAt: new Date() } })
+			.then(
+				() => null,
+				(error: unknown) => error as { code?: string; meta?: { target?: string[] } }
+			);
+		// It is the one-open-pause index on mesocycleId that refused it, not an id collision or another rule
+		expect(refused).toMatchObject({ code: 'P2002', meta: { target: ['mesocycleId'] } });
 		await prisma.mesocyclePause.create({
 			data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - DAY), resumedAt: new Date(Date.now() - DAY / 2) }
 		});
