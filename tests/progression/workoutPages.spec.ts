@@ -80,6 +80,9 @@ test("an exercise's history in pages of up to 100 (10 by default); none of 0, be
 	expect(await caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows' })).toHaveLength(10);
 	expect(await caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows', pageSize: 100 })).toHaveLength(TIED);
 	for (const pageSize of [0, -1, 101, 1.5]) {
-		await expect(caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows', pageSize })).rejects.toThrow();
+		// Refused as invalid input, not by some other failure
+		await expect(caller.workouts.getExerciseHistory({ exerciseName: 'Barbell rows', pageSize })).rejects.toMatchObject({
+			code: 'BAD_REQUEST'
+		});
 	}
 });

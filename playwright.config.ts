@@ -13,6 +13,8 @@ const config: PlaywrightTestConfig = {
 	fullyParallel: true,
 	// A failing test is tried again twice instead of three times, so a persistent failure shows up sooner
 	retries: 2,
+	// A test that needs a retry to pass fails the run on GitHub: the retry (and its trace) says what went wrong, it does not excuse it
+	failOnFlakyTests: !!process.env.CI,
 	globalSetup: './tests/global-setup',
 	globalTeardown: './tests/global-teardown',
 	// Two on GitHub (each has its own test user, see global-setup); one on a person's machine

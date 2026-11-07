@@ -5,6 +5,7 @@ config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { deleteTestUsers } from '../deleteTestUsers';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 /**
  * A workout's deload flag and the week in suggestions: weeks are counted in the phone's local days
@@ -15,14 +16,6 @@ const createdUserIds: string[] = [];
 test.afterAll(async () => {
 	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
 });
-
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 
 // A 6-week block (week 6 a deload) that started Oct 20 at 18:00 in Shanghai (10:00 UTC)
 const STARTED = new Date('2026-10-20T10:00:00Z');
@@ -37,10 +30,7 @@ async function seedPerson(withBlock = true) {
 	await prisma.user.create({ data: { id: userId, email: `week-server-${userId}@myfit.com` } });
 	const caller = createCaller({ event: {} as never, userId });
 	await prisma.exercise.create({ data: { userId, name: rows.name, targetMuscleGroup: rows.targetMuscleGroup } });
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = withBlock
 		? await prisma.mesocycle.create({
 				data: {
@@ -48,9 +38,7 @@ async function seedPerson(withBlock = true) {
 					name: 'Block',
 					weeklyRIR: [3, 2, 2, 1, 0, -1],
 					startDate: STARTED,
-					startOverloadPercentage: 2.5,
-					lastSetToFailure: false,
-					forceRIRMatching: false
+					...mesocycleDefaults
 				}
 			})
 		: null;

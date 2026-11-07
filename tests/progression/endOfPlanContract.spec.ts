@@ -5,6 +5,7 @@ config();
 import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { deleteTestUsers } from '../deleteTestUsers';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 /**
  * Which steps pause a block that has run all its planned weeks, and which do not. The pause is made only by a
@@ -19,13 +20,6 @@ test.afterAll(async () => {
 });
 
 const DAY = 24 * 60 * 60 * 1000;
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 
 /** A 4-week block that started 40 days ago and was never paused: its plan ended 12 days ago */
 async function overdueBlock() {
@@ -34,19 +28,14 @@ async function overdueBlock() {
 	await prisma.user.create({ data: { id: userId, email: `contract-${userId}@myfit.com` } });
 	const caller = createCaller({ event: {} as never, userId });
 	await prisma.exercise.create({ data: { userId, name: rows.name, targetMuscleGroup: rows.targetMuscleGroup } });
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = await prisma.mesocycle.create({
 		data: {
 			userId,
 			name: 'Block',
 			weeklyRIR: [3, 2, 1, -1],
 			startDate: new Date(Date.now() - 40 * DAY),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	return { userId, caller, block };

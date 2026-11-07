@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
+import { mesocycleDefaults } from '../support/blocks';
 import {
 	boxNumber,
 	createExercises,
@@ -1910,9 +1911,7 @@ async function blockWithWorkout(userId: string, name: string, startDate: Date, r
 			weeklyRIR: [3, 2, 1, 0],
 			startDate,
 			endDate: new Date(startDate.getTime() + 7 * 86400000),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	const startedAt = new Date(startDate.getTime() + 86400000);

@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect } from '@playwright/test';
 import { exerciseDetailsInput } from '../../src/lib/trpc/routes/exercises';
 import { weekInput } from '../../src/lib/trpc/routes/stats';
 

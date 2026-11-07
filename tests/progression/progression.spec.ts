@@ -40,7 +40,7 @@ import {
 	normalizeWeights,
 	type WeightSetLike
 } from '../../src/lib/utils/weightSets';
-import { test, expect } from '../fixtures';
+import { test, expect } from '@playwright/test';
 import { testPlan, testRoutines, testSettings } from './data';
 
 test('progress first cycle, no changes', () => {

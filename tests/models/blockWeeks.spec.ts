@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 
@@ -15,9 +16,7 @@ async function seedBlock(userId: string, start: Date | null, end: Date | null = 
 			weeklyRIR: [3, 2, 2, 1, 0, -1],
 			startDate: start,
 			endDate: end,
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 }
@@ -25,6 +24,13 @@ async function seedBlock(userId: string, start: Date | null, end: Date | null = 
 // Started Oct 20 at 18:00 Shanghai: on Oct 27 at 09:00 there it is the 8th day, but under 168 hours
 const STARTED = new Date('2026-10-20T10:00:00Z');
 const DAY_8 = new Date('2026-10-27T01:00:00Z');
+
+/** The page's script is running (the options menu opens, which only the script does): only then is "nothing marked" a statement about the page */
+async function pageIsLive(page: Page) {
+	await page.getByLabel('mesocycle-options').click();
+	await expect(page.getByRole('menuitem').first()).toBeVisible();
+	await page.keyboard.press('Escape');
+}
 
 async function openBlock(page: Page, id: string, now: Date) {
 	await page.clock.setFixedTime(now);
@@ -71,15 +77,18 @@ test('current week badge: a finished, an unstarted and a past-planned-length blo
 }) => {
 	const finished = await seedBlock(userData.userId, STARTED, new Date('2026-10-25T10:00:00Z'));
 	await openBlock(page, finished.id, DAY_8);
+	await pageIsLive(page);
 	await expect(page.getByTestId('mesocycle-weekly-effort').locator('[data-current], [aria-current]')).toHaveCount(0);
 
 	const unstarted = await seedBlock(userData.userId, null);
 	await openBlock(page, unstarted.id, DAY_8);
+	await pageIsLive(page);
 	await expect(page.getByTestId('mesocycle-weekly-effort').locator('[data-current], [aria-current]')).toHaveCount(0);
 
 	// Week 9 of a 6-week block
 	const past = await seedBlock(userData.userId, STARTED);
 	await openBlock(page, past.id, new Date('2026-12-15T01:00:00Z'));
+	await pageIsLive(page);
 	await expect(page.getByTestId('mesocycle-weekly-effort').locator('[data-current], [aria-current]')).toHaveCount(0);
 });
 

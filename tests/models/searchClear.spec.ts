@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createExercises, pickRoutine } from './commonFunctions';
+import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
@@ -26,7 +27,8 @@ test('Add exercises sheet: the clear button shows only with text, keeps the sear
 	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
 	const search = sheet.getByPlaceholder('Search your exercises');
 
-	// Nothing typed: no button
+	// The sheet is open (it is opened by the page's script, so this also says the page is live), then: nothing typed, no button
+	await expect(search).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Clear search' })).toHaveCount(0);
 	await search.fill('Later');
 	await expect(sheet.getByRole('checkbox')).toHaveCount(2);
@@ -57,6 +59,7 @@ test('Exercises page: the clear button empties the search and brings the whole l
 	]);
 	await page.goto('/exercises');
 	const search = page.getByLabel('Search exercises');
+	await expect(search).toBeVisible();
 	await expect(clearButton(page)).toHaveCount(0);
 	await search.fill('Cable');
 	await expect(page.getByRole('link', { name: /^Barbell rows/ })).toHaveCount(0);
@@ -84,9 +87,7 @@ test('Mesocycles page: the clear button drops the search from the link and shows
 				weeklyRIR: [3, 2, 1, 0],
 				startDate: new Date(Date.now() - daysAgo * DAY),
 				endDate: new Date(Date.now() - (daysAgo - 20) * DAY),
-				startOverloadPercentage: 2.5,
-				lastSetToFailure: false,
-				forceRIRMatching: false
+				...mesocycleDefaults
 			}
 		});
 	}
@@ -118,6 +119,7 @@ test('routine exercise picker: the clear button empties the search and the keybo
 	await page.getByLabel('add-exercise').click();
 	await page.getByLabel('Pick an exercise').click();
 	const search = page.getByPlaceholder('Search your exercises');
+	await expect(search).toBeVisible();
 	await expect(clearButton(page)).toBeHidden();
 	await search.fill('zzz');
 	await expect(page.getByRole('option', { name: 'Barbell rows' })).toHaveCount(0);

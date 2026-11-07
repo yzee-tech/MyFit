@@ -2,17 +2,10 @@ import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
 import { createCaller } from '../../src/lib/trpc/router';
 import { createExercises, pickRoutine, quickAdd, saveWorkout } from './commonFunctions';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 const prisma = new PrismaClient();
 const DAY = 24 * 60 * 60 * 1000;
-
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
 
 const HELP_ON = 'Workout used to calculate weights and reps progression.';
 const HELP_OFF = 'Workout saved in history, but not used to calculate weights and reps progression.';
@@ -24,19 +17,14 @@ const HELP_OFF = 'Workout saved in history, but not used to calculate weights an
 async function seedBlock(userId: string, options: { paused?: boolean; overdue?: boolean } = {}) {
 	const caller = createCaller({ event: {} as never, userId });
 	await createExercises(userId, [rows.name]);
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = await prisma.mesocycle.create({
 		data: {
 			userId,
 			name: 'MyMeso',
 			weeklyRIR: options.overdue ? [3, 2, 1, 0] : [3, 2, 2, 1, 0, -1],
 			startDate: new Date(Date.now() - (options.overdue ? 37 : 12) * DAY),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	if (options.overdue) {

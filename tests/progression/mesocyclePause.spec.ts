@@ -6,6 +6,8 @@ import { prisma } from '../../src/lib/prisma';
 import { createCaller } from '../../src/lib/trpc/router';
 import { getBlockWeek, isBlockPaused, isInPause } from '../../src/lib/utils/workoutUtils';
 import { deleteTestUsers } from '../deleteTestUsers';
+import { pgLocks } from '../support/pgLocks';
+import { mesocycleDefaults, pullRows as rows, savePullRoutine } from '../support/blocks';
 
 /**
  * Pausing a mesocycle: its week stands still while it is paused, past workouts keep the week they were done in,
@@ -13,6 +15,7 @@ import { deleteTestUsers } from '../deleteTestUsers';
  * suggestions
  */
 
+const { holderOf, untilBlockedOnHolder } = pgLocks(prisma);
 const createdUserIds: string[] = [];
 test.afterAll(async () => {
 	await deleteTestUsers(prisma, { id: { in: createdUserIds } });
@@ -109,14 +112,6 @@ test.describe('getBlockWeek with pauses', () => {
 	});
 });
 
-const rows = {
-	name: 'Barbell rows',
-	targetMuscleGroup: 'Traps' as const,
-	setType: 'Straight' as const,
-	repRangeStart: 10,
-	repRangeEnd: 15
-};
-
 async function seedPerson(options: { started?: boolean } = {}) {
 	const userId = createId();
 	createdUserIds.push(userId);
@@ -124,19 +119,14 @@ async function seedPerson(options: { started?: boolean } = {}) {
 	const caller = createCaller({ event: {} as never, userId });
 	const other = createCaller({ event: {} as never, userId: createId() });
 	await prisma.exercise.create({ data: { userId, name: rows.name, targetMuscleGroup: rows.targetMuscleGroup } });
-	await caller.exerciseSplits.save({
-		routines: [{ name: 'Pull A', weightUnit: 'KG' }],
-		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 3 }]]
-	});
+	await savePullRoutine(caller);
 	const block = await prisma.mesocycle.create({
 		data: {
 			userId,
 			name: 'Block',
 			weeklyRIR: [3, 2, 2, 1, 0, -1],
 			startDate: options.started === false ? null : new Date(Date.now() - 12 * DAY),
-			startOverloadPercentage: 2.5,
-			lastSetToFailure: false,
-			forceRIRMatching: false
+			...mesocycleDefaults
 		}
 	});
 	return { userId, caller, other, block };
@@ -156,9 +146,12 @@ test.describe('pause and resume on the server', () => {
 	test('the database itself refuses a second open pause for a block, but allows a closed one', async () => {
 		const { block } = await seedPerson();
 		await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } });
-		await expect(
-			prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } })
-		).rejects.toMatchObject({ code: 'P2002' });
+		const refused = await prisma.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } }).then(
+			() => null,
+			(error: unknown) => error as { code?: string; meta?: { target?: string[] } }
+		);
+		// It is the one-open-pause index on mesocycleId that refused it, not an id collision or another rule
+		expect(refused).toMatchObject({ code: 'P2002', meta: { target: ['mesocycleId'] } });
 		await prisma.mesocyclePause.create({
 			data: { mesocycleId: block.id, pausedAt: new Date(Date.now() - DAY), resumedAt: new Date(Date.now() - DAY / 2) }
 		});
@@ -227,11 +220,13 @@ test.describe('pause and resume on the server', () => {
 					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
 					await tx.mesocycle.update({ where: { id: block.id }, data: { endDate: new Date() } });
 					// The pause starts now: it must wait for the lock, not read the block as it was
+					const holder = await holderOf(block.id);
 					pausing = caller.mesocycles.pause(block.id).then(
 						() => 'paused',
 						(error) => error
 					);
-					await sleep(700);
+					// The pause is seen waiting for this transaction's lock, not guessed to be there after a delay
+					await untilBlockedOnHolder(holder);
 				},
 				{ timeout: 15000, maxWait: 5000 }
 			);
@@ -256,10 +251,12 @@ test.describe('pause and resume on the server', () => {
 				async (tx) => {
 					await tx.$queryRaw`SELECT id FROM "Mesocycle" WHERE id = ${block.id} FOR UPDATE`;
 					await tx.mesocyclePause.create({ data: { mesocycleId: block.id, pausedAt: new Date() } });
+					const holder = await holderOf(block.id);
 					stopping = caller.mesocycles
 						.progressToNextStage({ id: block.id, startDate: block.startDate, endDate: null })
 						.then(() => (stopped = true));
-					await sleep(700);
+					// The stop is seen waiting for this transaction's lock; only then is "has it run ahead?" a real question
+					await untilBlockedOnHolder(holder);
 					stoppedWhileHeld = stopped;
 				},
 				{ timeout: 15000, maxWait: 5000 }
