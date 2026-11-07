@@ -13,12 +13,16 @@ const STARTED = new Date('2026-10-20T10:00:00Z');
 const DAY_8 = new Date('2026-10-27T01:00:00Z');
 
 test('dashboard and start page: the 8th day of the block is Week 2, and the label follows the day when the app comes back to the front', async ({
-	page
+	page,
+	userData
 }) => {
 	await page.goto('/exercise-splits');
 	await createTemplateExerciseSplit(page);
 	await createMesocycle(page, { exerciseSplitCreated: true });
-	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+	const block = await prisma.mesocycle.findFirstOrThrow({
+		where: { userId: userData.userId, name: 'MyMeso' },
+		orderBy: { id: 'desc' }
+	});
 	await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: STARTED, endDate: null } });
 
 	await page.clock.install({ time: DAY_8 });
@@ -64,11 +68,14 @@ test('exercises page: a failed request ends the wait and says why', async ({ pag
 	await expect(page.getByText('Fetching exercises')).toHaveCount(0);
 });
 
-test('an in-progress workout keeps its starting week after local midnight and reload', async ({ page }) => {
+test('an in-progress workout keeps its starting week after local midnight and reload', async ({ page, userData }) => {
 	await page.goto('/exercise-splits');
 	await createTemplateExerciseSplit(page);
 	await createMesocycle(page, { exerciseSplitCreated: true });
-	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+	const block = await prisma.mesocycle.findFirstOrThrow({
+		where: { userId: userData.userId, name: 'MyMeso' },
+		orderBy: { id: 'desc' }
+	});
 	await prisma.mesocycle.update({ where: { id: block.id }, data: { startDate: STARTED, endDate: null } });
 	// Last minute of day 7 in Shanghai: start in Week 1.
 	await page.clock.install({ time: new Date('2026-10-26T15:59:00Z') });
@@ -557,7 +564,10 @@ for (const [label, time, week, deload] of [
 		await page.goto('/exercise-splits');
 		await createTemplateExerciseSplit(page);
 		await createMesocycle(page, { exerciseSplitCreated: true });
-		const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+		const block = await prisma.mesocycle.findFirstOrThrow({
+			where: { userId: userData.userId, name: 'MyMeso' },
+			orderBy: { id: 'desc' }
+		});
 		await prisma.mesocycle.update({
 			where: { id: block.id },
 			data: { startDate: STARTED, endDate: null, weeklyRIR: [3, 2, 2, 1, 0, -1] }
@@ -619,7 +629,10 @@ async function setUpForWelcomeBack(page: Page, userId: string, lastWorkoutAt: Da
 	await page.goto('/exercise-splits');
 	await createTemplateExerciseSplit(page);
 	await createMesocycle(page, { exerciseSplitCreated: true });
-	const block = await prisma.mesocycle.findFirstOrThrow({ where: { name: 'MyMeso' }, orderBy: { id: 'desc' } });
+	const block = await prisma.mesocycle.findFirstOrThrow({
+		where: { userId, name: 'MyMeso' },
+		orderBy: { id: 'desc' }
+	});
 	// A long block that started the same day as the last workout, so no deload week gets in the way
 	await prisma.mesocycle.update({
 		where: { id: block.id },
