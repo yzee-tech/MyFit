@@ -1,4 +1,10 @@
 {
 	"installCommand": "pnpm install --frozen-lockfile",
-	"buildCommand": "sh scripts/vercel-build.sh"
+	"buildCommand": "sh scripts/vercel-build.sh",
+	"git": {
+		"deploymentEnabled": {
+			"**": false,
+			"main": true
+		}
+	}
 }
