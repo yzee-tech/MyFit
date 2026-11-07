@@ -60,10 +60,16 @@ export async function quickAdd(page: Page, names: string[]) {
 	const sheet = page.getByRole('dialog').filter({ hasText: 'Add exercises' });
 	for (const name of names) {
 		await sheet.getByPlaceholder('Search your exercises').fill(name);
-		await sheet.getByRole('checkbox', { name, exact: true }).click();
+		const checkbox = sheet.getByRole('checkbox', { name, exact: true });
+		await checkbox.click();
+		await expect(checkbox).toBeChecked();
 	}
-	await sheet.getByRole('button', { name: /^Add \d+ exercises?$/ }).click();
+	const addLabel = `Add ${names.length} ${names.length === 1 ? 'exercise' : 'exercises'}`;
+	await sheet.getByRole('button', { name: addLabel, exact: true }).click();
 	await expect(sheet).toHaveCount(0);
+	for (const name of names) {
+		await expect(page.getByTestId(`${name}-menu-button`)).toBeVisible();
+	}
 }
 
 /** Opens an exercise of the workout in progress in its full editor (⋯ → Edit) */

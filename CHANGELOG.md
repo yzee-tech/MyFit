@@ -2,6 +2,24 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-07: Quick add test guards, safe failure evidence and database-only previews
+
+### Tests
+
+- Quick add checks each requested checkbox, the exact Add count, and each resulting exercise menu. A missed
+  selection now fails in the helper instead of allowing a later missing-exercise failure. No app behavior or
+  timeout changed; the earlier intermittent cardio failure's cause is still unconfirmed.
+- A browser-backed helper contract covers normal Run/Bike selection and a deliberately ignored Run click.
+- CI saves the original failed attempt's action-only Trace Viewer timeline and fixed selection/picker state,
+  including step timings. Only validated records are uploaded, never raw traces, DOM, network, login/session
+  data, screenshots or videos. A runner failure/retry smoke checks retention and the fail-on-flaky exit.
+
+### Deployment
+
+- Automatic previews are limited to database schema or migration changes. Ordinary app, test and docs changes
+  skip previews; production deployments and the existing CI jobs are unchanged. The trusted preview workflow
+  needs its approved Vercel deployment secret and post-merge activation checks before it is operational.
+
 ## 2026-11-06: one editor for a block's weeks, and a block pauses itself when its plan is over
 
 ### Changed
