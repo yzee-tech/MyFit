@@ -1,0 +1,36 @@
+name: Database preview
+
+# The workflow and script come from the trusted base, never the PR checkout.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: database-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  database-preview:
+    if: >-
+      github.repository == 'yzee-tech/MyFit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted base code only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Request preview only for a full-PR database diff
+        run: node scripts/database-preview.cjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERCEL_DATABASE_PREVIEW_TOKEN: ${{ secrets.VERCEL_DATABASE_PREVIEW_TOKEN }}

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import path from 'path';
 import type { UserData } from './global-setup';
+import { startUiCapture, attachFailedUiState } from './diagnostics/ui-state';
 
 dotenv.config();
 const prisma = new PrismaClient();
@@ -73,6 +74,13 @@ export const test = baseTest.extend<{ autoTestFixture: string }, { workerStorage
 		},
 		{ scope: 'worker' }
 	],
+
+	page: async ({ page }, use, testInfo) => {
+		const capture = /(?:cardio|exercises)\.spec\.ts$/.test(testInfo.file);
+		if (capture) await startUiCapture(page);
+		await use(page);
+		if (capture) await attachFailedUiState(page, testInfo);
+	},
 
 	autoTestFixture: [
 		async ({ userData }, use) => {
