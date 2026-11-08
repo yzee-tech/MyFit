@@ -4,11 +4,14 @@ CI writes `playwright-diagnostics/`. The upload runs even when the test command 
 `safe-artifacts.cjs` validates every file. It never uploads `test-results/` or `playwright-report/`.
 
 - Each attempt has a JSON record: test source/line, retry index, outcome, duration, up to 500 step timings,
-  fixed action categories/operations, and up to 200 fixed UI-state changes.
+  fixed action categories/operations, and up to 200 fixed UI-state changes. Records are written for every
+  attempt, pass or fail, and are kept 7 days. Step entries name the operation (click, expect) and its
+  category, never the element or selector.
 - Unexpected failures also have an action-only `.zip` timeline. Open it with `pnpm exec playwright show-trace`.
   This is a Trace Viewer projection built from the validated JSON, not a full raw trace. The blank page preview
   is intentional: it contains no screenshots, snapshots, network events, source files, arguments, URLs or raw errors.
-- The page fixture passively watches cardio and exercise tests for Run/Bike checkbox states, Add count,
+- The page fixture passively watches only the cardio and exercises specs; other specs produce just the
+  attempt record above, with no UI-state capture. It watches Run/Bike checkbox states, Add count,
   Run/Bike menu visibility, and Pick/New button visibility, picker expansion and search visibility. State times are relative to the test start. A checkbox
   not currently in the filtered DOM has `*CheckboxVisible: false`; its `*Checked: false` is not proof it was unticked.
 - The state buffer belongs to the current document. Navigation resets it. A closed/crashed page may produce no

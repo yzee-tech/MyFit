@@ -86,6 +86,10 @@ async function run({ event, env, fetchImpl = fetch, log = console.log }) {
 		throw new Error('Database preview requires the VERCEL_DATABASE_PREVIEW_TOKEN repository secret');
 	}
 	const token = env.VERCEL_DATABASE_PREVIEW_TOKEN;
+	// `sha` is a documented server-side filter and `target=preview` narrows it further
+	// (vercel.com/docs/rest-api/deployments/list-deployments), so this page only ever spans this commit's
+	// previews and limit=100 cannot hide a match. The githubCommitSha re-check below stays as a guard: a
+	// wrongly ignored filter could at worst cause a duplicate preview of the same exact commit.
 	const existing = await request(
 		`https://api.vercel.com/v7/deployments?projectId=${PROJECT}&slug=${TEAM}&sha=${current.head.sha}&target=preview&limit=100`,
 		token

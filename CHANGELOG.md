@@ -10,9 +10,11 @@ What changed in MyFit, newest first.
   selection now fails in the helper instead of allowing a later missing-exercise failure. No app behavior or
   timeout changed; the earlier intermittent cardio failure's cause is still unconfirmed.
 - A browser-backed helper contract covers normal Run/Bike selection and a deliberately ignored Run click.
-- CI saves the original failed attempt's action-only Trace Viewer timeline and fixed selection/picker state,
-  including step timings. Only validated records are uploaded, never raw traces, DOM, network, login/session
-  data, screenshots or videos. A runner failure/retry smoke checks retention and the fail-on-flaky exit.
+- CI saves a small validated record for every test attempt (about one per test, kept 7 days) and the
+  original failed attempt's full evidence: an action-only Trace Viewer timeline and fixed selection/picker
+  state, including step timings. Only validated records are uploaded, never raw traces, DOM, network,
+  login/session data, screenshots or videos. A runner failure/retry smoke checks retention and the
+  fail-on-flaky exit.
 
 ### Deployment
 
