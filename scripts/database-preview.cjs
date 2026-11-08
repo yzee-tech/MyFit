@@ -87,9 +87,10 @@ async function run({ event, env, fetchImpl = fetch, log = console.log }) {
 	}
 	const token = env.VERCEL_DATABASE_PREVIEW_TOKEN;
 	// `sha` is a documented server-side filter and `target=preview` narrows it further
-	// (vercel.com/docs/rest-api/deployments/list-deployments), so this page only ever spans this commit's
-	// previews and limit=100 cannot hide a match. The githubCommitSha re-check below stays as a guard: a
-	// wrongly ignored filter could at worst cause a duplicate preview of the same exact commit.
+	// (vercel.com/docs/rest-api/deployments/list-deployments), so other commits cannot crowd this commit's
+	// previews off the 100-deployment page. Only more than 100 previews of this same commit could, and even
+	// then the worst case is a duplicate preview of the same exact commit. The githubCommitSha re-check
+	// below stays as a guard.
 	const existing = await request(
 		`https://api.vercel.com/v7/deployments?projectId=${PROJECT}&slug=${TEAM}&sha=${current.head.sha}&target=preview&limit=100`,
 		token
