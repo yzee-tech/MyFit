@@ -129,6 +129,7 @@ function measureSettings(exercises: { name: string; measure: ExerciseMeasure; di
  * its save is refused and it's asked to reopen the app
  */
 async function assertSetsMatchMeasures(userId: string, input: z.infer<typeof createWorkoutSchema>) {
+	assertListsLineUp(input);
 	const names = [...new Set(input.workoutExercises.map((exercise) => exercise.name))];
 	const exercises = await prisma.exercise.findMany({
 		where: { userId, name: { in: names } },
@@ -185,7 +186,10 @@ type WorkoutExercisesWithPreviousData = {
 	measures: Record<string, ExerciseMeasureInfo>;
 	previousWorkoutData: null | {
 		exercises: WorkoutExerciseWithSets[];
+		/** Kept for app versions from before `bodyweights`: the last exercise's */
 		userBodyweight: number;
+		/** The bodyweight (kg) on the day each exercise was last done, by exercise name */
+		bodyweights?: Record<string, number>;
 	};
 };
 
@@ -265,6 +269,22 @@ const createWorkoutSchema = z.strictObject({
 	workoutExercisesSets: z.array(z.array(WorkoutExerciseSetCreateWithoutWorkoutExerciseInputSchema)),
 	workoutExercisesMiniSets: z.array(z.array(z.array(WorkoutExerciseMiniSetCreateWithoutParentSetInputSchema)))
 });
+
+/**
+ * A workout comes as three lists side by side: its exercises, each exercise's sets, and each set's
+ * mini-sets. They have to line up: a list too long or too short would put sets on no exercise, or
+ * mini-sets on another set
+ */
+function assertListsLineUp(input: z.infer<typeof createWorkoutSchema>) {
+	const { workoutExercises, workoutExercisesSets, workoutExercisesMiniSets } = input;
+	const linedUp =
+		workoutExercisesSets.length === workoutExercises.length &&
+		workoutExercisesMiniSets.length === workoutExercises.length &&
+		workoutExercisesSets.every((sets, exerciseIdx) => workoutExercisesMiniSets[exerciseIdx].length === sets.length);
+	if (!linedUp) {
+		throw new TRPCError({ code: 'BAD_REQUEST', message: 'The workout’s exercises, sets and mini-sets don’t line up' });
+	}
+}
 
 /**
  * The name of the routine a workout is done from; none for a blank workout. A workout saved on the
@@ -499,7 +519,9 @@ export const workouts = t.router({
 	}),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
-		await prisma.workout.delete({ where: { id: input, userId: ctx.userId } });
+		// Already deleted (e.g. on another device): said, not a server error
+		const { count } = await prisma.workout.deleteMany({ where: { id: input, userId: ctx.userId } });
+		if (count === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workout not found' });
 		return { message: 'Workout deleted successfully' };
 	}),
 
@@ -720,7 +742,11 @@ export const workouts = t.router({
 						const weightUnit = unitByExerciseName.get(exercise.name) ?? exercise.weightUnit;
 						return convertExerciseLoads({ ...exercise, weightUnit }, 'toDisplay');
 					}),
-					userBodyweight: lastPerformances.at(-1)!.oldUserBodyweight
+					userBodyweight: lastPerformances.at(-1)!.oldUserBodyweight,
+					// Each exercise was last done on its own day, at that day's bodyweight
+					bodyweights: Object.fromEntries(
+						lastPerformances.map(({ exercise, oldUserBodyweight }) => [exercise.name, oldUserBodyweight])
+					)
 				};
 			}
 

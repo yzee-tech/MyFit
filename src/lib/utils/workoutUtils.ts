@@ -1128,6 +1128,20 @@ export function convertExerciseLoads<T extends { weightUnit?: WeightUnit | null;
 	};
 }
 
+/**
+ * A down set's next weight, in the exercise's unit: `load` rounded down to a weight the gym has (its
+ * lightest, under all of them), else to the exercise's weight step (2.5 kg or 5 lb without one)
+ */
+export function downSetLoad(
+	load: number,
+	ex: { weightUnit?: WeightUnit | null; minimumWeightChange?: number | null },
+	weights: number[] | null
+): number {
+	if (weights) return weightsAround(weights, load).below ?? weights[0];
+	const step = ex.minimumWeightChange ?? defaultWeightStep(ex.weightUnit ?? 'KG');
+	return roundWeight(Math.floor(load / step + 1e-9) * step);
+}
+
 /** Whether a set holds a suggestion: reps, or for a cardio set a time */
 const hasSuggestion = (set: WorkoutExerciseInProgress['sets'][number]) =>
 	set.reps !== undefined || set.timeSeconds !== undefined;

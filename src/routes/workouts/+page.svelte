@@ -26,6 +26,7 @@
 		calendarDayNames,
 		describeDates,
 		describePick,
+		formatWorkoutDate,
 		localDayKey,
 		monthOf,
 		monthStart,
@@ -72,6 +73,18 @@
 		return to < from ? null : { from, to };
 	}
 
+	/** A link's list of blocks (ids or names; null: workouts outside a block), or null if it isn't one */
+	function parseBlockFilter(value: string | null): (string | null)[] | null {
+		if (!value) return null;
+		try {
+			const parsed: unknown = JSON.parse(value);
+			const valid = Array.isArray(parsed) && parsed.every((entry) => entry === null || typeof entry === 'string');
+			return valid && parsed.length > 0 ? parsed : null;
+		} catch {
+			return null;
+		}
+	}
+
 	function getCurrentFilters() {
 		const currentFilters: Exclude<RouterInputs['workouts']['load']['filters'], undefined> = {};
 		// Days picked on the calendar replace the filters
@@ -92,22 +105,31 @@
 		const endDay = parseLocalDay(endDate);
 		if (startDay) currentFilters.startDate = startDay;
 		if (endDay) currentFilters.endBefore = nextDay(endDay);
-		if (selectedMesocycleIds) {
-			currentFilters.selectedMesocycleIds = JSON.parse(selectedMesocycleIds);
-		} else if (selectedMesocycles) {
-			currentFilters.selectedMesocycles = JSON.parse(selectedMesocycles);
-		}
+		// A link's block filter that isn't a list of blocks (cut short, or typed by hand) is left out
+		const ids = parseBlockFilter(selectedMesocycleIds);
+		const names = parseBlockFilter(selectedMesocycles);
+		if (ids) currentFilters.selectedMesocycleIds = ids;
+		else if (names) currentFilters.selectedMesocycles = names;
 
 		return currentFilters;
 	}
 
 	async function loadMore(infiniteEvent: InfiniteLoadingEvents['infinite']) {
 		const lastWorkout = workouts.at(-1);
-
-		const newWorkouts = await trpc().workouts.load.query({
-			cursorId: lastWorkout?.id,
-			filters: getCurrentFilters()
-		});
+		// The answer belongs to the list asked for: one that comes after other days or filters were picked is
+		// dropped (that list asks for its own)
+		const askedFor = $page.url.search;
+		let newWorkouts: RouterOutputs['workouts']['load'];
+		try {
+			newWorkouts = await trpc().workouts.load.query({
+				cursorId: lastWorkout?.id,
+				filters: getCurrentFilters()
+			});
+		} catch {
+			if (askedFor === $page.url.search) infiniteEvent.detail.error();
+			return;
+		}
+		if (askedFor !== $page.url.search) return;
 
 		if (newWorkouts.length === 0) {
 			infiniteEvent.detail.complete();
@@ -274,10 +296,7 @@
 			>
 				<span class="flex items-baseline justify-between gap-2">
 					<span class="whitespace-nowrap text-lg font-semibold">
-						{workout.startedAt.toLocaleDateString(undefined, {
-							day: '2-digit',
-							month: 'long'
-						})}
+						{formatWorkoutDate(workout.startedAt)}
 					</span>
 					<span class="flex min-w-0 items-center gap-1 text-muted-foreground">
 						{#if !workout.countsForProgression}

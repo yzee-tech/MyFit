@@ -14,7 +14,7 @@
 	import Minus from 'virtual:icons/lucide/minus';
 	import TrendDownIcon from 'virtual:icons/lucide/trending-down';
 	import TrendUpIcon from 'virtual:icons/lucide/trending-up';
-	import { workoutRunes } from '../../workoutRunes.svelte';
+	import { previousBodyweightOf, workoutRunes } from '../../workoutRunes.svelte';
 
 	type PropsType = { exercise: WorkoutExerciseInProgress };
 	let { exercise }: PropsType = $props();
@@ -28,6 +28,9 @@
 		const inKg = convertExerciseLoads(previous, 'toKg');
 		return convertExerciseLoads({ ...inKg, weightUnit: exercise.weightUnit ?? 'KG' }, 'toDisplay');
 	});
+
+	// The bodyweight on the day this exercise was last done (kg), not another exercise's day
+	let previousBodyweight = $derived(previousBodyweightOf(workoutRunes.previousWorkoutData, exercise.name));
 
 	// Loads here are in the exercise's unit; bodyweight is stored in kg
 	function inExerciseUnit(kg: number | null | undefined) {
@@ -53,7 +56,7 @@
 				oldSet: prevSet,
 				newSet: { reps, load, RIR, miniSets: cleanupInProgressMiniSets(miniSets) },
 				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
-				oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
+				oldUserBodyweight: inExerciseUnit(previousBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
 			}
 		});
@@ -85,7 +88,7 @@
 				oldSet: { ...prev, miniSets: [] },
 				newSet: { ...current, miniSets: [] },
 				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
-				oldUserBodyweight: inExerciseUnit(workoutRunes.previousWorkoutData?.userBodyweight),
+				oldUserBodyweight: inExerciseUnit(previousBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
 			}
 		});
@@ -104,8 +107,8 @@
 				<Popover.Root>
 					<Popover.Trigger class="text-xs font-semibold text-muted-foreground underline">(BW)</Popover.Trigger>
 					<Popover.Content class="w-48 text-center text-base">
-						<span class="text-muted-foreground">
-							{workoutRunes.previousWorkoutData?.userBodyweight} -&gt;
+						<span class="text-muted-foreground" data-testid="previous-bodyweight">
+							{previousBodyweight} -&gt;
 						</span>
 						{workoutRunes.workoutData?.userBodyweight}
 					</Popover.Content>

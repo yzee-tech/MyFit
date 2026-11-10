@@ -38,6 +38,19 @@ export function parseLocalDay(value: string | null | undefined): Date | null {
 	return date;
 }
 
+/**
+ * A workout's date on its card, on the phone's calendar: "Oct 16", with the year when it isn't this
+ * one ("Oct 16, 2025"). Always month, day, year, whatever the phone's language
+ */
+export function formatWorkoutDate(date: Date | string, now = new Date()): string {
+	const day = new Date(date);
+	return day.toLocaleDateString('en-US', {
+		month: 'short',
+		day: 'numeric',
+		...(day.getFullYear() !== now.getFullYear() && { year: 'numeric' })
+	});
+}
+
 /** Midnight of the day after */
 export function nextDay(day: Date): Date {
 	return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);

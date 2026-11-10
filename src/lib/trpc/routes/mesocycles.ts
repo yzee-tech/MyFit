@@ -100,7 +100,9 @@ export const mesocycles = t.router({
 		.query(async ({ input, ctx }) => {
 			return prisma.mesocycle.findMany({
 				where: { userId: ctx.userId, name: { contains: input.searchString, mode: 'insensitive' } },
-				orderBy: { id: 'desc' },
+				// Blocks not started yet, then the latest started first (ids are random: they only break ties, so the
+				// pages never repeat or skip one)
+				orderBy: [{ startDate: { sort: 'desc', nulls: 'first' } }, { id: 'desc' }],
 				cursor: input.cursorId !== undefined ? { id: input.cursorId } : undefined,
 				skip: input.cursorId !== undefined ? 1 : 0,
 				take: 10
@@ -194,7 +196,9 @@ export const mesocycles = t.router({
 		}),
 
 	deleteById: t.procedure.input(z.string().cuid2()).mutation(async ({ input, ctx }) => {
-		await prisma.mesocycle.delete({ where: { userId: ctx.userId, id: input } });
+		// Already deleted (e.g. on another device): said, not a server error
+		const { count } = await prisma.mesocycle.deleteMany({ where: { userId: ctx.userId, id: input } });
+		if (count === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'Mesocycle not found' });
 		return { message: 'Mesocycle deleted successfully' };
 	}),
 

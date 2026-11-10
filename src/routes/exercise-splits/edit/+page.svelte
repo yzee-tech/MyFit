@@ -37,6 +37,9 @@
 	let saving = $state(false);
 
 	onMount(async () => {
+		if (routineEditor.takeDraftUnreadable()) {
+			toast.error("Your unsaved routine edits couldn't be opened. They were set aside, and the routine is as saved");
+		}
 		const originalName = $page.url.searchParams.get('routine');
 		// Back after a reload: the unsaved edits are still here
 		if (routineEditor.isOpenFor(originalName)) {

@@ -2,6 +2,45 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-10: easier sessions that are really easier, and fixes from a full code review
+
+### Changed
+
+- **Suggestions never turn spare reps into a set to failure.** A set at the bottom of its rep range that still
+  had reps in reserve was suggested with more reps at 0 in reserve, in a welcome back session as in a normal
+  week (10 × 60 kg with 2 in reserve became 12 × 60 kg to failure). The reserve is kept now.
+- **Welcome back can lower the weight.** When taking a rep off would leave the rep range, the weight comes down
+  a step instead and the reps stay in the range (10 × 60 kg with 2 in reserve becomes 10 × 57.5 kg with 4).
+  With no lighter weight (bodyweight only, the gym's lightest), the reps go under the range. The welcome back
+  cards say "easier than last time" rather than "repeat your last numbers".
+- **A normal week after falling short of the range gets a lighter weight** at the week's planned effort, not
+  the same weight to failure (8 × 60 kg with 3 in reserve becomes 11 × 57.5 kg with 3). Straight and myo-rep
+  sets move together, and only set 1 falling short lowers them: later sets fading under the range keep the
+  weight. Independent, down, drop and top/back-off sets each go by their own reps.
+- **A deload never suggests zero or negative reps.** It still keeps the weight and takes reps off; a set already
+  out of reps keeps them at a lighter weight (3 × 140 kg to failure becomes 3 × 127.5 kg with 4 in reserve,
+  where it was -1 reps).
+- A session lowers a weight by a tenth at most (always by one step at least), and never suggests more than
+  could be done last time.
+- Workout cards show the date as "Oct 16", with the year for another year ("Oct 16, 2025").
+- The list of mesocycles is in order: blocks not started yet, then the latest started first (it was in no order).
+
+### Fixed
+
+- Picking a day (or filters) on Workouts while the list was still loading mixed the two lists. The same in the
+  mesocycle search and when another exercise's History was opened. A late answer is dropped now.
+- Text typed in the mesocycle search box but not submitted filtered the rest of the list as it loaded.
+- Compare (and the volume chart after a workout) used one earlier bodyweight for every exercise: each exercise
+  now uses the bodyweight of the day it was last done.
+- A down set's suggested weight was rounded down to 5 kg steps; it uses the exercise's step, 2.5 kg or 5 lb
+  without one.
+- A list or the Stats overview whose request failed kept loading for ever: it says so, with Retry.
+- Routine edits saved on the phone that can't be read are set aside with a note instead of breaking the editor,
+  and a Workouts link with a broken block filter shows every workout instead of an error.
+- Deleting a workout or a block that is already gone says "not found" instead of a server error, and a workout
+  whose exercises, sets and mini-sets don't line up is refused instead of saved wrongly.
+- The docs no longer say deload is coming soon.
+
 ## 2026-11-07: Quick add test guards, safe failure evidence and database-only previews
 
 ### Tests
