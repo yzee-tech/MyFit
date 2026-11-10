@@ -26,8 +26,8 @@
 	<Card.Header>
 		<Card.Title>Welcome back</Card.Title>
 		<Card.Description>
-			After a break from training, the next workout repeats your last numbers with 1 extra rep in reserve, instead of
-			trying to beat them.
+			After a break from training, the next workout is easier than your last one (1 extra rep in reserve, with fewer
+			reps or a lighter weight) instead of trying to beat it.
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="grid gap-4">

@@ -84,7 +84,9 @@ test('progression: exercises without a bodyweight share get the same suggestions
 			sets: [
 				[13, 60, 3],
 				[10, 60, 3],
-				[11, 60, 1]
+				// 11 with 1 in reserve, for a week at 3: a rep comes off down to the bottom of the range, and
+				// the reserve it had is kept (it was 11 at 1 in reserve: the reserve wasn't counted)
+				[10, 60, 2]
 			]
 		},
 		{

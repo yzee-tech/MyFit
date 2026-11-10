@@ -18,7 +18,7 @@
 	<p>
 		A mesocycle is a unit of training consisting of several microcycles (repeated splits), usually lasting 4-6 weeks.
 		The mesocycle structures progression and recovery, with increasing intensity or volume followed by deload phases to
-		avoid overtraining. Deload feature will be coming soon!
+		avoid overtraining.
 	</p>
 
 	<h2>Workouts</h2>
