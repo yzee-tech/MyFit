@@ -1329,6 +1329,51 @@ function lowerLoadForReps(
 	return lowest;
 }
 
+/**
+ * A load (kg) that follows another one down from `from` to `to`: a mini-set's, or a set's that shares
+ * the weight being lowered but was logged at its own. The same load moves to the same weight; another
+ * one comes down by the same amount within its own limits: MAX_LOAD_DROP of what it lifts (one step at
+ * least), added weight down to none and never into help (only a load already done with help gets
+ * more), and a weight the gym has. A load that can't come down stays as it is
+ */
+export function followLoadDown(
+	ex: Pick<WorkoutExerciseInProgress, 'bodyweightFraction' | 'weightUnit' | 'minimumWeightChange'>,
+	kg: number,
+	from: number,
+	to: number,
+	weights: number[] | null,
+	userBodyweight: number
+): number {
+	const by = from - to;
+	if (by <= 1e-9) return kg;
+	if (Math.abs(kg - from) < 1e-9) return to;
+	const unit = ex.weightUnit ?? 'KG';
+	const share = (ex.bodyweightFraction ?? 0) * userBodyweight;
+	const usable = (load: number) => (kg >= 0 ? load >= -1e-9 : true) && bergerLoadFactor(load + share) > 0;
+	if (weights) {
+		// The gym's weights at or under where the amount would take it, never under its own limit
+		// (its next weight down is always allowed)
+		const shown = roundWeight(fromKg(kg, unit));
+		const lower = weights.filter((weight) => weight < shown - 1e-6).toReversed();
+		const limit = (kg + share) * (1 - MAX_LOAD_DROP) - share;
+		let picked: number | null = null;
+		for (const [index, weight] of lower.entries()) {
+			const load = toKg(weight, unit);
+			if (!usable(load) || (index > 0 && load < limit - 1e-9)) break;
+			picked = load;
+			if (load <= kg - by + 1e-9) break;
+		}
+		return picked ?? kg;
+	}
+	const step = toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
+	if (step <= 0) return kg;
+	const steps = Math.max(1, Math.floor(((kg + share) * MAX_LOAD_DROP) / step + 1e-9));
+	let moved = kg - Math.min(by, steps * step);
+	// Added weight comes off down to none
+	if (kg >= 0 && moved < 0) moved = 0;
+	return usable(moved) ? moved : kg;
+}
+
 export function progressiveOverloadMagic(
 	plan: ProgressionPlan,
 	cycleNumber: number,
@@ -1589,13 +1634,10 @@ export function progressiveOverloadMagic(
 				userBodyweight
 			);
 		};
-		const miniSnap = (from: number, to: number) => (kg: number) => {
-			const moved = kg + (to - from);
-			if (!weights) return moved;
-			const unit = ex.weightUnit ?? 'KG';
-			const { below, above } = weightsAround(weights, roundWeight(fromKg(moved, unit)));
-			return below === null && above === null ? moved : toKg((below ?? above)!, unit);
-		};
+		// A load that goes with one being lowered (a mini-set's, or another set of sets that share a weight
+		// but were logged at their own): it comes down by the same amount, within its own limits
+		const miniSnap = (from: number, to: number) => (kg: number) =>
+			followLoadDown(ex, kg, from, to, weights, userBodyweight);
 
 		const active = plans.filter((plan): plan is EffortPlan => plan !== null);
 		const sharedLoad = ['Straight', 'Myorep', 'MyorepMatch'].includes(ex.setType);

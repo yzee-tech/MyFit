@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
-const MAX_LOAD_DROP = 0.1;
 import {
-	// MAX_LOAD_DROP,
+	MAX_LOAD_DROP,
+	followLoadDown,
 	progressiveOverloadMagic,
 	type ExerciseHistory,
 	type PreviousPerformance,
@@ -15,7 +15,8 @@ import { testPlan, testRoutines, testSettings } from './data';
  * The week's effort (reps in reserve) applied to last time's sets. "Barbell rows": 3 straight sets,
  * 10–15 reps, 2.5 kg steps. Week 1 of the test plan asks for 3 in reserve, week 4 for 2
  */
-type TestSet = { reps: number; load: number; RIR: number; skipped?: boolean };
+type TestMiniSet = { reps: number; load: number; RIR: number };
+type TestSet = { reps: number; load: number; RIR: number; skipped?: boolean; miniSets?: TestMiniSet[] };
 type Row = ProgressionPlan['exercises'][number];
 type Options = {
 	week?: number;
@@ -47,10 +48,28 @@ function performance(sets: TestSet[], row: Row, unit: 'KG' | 'LB', bodyweight: n
 				timeSeconds: null,
 				distanceMeters: null,
 				workoutExerciseId: 'past-rows',
-				miniSets: []
+				miniSets: (set.miniSets ?? []).map((miniSet, miniSetIndex) => ({
+					...miniSet,
+					id: `mini-${setIndex}-${miniSetIndex}`,
+					miniSetIndex,
+					workoutExerciseSetId: `set-${setIndex}`
+				}))
 			}))
 		}
 	};
+}
+
+/** The suggested sets of Barbell rows from one past workout, as the engine gives them */
+function suggestSets(last: TestSet[], options: Options = {}) {
+	const { week = 1, mode = 'normal', unit = 'KG', bodyweight = 100 } = options;
+	const plan = testPlan();
+	plan.settings = { ...testSettings, lastSetToFailure: false, forceRIRMatching: false, ...options.settings };
+	const row = plan.exercises.find((ex) => ex.name === 'Barbell rows')!;
+	row.weightUnit = unit;
+	options.row?.(row);
+	const history: ExerciseHistory = { 'Barbell rows': [performance(last, row, unit, bodyweight)] };
+	const output = progressiveOverloadMagic(plan, week, bodyweight, history, mode, options.weightSets ?? []);
+	return output.find((ex) => ex.name === 'Barbell rows')!.sets;
 }
 
 /** The suggestion for Barbell rows from one past workout, as [reps, load in kg, RIR] per set */
@@ -314,4 +333,72 @@ test('every mode, 20,000 histories: whole reps of one or more, and an easy sessi
 		});
 	}
 	expect(problems).toEqual([]);
+});
+
+test('a load that follows a lowered weight keeps to its own limits: none into help, a tenth at most, weights the gym has', () => {
+	const KG_PER_LB = 0.45359237;
+	const plain = {
+		bodyweightFraction: null as number | null,
+		weightUnit: 'KG' as 'KG' | 'LB',
+		minimumWeightChange: null
+	};
+	const bodyweight = { ...plain, bodyweightFraction: 1 };
+	const pounds = { ...plain, weightUnit: 'LB' as const };
+	const gym = [10, 20, 30, 40];
+	const help = [-20, -15, -10, -5];
+	// [what, exercise, the load, the weight lowered from, to, the gym's weights, expected]
+	const cases: [string, typeof plain, number, number, number, number[] | null, number][] = [
+		['the same load moves to the same weight', bodyweight, 10, 10, 5, null, 5],
+		['no added weight stays at none (was 5 kg of help)', bodyweight, 0, 10, 5, null, 0],
+		['a little added weight comes off down to none, not into help', bodyweight, 2.5, 10, 5, null, 0],
+		['help already used becomes more help', bodyweight, -10, -5, -10, null, -15],
+		['help stops where nothing is left to lift', { ...plain, bodyweightFraction: 0.1 }, -7.5, 0, -5, null, -7.5],
+		['the same amount, when that is within a tenth of it', plain, 40, 60, 57.5, null, 37.5],
+		['a tenth of a light load is under a step: one step', plain, 20, 60, 50, null, 17.5],
+		['a load at no weight without bodyweight stays', plain, 0, 60, 57.5, null, 0],
+		['a weight the gym has, at or under where the amount takes it', plain, 30, 40, 30, gym, 20],
+		['the lightest weight the gym has stays', plain, 10, 40, 30, gym, 10],
+		['more help from the settings of a machine', bodyweight, -10, -5, -10, help, -15],
+		['added weight never becomes help from a machine', bodyweight, 0, 10, 5, help, 0],
+		['pounds come down by 5 lb', pounds, 50 * KG_PER_LB, 100 * KG_PER_LB, 95 * KG_PER_LB, null, 45 * KG_PER_LB],
+		['a weight that goes up moves nothing', plain, 40, 60, 62.5, null, 40]
+	];
+	for (const [what, exercise, load, from, to, weights, expected] of cases) {
+		expect(followLoadDown(exercise, load, from, to, weights, 100), what).toBeCloseTo(expected, 6);
+	}
+});
+
+test('drop sets on a bodyweight exercise: lowering the added weight leaves a mini-set at bodyweight where it was', () => {
+	const dips = (row: Row) =>
+		Object.assign(row, { setType: 'Drop', repRangeStart: 5, repRangeEnd: 15, bodyweightFraction: 1 });
+	const last = same(3, { reps: 5, load: 10, RIR: 2, miniSets: [{ reps: 3, load: 0, RIR: 0 }] });
+	const sets = suggestSets(last, { mode: 'welcomeBack', row: dips });
+	// The added weight comes down (10 kg to 5 kg at 4 in reserve); the mini-set stays at no added weight (was -5 kg)
+	expect(sets.map((set) => [set.reps, set.load, set.RIR])).toEqual([0, 1, 2].map(() => [5, 5, 4]));
+	expect(sets.map((set) => set.miniSets.map((miniSet) => miniSet.load))).toEqual([[0], [0], [0]]);
+
+	// A mini-set done with help keeps getting it, and more as the weight comes down
+	const helped = same(3, { reps: 5, load: -10, RIR: 2, miniSets: [{ reps: 3, load: -20, RIR: 0 }] });
+	const more = suggestSets(helped, { mode: 'welcomeBack', row: dips });
+	more.forEach((set) => {
+		expect(set.load!).toBeLessThan(-10);
+		expect(set.miniSets[0].load).toBeCloseTo(-20 + (set.load! + 10), 6);
+	});
+});
+
+test('sets that share a weight but were logged at their own: each comes down within its own limits', () => {
+	const pullUps = (row: Row) => Object.assign(row, { bodyweightFraction: 1, repRangeStart: 8, repRangeEnd: 15 });
+	// Set 1 with 10 kg added fell short; sets 2 and 3 were done with none
+	const sets = suggestSets(
+		[
+			{ reps: 5, load: 10, RIR: 3 },
+			{ reps: 5, load: 0, RIR: 3 },
+			{ reps: 5, load: 0, RIR: 3 }
+		],
+		{ row: pullUps }
+	);
+	expect(sets[0].load!).toBeLessThan(10);
+	expect(sets[0].load!).toBeGreaterThanOrEqual(0);
+	// Was pushed into help by the amount set 1 came down
+	expect(sets.slice(1).map((set) => set.load)).toEqual([0, 0]);
 });
