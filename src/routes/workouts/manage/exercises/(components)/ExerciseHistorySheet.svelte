@@ -26,10 +26,18 @@
 		const lastExerciseFound = exercisesFound.at(-1);
 		if (exerciseName === undefined) return;
 
-		const newExercisesFound = await trpc().workouts.getExerciseHistory.query({
-			cursorId: lastExerciseFound?.id,
-			exerciseName
-		});
+		let newExercisesFound: RouterOutputs['workouts']['getExerciseHistory'];
+		try {
+			newExercisesFound = await trpc().workouts.getExerciseHistory.query({
+				cursorId: lastExerciseFound?.id,
+				exerciseName
+			});
+		} catch {
+			if (exerciseName === workoutRunes.exerciseHistorySheetName) infiniteEvent.detail.error();
+			return;
+		}
+		// Another exercise's history was opened meanwhile: this answer isn't its
+		if (exerciseName !== workoutRunes.exerciseHistorySheetName) return;
 		if (newExercisesFound.length === 0) {
 			infiniteEvent.detail.complete();
 			return;

@@ -386,8 +386,8 @@
 			<Card.Header>
 				<Card.Title>Deload week</Card.Title>
 				<Card.Description>
-					Same weights as last time with half the sets, stopping well short of failure. This week doesn't count as the
-					baseline for your next workouts.
+					Last time's weights (lighter where the reps are already low) with half the sets, stopping well short of
+					failure. This week doesn't count as the baseline for your next workouts.
 				</Card.Description>
 			</Card.Header>
 		</Card.Root>
@@ -396,7 +396,8 @@
 			<div class="flex flex-col gap-1">
 				<Label for="take-it-easy">Welcome back: take it easy today</Label>
 				<p class="text-sm text-muted-foreground">
-					It's been {welcomeBackDays} days. Suggestions repeat your last numbers with 1 extra rep in reserve.
+					It's been {welcomeBackDays} days. Suggestions are easier than last time: 1 extra rep in reserve, with fewer reps
+					or a lighter weight.
 				</p>
 			</div>
 			<Switch id="take-it-easy" name="take-it-easy" bind:checked={takeItEasy} />

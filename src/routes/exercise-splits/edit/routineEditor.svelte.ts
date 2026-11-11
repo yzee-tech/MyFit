@@ -4,6 +4,9 @@ import { routineFingerprint, type MyRoutine } from '../myRoutines';
 
 type Exercise = SplitExerciseTemplateWithoutIdsOrIndex;
 
+/** Where saved edits that couldn't be opened are kept */
+const ROUTINE_BACKUP_KEY = 'routineEditor:backup';
+
 /**
  * One routine being edited (or a new one), with its unsaved changes. Kept on this device, so a reload
  * doesn't lose them. `opened` is the routine as it was when editing began: to tell whether anything
@@ -21,9 +24,22 @@ function createRoutineEditor() {
 	// Copied exercises stay for this visit, to paste into another routine
 	let copiedExercises: Exercise[] | undefined = $state();
 
+	/** Saved edits couldn't be opened (kept as a backup): told once the page is up */
+	let draftUnreadable = false;
 	if (globalThis.localStorage) {
 		const saved = localStorage.getItem('routineEditor');
-		if (saved) ({ editing, opened, name, weightUnit, exercises } = JSON.parse(saved));
+		if (saved) {
+			try {
+				const draft = JSON.parse(saved);
+				if (typeof draft !== 'object' || draft === null || !Array.isArray(draft.exercises)) throw new Error();
+				({ editing, opened = '', name = '', weightUnit = 'KG', exercises } = draft);
+			} catch {
+				// Never thrown away silently: kept as it was, under another key, and the person told
+				localStorage.setItem(ROUTINE_BACKUP_KEY, saved);
+				localStorage.removeItem('routineEditor');
+				draftUnreadable = true;
+			}
+		}
 	}
 
 	function save() {
@@ -137,6 +153,12 @@ function createRoutineEditor() {
 		},
 		get copiedExercises() {
 			return copiedExercises;
+		},
+		/** Whether saved edits couldn't be opened; true only the first time it's asked */
+		takeDraftUnreadable() {
+			const unreadable = draftUnreadable;
+			draftUnreadable = false;
+			return unreadable;
 		},
 		open,
 		isOpenFor,

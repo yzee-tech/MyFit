@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { chartTheme } from '$lib/utils/chartTheme';
 	import { page } from '$app/stores';
+	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
@@ -57,10 +58,16 @@
 	// cards and the chart, so they always cover the same workouts
 	let ranges: StatsRanges | undefined = $state();
 
+	// A failed request: said, with a way to try again (never the placeholders left there)
+	let failed = $state(false);
+	let attempt = $state(0);
+
 	$effect(() => {
 		const picked = period;
+		const asked = attempt;
 		const pickedRanges = statsRanges(picked, new Date());
 		overview = undefined;
+		failed = false;
 		const { current, previous } = pickedRanges;
 		trpc()
 			.stats.overview.query(
@@ -76,9 +83,12 @@
 			)
 			.then((result) => {
 				// Still the period picked
-				if (picked !== period) return;
+				if (picked !== period || asked !== attempt) return;
 				ranges = pickedRanges;
 				overview = result;
+			})
+			.catch(() => {
+				if (picked === period && asked === attempt) failed = true;
 			});
 	});
 
@@ -309,7 +319,12 @@
 		{/each}
 	</ToggleGroup.Root>
 
-	{#if !overview}
+	{#if failed}
+		<div class="muted-text-box flex items-center justify-between gap-2 text-left" data-testid="stats-failed">
+			<span>Couldn't load your stats, check your connection</span>
+			<Button onclick={() => attempt++} size="sm" variant="outline">Retry</Button>
+		</div>
+	{:else if !overview}
 		<Skeleton class="h-72 w-full" />
 		<div class="grid grid-cols-2 gap-2">
 			{#each Array(4) as _}

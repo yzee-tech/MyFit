@@ -400,8 +400,10 @@ export function formatWeekEffort(weeklyRIR: number[], week: number): string {
 
 /**
  * - `normal`: beat last time
- * - `deload`: same weights and reps as last time, half the sets, easy effort
- * - `welcomeBack`: first workout after a break; same weights and reps as last time, 1 extra RIR
+ * - `deload`: last time's weights with half the sets at an easy effort: reps come off, and a set already
+ *   out of reps keeps them at a lighter weight
+ * - `welcomeBack`: first workout after a break; last time's numbers at 1 extra RIR: reps come off, and a
+ *   set that would leave its rep range gets a lighter weight instead
  */
 export type ProgressionMode = 'normal' | 'deload' | 'welcomeBack';
 
@@ -1126,6 +1128,20 @@ export function convertExerciseLoads<T extends { weightUnit?: WeightUnit | null;
 	};
 }
 
+/**
+ * A down set's next weight, in the exercise's unit: `load` rounded down to a weight the gym has (its
+ * lightest, under all of them), else to the exercise's weight step (2.5 kg or 5 lb without one)
+ */
+export function downSetLoad(
+	load: number,
+	ex: { weightUnit?: WeightUnit | null; minimumWeightChange?: number | null },
+	weights: number[] | null
+): number {
+	if (weights) return weightsAround(weights, load).below ?? weights[0];
+	const step = ex.minimumWeightChange ?? defaultWeightStep(ex.weightUnit ?? 'KG');
+	return roundWeight(Math.floor(load / step + 1e-9) * step);
+}
+
 /** Whether a set holds a suggestion: reps, or for a cardio set a time */
 const hasSuggestion = (set: WorkoutExerciseInProgress['sets'][number]) =>
 	set.reps !== undefined || set.timeSeconds !== undefined;
@@ -1246,6 +1262,116 @@ function doneWithNoWeight(ex: WorkoutExerciseInProgress, lastPerformance: Previo
 	if (ex.bodyweightFraction !== null && ex.bodyweightFraction !== undefined) return false;
 	const done = lastPerformance.exercise.sets.filter((set) => !set.skipped);
 	return done.length > 0 && done.every((set) => set.load === 0 && set.miniSets.every((miniSet) => miniSet.load === 0));
+}
+
+/** A set's effort change for the week, worked out before any weight is lowered */
+type EffortPlan = {
+	idx: number;
+	/** In reserve last time, and what the week asks for */
+	oldRIR: number;
+	targetRIR: number;
+	/** Reps the week takes off for the extra reps in reserve (negative: reps added for fewer) */
+	repsOff: number;
+	/** Bottom of the set's rep range */
+	start: number;
+	/** Its reps before the week's effort is applied */
+	reps: number;
+};
+
+/** A session never lowers a weight by more than this share of it (always by one step at least) */
+export const MAX_LOAD_DROP = 0.1;
+
+/**
+ * The heaviest lower weight (kg) at which a set reaches `targetReps` for the same effort, less the reps
+ * the week takes off. Weights the gym has, else steps of the exercise's unit; more help for an assisted
+ * exercise already done with help. Stops at MAX_LOAD_DROP of what is lifted (the bodyweight share
+ * included) and where the formula can't tell. Short of the target: the lowest weight it may use, with
+ * the reps it gives there; null with no lower weight at all
+ */
+function lowerLoadForReps(
+	ex: Pick<WorkoutExerciseInProgress, 'bodyweightFraction' | 'weightUnit' | 'minimumWeightChange'>,
+	set: { reps: number; load: number; RIR: number },
+	repsOff: number,
+	targetReps: number,
+	maxReps: number,
+	weights: number[] | null,
+	userBodyweight: number
+): { load: number; reps: number } | null {
+	const unit = ex.weightUnit ?? 'KG';
+	const share = (ex.bodyweightFraction ?? 0) * userBodyweight;
+	const lifted = set.load + share;
+	if (bergerLoadFactor(lifted) <= 0) return null;
+	const shown = roundWeight(fromKg(set.load, unit));
+	const step = ex.minimumWeightChange ?? defaultWeightStep(unit);
+	// A gym's weights don't mix with help: added weight stays added weight
+	const candidates = weights
+		? set.load > 0 && weights[0] < 0
+			? []
+			: weights.filter((weight) => weight < shown - 1e-6).toReversed()
+		: step > 0
+			? Array.from({ length: 400 }, (_, k) => roundWeight(shown - (k + 1) * step))
+			: [];
+	let lowest: { load: number; reps: number } | null = null;
+	for (const [index, candidate] of candidates.entries()) {
+		const load = toKg(candidate, unit);
+		// Added weight comes off down to none; only a set done with help gets more help
+		if (set.load >= 0 && load < 0) break;
+		if (bergerLoadFactor(load + share) <= 0) break;
+		if (index > 0 && load + share < lifted * (1 - MAX_LOAD_DROP) - 1e-9) break;
+		const moved = Math.round(repsAtLoad(ex, set, load, userBodyweight));
+		if (!Number.isFinite(moved)) break;
+		const reps = moved - repsOff;
+		// A gap too big to land in the range (the next weight down is past its top): the weight stays
+		if (reps > maxReps) return lowest;
+		lowest = { load, reps };
+		if (reps >= targetReps) return lowest;
+	}
+	return lowest;
+}
+
+/**
+ * A load (kg) that follows another one down from `from` to `to`: a mini-set's, or a set's that shares
+ * the weight being lowered but was logged at its own. The same load moves to the same weight; another
+ * one comes down by the same amount within its own limits: MAX_LOAD_DROP of what it lifts (one step at
+ * least), added weight down to none and never into help (only a load already done with help gets
+ * more), and a weight the gym has. A load that can't come down stays as it is
+ */
+export function followLoadDown(
+	ex: Pick<WorkoutExerciseInProgress, 'bodyweightFraction' | 'weightUnit' | 'minimumWeightChange'>,
+	kg: number,
+	from: number,
+	to: number,
+	weights: number[] | null,
+	userBodyweight: number
+): number {
+	const by = from - to;
+	if (by <= 1e-9) return kg;
+	if (Math.abs(kg - from) < 1e-9) return to;
+	const unit = ex.weightUnit ?? 'KG';
+	const share = (ex.bodyweightFraction ?? 0) * userBodyweight;
+	const usable = (load: number) => (kg >= 0 ? load >= -1e-9 : true) && bergerLoadFactor(load + share) > 0;
+	if (weights) {
+		// The gym's weights at or under where the amount would take it, never under its own limit
+		// (its next weight down is always allowed)
+		const shown = roundWeight(fromKg(kg, unit));
+		const lower = weights.filter((weight) => weight < shown - 1e-6).toReversed();
+		const limit = (kg + share) * (1 - MAX_LOAD_DROP) - share;
+		let picked: number | null = null;
+		for (const [index, weight] of lower.entries()) {
+			const load = toKg(weight, unit);
+			if (!usable(load) || (index > 0 && load < limit - 1e-9)) break;
+			picked = load;
+			if (load <= kg - by + 1e-9) break;
+		}
+		return picked ?? kg;
+	}
+	const step = toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
+	if (step <= 0) return kg;
+	const steps = Math.max(1, Math.floor(((kg + share) * MAX_LOAD_DROP) / step + 1e-9));
+	let moved = kg - Math.min(by, steps * step);
+	// Added weight comes off down to none
+	if (kg >= 0 && moved < 0) moved = 0;
+	return usable(moved) ? moved : kg;
 }
 
 export function progressiveOverloadMagic(
@@ -1405,7 +1531,12 @@ export function progressiveOverloadMagic(
 	// RIR adjustment (cardio has no effort to adjust)
 	workoutExercises.forEach((ex) => {
 		if (isCardio(ex)) return;
-		ex.sets.forEach((set, idx) => {
+		// Levels and reps only already add a rep each time, and have no weight to lower
+		const repEachTime = isLevelUnit(ex.weightUnit) || isRepsOnly(ex);
+		const weights = availableWeightsFor(ex, weightSets);
+		const before = ex.sets.map((set) => ({ reps: set.reps, load: set.load }));
+
+		const plans = ex.sets.map((set, idx): EffortPlan | null => {
 			const oldRIR = set.RIR ?? currentCycleRIR;
 			set.RIR = currentCycleRIR;
 
@@ -1415,38 +1546,139 @@ export function progressiveOverloadMagic(
 
 			// Adjust reps when RIR changed
 			const RIRDifference = set.RIR - oldRIR;
-			if (set.reps === undefined) return;
-			// Levels and reps only already add a rep each time, so a harder week doesn't add more
-			const repEachTime = isLevelUnit(ex.weightUnit) || isRepsOnly(ex);
-			if (repEachTime && RIRDifference < 0) return;
+			// A set skipped last time has no numbers to adjust (it is emptied below)
+			if (set.reps === undefined || set.skipped) return null;
+			const targetRIR = set.RIR;
+			const repRangeStart = repRangeOfSet(ex, idx).start;
 
-			// Easy sessions always take reps off to match the easier effort
+			if (repEachTime) {
+				// A harder week doesn't add more than the rep they already get
+				if (RIRDifference < 0) return null;
+				// Easy sessions always take reps off to match the easier effort
+				if (RIRDifference > 0 && !(easySession || (ex.forceRIRMatching ?? mesocycle.forceRIRMatching))) return null;
+				// An easier week takes reps off, but not below the range (or a lower rep cap), and keeps the
+				// week's effort
+				if (mode !== 'deload') {
+					const floor = Math.min(repRangeStart, repsOnly.get(ex.name) ?? Infinity);
+					set.reps = Math.max(set.reps - RIRDifference, Math.min(set.reps, floor));
+					return null;
+				}
+				// A deload may go below the range, never below one rep (and never past what was there to give)
+				const reps = Math.max(1, set.reps - RIRDifference);
+				set.RIR = Math.min(targetRIR, Math.max(0, set.reps + oldRIR - reps));
+				set.reps = reps;
+				return null;
+			}
+
+			// Easy sessions always take reps off to match the easier effort; a normal week only when asked to
 			const forceRIRMatching = easySession || (ex.forceRIRMatching ?? mesocycle.forceRIRMatching);
-			if (RIRDifference > 0 && !forceRIRMatching) return;
-
-			// For TopBackoff, use topRepRangeStart for first set, regular repRangeStart for others
-			const isTopSet = ex.setType === 'TopBackoff' && idx === 0;
-			const repRangeStart =
-				isTopSet && typeof ex.topRepRangeStart === 'number' ? ex.topRepRangeStart : ex.repRangeStart;
-
-			// If the RIR adjustment we are about to make causes reps to fall outside of lower rep range
-			// (a deload is meant to be easy, so there reps may drop below the range)
-			const adjustedReps = set.reps - RIRDifference;
-			// Levels and reps only: an easier week takes reps off, but not below the range (or a lower rep
-			// cap), and keeps the week's effort
-			if (repEachTime && mode !== 'deload') {
-				const floor = Math.min(repRangeStart, repsOnly.get(ex.name) ?? Infinity);
-				set.reps = Math.max(adjustedReps, Math.min(set.reps, floor));
-				return;
-			}
-			if (mode !== 'deload' && adjustedReps < repRangeStart && !(lastSetToFailure && idx === ex.sets.length - 1)) {
-				const maxRIR = Math.max(set.reps - repRangeStart, 0);
-				set.RIR = maxRIR;
-				set.reps -= maxRIR - oldRIR;
-				return;
-			}
-			set.reps -= RIRDifference;
+			const repsOff = RIRDifference > 0 && !forceRIRMatching ? 0 : RIRDifference;
+			return { idx, oldRIR, targetRIR, repsOff, start: repRangeStart, reps: set.reps };
 		});
+
+		/** When taking the reps off isn't enough: the reps to reach at a lower weight, else null */
+		const dropTarget = (plan: EffortPlan): number | null => {
+			const planned = plan.reps - plan.repsOff;
+			// A deload keeps its weight and gives up reps; out of reps, it keeps them and gives up weight
+			if (mode === 'deload') return planned < 1 ? plan.reps : null;
+			if (planned >= plan.start) return null;
+			// A normal week keeps the weight of a set that reached the range (it stops at the bottom of it,
+			// with less in reserve than the week asks); one that fell short gets a lighter weight
+			if (mode === 'normal' && plan.reps >= plan.start) return null;
+			return plan.start;
+		};
+
+		/** The set at a load (kg), for the same effort less the reps the week takes off; never under one rep */
+		const applyAt = (plan: EffortPlan, loadKg: number | undefined, snapMini: (kg: number) => number) => {
+			const set = ex.sets[plan.idx];
+			let sameEffortReps = plan.reps;
+			if (loadKg !== undefined && set.load !== undefined && Math.abs(loadKg - set.load) > 1e-9) {
+				const moved = Math.round(
+					repsAtLoad(ex, { reps: plan.reps, load: set.load, RIR: plan.oldRIR }, loadKg, userBodyweight)
+				);
+				if (Number.isFinite(moved)) {
+					sameEffortReps = moved;
+					set.load = loadKg;
+					set.miniSets = set.miniSets.map((miniSet) =>
+						miniSet.load === undefined ? miniSet : { ...miniSet, load: snapMini(miniSet.load) }
+					);
+				}
+			}
+			let reps = sameEffortReps - plan.repsOff;
+			let RIR = plan.targetRIR;
+			if (mode === 'normal' && loadKg === undefined && plan.repsOff > 0 && reps < plan.start) {
+				// Stops at the bottom of the range, with as much in reserve as that leaves
+				const give = Math.min(plan.repsOff, Math.max(sameEffortReps - plan.start, 0));
+				reps = sameEffortReps - give;
+				RIR = plan.oldRIR + give;
+			}
+			if (reps < 1) {
+				// Never more than could be done last time
+				reps = 1;
+				RIR = Math.min(plan.targetRIR, Math.max(0, sameEffortReps + plan.oldRIR - 1));
+			}
+			set.reps = reps;
+			set.RIR = RIR;
+		};
+
+		const lowerFor = (plan: EffortPlan, target: number) => {
+			const set = ex.sets[plan.idx];
+			if (set.load === undefined) return null;
+			return lowerLoadForReps(
+				ex,
+				{ reps: plan.reps, load: set.load, RIR: plan.oldRIR },
+				plan.repsOff,
+				target,
+				mode === 'deload' ? Infinity : repRangeOfSet(ex, plan.idx).end,
+				weights,
+				userBodyweight
+			);
+		};
+		// A load that goes with one being lowered (a mini-set's, or another set of sets that share a weight
+		// but were logged at their own): it comes down by the same amount, within its own limits
+		const miniSnap = (from: number, to: number) => (kg: number) =>
+			followLoadDown(ex, kg, from, to, weights, userBodyweight);
+
+		const active = plans.filter((plan): plan is EffortPlan => plan !== null);
+		const sharedLoad = ['Straight', 'Myorep', 'MyorepMatch'].includes(ex.setType);
+		if (sharedLoad) {
+			// Sets meant to share a load move together: the first set with numbers says whether, and how far.
+			// Later sets fading under the range don't lower the weight by themselves
+			const decider = active.find((plan) => ex.sets[plan.idx].load !== undefined);
+			const target = decider ? dropTarget(decider) : null;
+			const lower = decider && target !== null ? lowerFor(decider, target) : null;
+			const from = decider ? ex.sets[decider.idx].load! : 0;
+			active.forEach((plan) => {
+				const sharesIt = lower !== null && ex.sets[plan.idx].load !== undefined;
+				applyAt(
+					plan,
+					sharesIt ? miniSnap(from, lower!.load)(ex.sets[plan.idx].load!) : undefined,
+					miniSnap(from, lower?.load ?? from)
+				);
+			});
+		} else {
+			active.forEach((plan) => {
+				const target = dropTarget(plan);
+				const lower = target !== null ? lowerFor(plan, target) : null;
+				const from = ex.sets[plan.idx].load ?? 0;
+				applyAt(plan, lower?.load, miniSnap(from, lower?.load ?? from));
+			});
+			// Down and top/back-off sets get lighter set by set: a set lowered here doesn't leave the next one
+			// heavier than it, when it wasn't before
+			if (ex.setType === 'Down' || ex.setType === 'TopBackoff') {
+				active.forEach((plan) => {
+					const prev = plan.idx - 1;
+					const [loadNow, prevNow] = [ex.sets[plan.idx].load, ex.sets[prev]?.load];
+					const [loadBefore, prevBefore] = [before[plan.idx].load, before[prev]?.load];
+					if (loadNow === undefined || prevNow === undefined || loadBefore === undefined || prevBefore === undefined)
+						return;
+					if (loadBefore <= prevBefore + 1e-9 && loadNow > prevNow + 1e-9) {
+						ex.sets[plan.idx].load = loadBefore;
+						applyAt(plan, prevNow, miniSnap(loadBefore, prevNow));
+					}
+				});
+			}
+		}
 	});
 
 	// Reps-only cap: the last word, after every other change to reps

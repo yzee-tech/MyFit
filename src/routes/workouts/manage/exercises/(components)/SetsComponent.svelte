@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
+	import { availableWeightsFor } from '$lib/utils/weightSets';
 	import { convertWeight, formatWeight, fromKg, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { formatHintLoad, formatPreviousSet, type LoadKind } from '$lib/utils/previousSet';
 	import {
@@ -22,8 +22,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Popover from '$lib/components/ui/popover';
 	import { Separator } from '$lib/components/ui/separator';
-	import { arraySum, floorToNearestMultiple } from '$lib/utils';
+	import { arraySum } from '$lib/utils';
 	import {
+		downSetLoad,
 		solveBergerFormula,
 		type SetField,
 		type WorkoutExerciseInProgress,
@@ -276,8 +277,7 @@
 		// Down to the weight the gym has, else the weight step
 		const nextLoad = calculateNextLoad(setIdx);
 		const weights = availableWeightsFor(exercise, $page.data.weightSets ?? []);
-		if (weights) return (weightsAround(weights, nextLoad).below ?? weights[0]).toString();
-		return floorToNearestMultiple(nextLoad, exercise.minimumWeightChange ?? 5).toString();
+		return downSetLoad(nextLoad, exercise, weights).toString();
 	}
 
 	function getRemainingMyorepMatchReps(setIdx: number) {

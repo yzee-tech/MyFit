@@ -19,7 +19,7 @@ import {
 const prisma = new PrismaClient();
 
 function getTodaysDateString() {
-	return new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit' });
+	return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 async function createSplitAndMesoForTest(page: Page) {

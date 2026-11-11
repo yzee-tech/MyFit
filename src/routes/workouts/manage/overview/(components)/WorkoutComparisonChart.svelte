@@ -11,7 +11,7 @@
 	} from '$lib/utils/workoutUtils';
 	import { isLevelUnit } from '$lib/utils/weightUnits';
 	import { BarController, BarElement, CategoryScale, Chart, Legend, LinearScale, Tooltip } from 'chart.js';
-	import type { PreviousWorkoutData } from '../../workoutRunes.svelte';
+	import { previousBodyweightOf, type PreviousWorkoutData } from '../../workoutRunes.svelte';
 	import type { Selected } from 'bits-ui';
 	Chart.register(Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale);
 
@@ -42,7 +42,13 @@
 		if (selectedChartType.value === 'Work volume') {
 			// Compare in kg: exercises can be shown in different units
 			const previousWorkoutVolume = previousWorkoutData.exercises.reduce((volume, exercise) => {
-				return volume + getExerciseVolume(convertExerciseLoads(exercise, 'toKg'), previousWorkoutData.userBodyweight);
+				return (
+					volume +
+					getExerciseVolume(
+						convertExerciseLoads(exercise, 'toKg'),
+						previousBodyweightOf(previousWorkoutData, exercise.name) ?? previousWorkoutData.userBodyweight
+					)
+				);
 			}, 0);
 			const currentExercisesInKg = currentWorkoutData.exercises.map((exercise) =>
 				convertExerciseLoads(exercise, 'toKg')

@@ -47,7 +47,18 @@
 
 	async function loadMore(infiniteEvent: InfiniteEvent) {
 		const lastMesocycle = mesocycles.at(-1);
-		const newMesocycles = await trpc().mesocycles.load.query({ cursorId: lastMesocycle?.id, searchString });
+		// The search in the link (the one submitted), not what is being typed. An answer that comes after
+		// another search was submitted is dropped (that list asks for its own)
+		const askedFor = $page.url.search;
+		const submitted = $page.url.searchParams.get('search') ?? '';
+		let newMesocycles: Mesocycle[];
+		try {
+			newMesocycles = await trpc().mesocycles.load.query({ cursorId: lastMesocycle?.id, searchString: submitted });
+		} catch {
+			if (askedFor === $page.url.search) infiniteEvent.detail.error();
+			return;
+		}
+		if (askedFor !== $page.url.search) return;
 
 		if (newMesocycles.length === 0) {
 			infiniteEvent.detail.complete();

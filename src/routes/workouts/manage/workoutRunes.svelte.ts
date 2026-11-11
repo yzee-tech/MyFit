@@ -234,7 +234,8 @@ function createWorkoutRunes() {
 		const others = previousWorkoutData?.exercises.filter((ex) => ex.name !== exercise.name) ?? [];
 		previousWorkoutData = {
 			exercises: [...others, exercise],
-			userBodyweight: previousWorkoutData?.userBodyweight ?? userBodyweight
+			userBodyweight: previousWorkoutData?.userBodyweight ?? userBodyweight,
+			bodyweights: { ...previousWorkoutData?.bodyweights, [exercise.name]: userBodyweight }
 		};
 		saveStoresToLocalStorage();
 	}
@@ -707,3 +708,11 @@ function createWorkoutRunes() {
 }
 
 export const workoutRunes = createWorkoutRunes();
+
+/**
+ * The bodyweight (kg) on the day an exercise was last done. A workout started before each exercise
+ * kept its own (or loaded by an older app version) has one for all of them
+ */
+export function previousBodyweightOf(previous: PreviousWorkoutData, exerciseName: string): number | undefined {
+	return previous?.bodyweights?.[exerciseName] ?? previous?.userBodyweight;
+}
