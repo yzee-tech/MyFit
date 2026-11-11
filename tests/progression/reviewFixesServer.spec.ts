@@ -208,3 +208,36 @@ test('a workout card’s date: "Oct 16", with the year when it isn’t this one'
 	expect(formatWorkoutDate(new Date(2025, 9, 16, 18), now)).toEqual('Oct 16, 2025');
 	expect(formatWorkoutDate(new Date(2025, 11, 31, 23, 59), now)).toEqual('Dec 31, 2025');
 });
+
+test('a block’s sets per muscle count the sets done: an old workout’s skipped sets are left out', async () => {
+	const { getSetsPerformedPerMuscleGroup } = await import('../../src/lib/utils/mesocycleUtils');
+	const set = (skipped: boolean) => ({ reps: skipped ? 0 : 10, load: skipped ? 0 : 40, RIR: 0, skipped, miniSets: [] });
+	const data = [
+		{
+			workoutId: 'w1',
+			workout: {
+				userBodyweight: 80,
+				routineName: 'Pull A',
+				workoutExercises: [
+					{
+						name: 'Barbell rows',
+						targetMuscleGroup: 'Traps',
+						customMuscleGroup: null,
+						sets: [set(false), set(false), set(true)]
+					},
+					{
+						name: 'Pull-ups',
+						targetMuscleGroup: 'Lats',
+						customMuscleGroup: null,
+						sets: [set(false), set(true), set(true)]
+					}
+				]
+			}
+		}
+	] as unknown as Parameters<typeof getSetsPerformedPerMuscleGroup>[0];
+	// Was 3 and 3: every set, done or not
+	expect(getSetsPerformedPerMuscleGroup(data)).toEqual([
+		{ muscleGroup: 'Lats', totalSets: 1 },
+		{ muscleGroup: 'Traps', totalSets: 2 }
+	]);
+});

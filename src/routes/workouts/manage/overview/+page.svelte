@@ -82,7 +82,13 @@
 
 			await goto('/workouts');
 		} catch (error) {
-			if (error instanceof TRPCClientError) toast.error(error.message);
+			// Nothing is lost: the workout stays here to save again
+			toast.error(
+				// The server's own words when it answered; a request that never got there has none worth showing
+				error instanceof TRPCClientError && error.shape
+					? error.message
+					: "Couldn't save the workout, check your connection and try again"
+			);
 		}
 		savingWorkout = false;
 	}

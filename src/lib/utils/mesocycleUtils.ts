@@ -101,7 +101,8 @@ export function getSetsPerformedPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMe
 
 	const setsPerformedPerMuscleGroup = groupedExercisesByMuscleGroup.map(({ exercises, muscleGroup }) => ({
 		muscleGroup,
-		totalSets: arraySum(exercises.map((exercise) => exercise.sets.length))
+		// Sets done: an old workout's skipped sets don't count, as on the Stats page
+		totalSets: arraySum(exercises.map((exercise) => exercise.sets.filter((set) => !set.skipped).length))
 	}));
 	setsPerformedPerMuscleGroup.sort((a, b) => a.totalSets - b.totalSets);
 
