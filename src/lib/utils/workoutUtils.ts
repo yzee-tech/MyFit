@@ -783,12 +783,18 @@ function raiseMyorepMatchLoad(ex: WorkoutExerciseInProgress, userBodyweight: num
 
 function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: number, weights: number[] | null) {
 	const sameLoadSetType = ex.setType === 'Straight' || ex.setType === 'Myorep';
-	let loadIncreasedForOneOfSameLoadSets = false;
+	// Sets meant to share a load go up together, and the first set with numbers says whether: a later set
+	// past the top of the range doesn't raise the weight by itself (as only set 1 falling short lowers it)
+	const decider = ex.sets.find(
+		(set) => !set.skipped && set.reps !== undefined && set.load !== undefined && set.RIR !== undefined
+	);
+	const raiseTogether = sameLoadSetType && decider?.reps !== undefined && decider.reps > ex.repRangeEnd;
 	// A set whose reps the formula can't work out (e.g. 0 kg to a weight) stays exactly as last time
 	let cantMoveASet = false;
 
 	const newSets = ex.sets.map((set, setIdx) => {
-		if (set.reps === undefined || set.load === undefined || set.RIR === undefined) return set;
+		// A set skipped last time has no numbers to move (it is emptied later), and holds no other set back
+		if (set.skipped || set.reps === undefined || set.load === undefined || set.RIR === undefined) return set;
 
 		let newLoad = set.load;
 
@@ -796,8 +802,7 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 		const isTopSet = ex.setType === 'TopBackoff' && setIdx === 0;
 		const repRangeEnd = isTopSet && typeof ex.topRepRangeEnd === 'number' ? ex.topRepRangeEnd : ex.repRangeEnd;
 
-		// TODO: #107
-		if (set.reps > repRangeEnd || loadIncreasedForOneOfSameLoadSets) {
+		if (sameLoadSetType ? raiseTogether : set.reps > repRangeEnd) {
 			// Weights and steps are in the exercise's unit (e.g. 5 lb); loads here are in kg
 			const unit = ex.weightUnit ?? 'KG';
 			if (weights) {
@@ -808,10 +813,6 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 				newLoad += toKg(ex.minimumWeightChange ?? defaultWeightStep(unit), unit);
 			}
 		}
-		if (sameLoadSetType && newLoad > set.load) {
-			loadIncreasedForOneOfSameLoadSets = true;
-		}
-
 		const cleanedMiniSets = cleanupInProgressMiniSets(set.miniSets);
 		const newReps = solveBergerFormula({
 			variableToSolve: 'NewReps',
@@ -836,7 +837,7 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 	// Sets meant to share a load move together, or not at all
 	if (sameLoadSetType && cantMoveASet) return ex.sets;
 	if (sameLoadSetType) {
-		const belowRepRangeStart = newSets.some((set) => set.reps! < ex.repRangeStart);
+		const belowRepRangeStart = newSets.some((set) => !set.skipped && set.reps! < ex.repRangeStart);
 		if (belowRepRangeStart) return ex.sets;
 	}
 
@@ -845,7 +846,7 @@ function increaseLoadOfSets(ex: WorkoutExerciseInProgress, userBodyweight: numbe
 		const isTopSet = ex.setType === 'TopBackoff' && setIdx === 0;
 		const repRangeStart = isTopSet && typeof ex.topRepRangeStart === 'number' ? ex.topRepRangeStart : ex.repRangeStart;
 
-		if (newSet.reps! < repRangeStart) return ex.sets[setIdx];
+		if (newSet.skipped || newSet.reps! < repRangeStart) return ex.sets[setIdx];
 		return newSet;
 	});
 }
