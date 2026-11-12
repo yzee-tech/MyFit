@@ -287,3 +287,22 @@ test('History: an answer for the exercise opened before isn’t added to the one
 	// Pull-ups were done once: the rows' session isn't listed under them
 	await expect(sheet.getByLabel('Copy these sets')).toHaveCount(1);
 });
+
+test('a save that can’t reach the server says so and keeps the workout; Save again saves it', async ({
+	page,
+	userData
+}) => {
+	await seedPullDay(userData.userId);
+	await startPullDay(page);
+	await page.getByTestId('Pull-ups-set-1-action').click();
+	await page.getByTestId('Barbell rows-set-1-action').click();
+	await page.getByRole('button', { name: 'Next' }).click();
+	await failFirstRequest(page, /workouts\.create/);
+	await page.getByRole('button', { name: 'Save' }).click();
+	// Was the browser's own "Failed to fetch" (and nothing at all for any other kind of error)
+	await expect(page.getByText("Couldn't save the workout, check your connection and try again")).toBeVisible();
+	expect(await prisma.workout.count({ where: { userId: userData.userId } })).toEqual(2);
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Workout created successfully' })).toBeVisible();
+	expect(await prisma.workout.count({ where: { userId: userData.userId } })).toEqual(3);
+});

@@ -32,6 +32,21 @@ test('sign-in returns only to pages on this site', () => {
 	expect(safeRedirectPath('https://evil.com')).toEqual('/dashboard');
 	expect(safeRedirectPath('/\\evil.com')).toEqual('/dashboard');
 	expect(safeRedirectPath(null)).toEqual('/dashboard');
+	// A browser drops tabs and line breaks from an address: each of these would be read as "//evil.com"
+	for (const hidden of ['\t', '\n', '\r', '\t\n', ' ', '\u0000', '\u0085']) {
+		expect(safeRedirectPath(`/${hidden}/evil.com`), JSON.stringify(hidden)).toEqual('/dashboard');
+		expect(safeRedirectPath(`/workouts${hidden}`), JSON.stringify(hidden)).toEqual('/dashboard');
+	}
+	// As the sign-in page gets it from a link
+	const fromLink = (link: string) =>
+		safeRedirectPath(new URL(link, 'https://myfit.example').searchParams.get('redirectTo'));
+	expect(fromLink('/login?redirectTo=/%09/evil.com')).toEqual('/dashboard');
+	expect(fromLink('/login?redirectTo=%2Fworkouts%3Froutine%3DPull%2520A')).toEqual('/workouts?routine=Pull%20A');
+	// Whatever is let through is still this site when a browser reads it
+	for (const path of ['/workouts', '/exercise-splits/edit?routine=Pull%20A', '/stats?tab=exercises#top']) {
+		expect(safeRedirectPath(path)).toEqual(path);
+		expect(new URL(safeRedirectPath(path), 'https://myfit.example').origin).toEqual('https://myfit.example');
+	}
 	expect(isPublicPath('/docs')).toBe(true);
 	expect(isPublicPath('/dashboard')).toBe(false);
 	expect(isPublicPath('/loginx')).toBe(false);

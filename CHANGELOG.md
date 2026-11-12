@@ -2,6 +2,21 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-11: fixes from a second code review
+
+### Fixed
+
+- **A sign-in link could send someone to another website.** The page to go to after signing in is only ever a
+  page of MyFit, but an address with a tab or a line break hidden in it got past the check and was read by the
+  browser as another site. Such addresses go to the dashboard now.
+- Straight and myo-rep sets go up in weight together, and only set 1 past the top of its rep range raises them:
+  a later set doing more reps than set 1 no longer goes up by itself (60, 62.5, 62.5 kg). A set skipped in an
+  old workout no longer stops the others going up.
+- A block's most and least trained muscles count the sets done: an old workout's skipped sets are left out, as
+  on Stats.
+- Saving a workout with no connection says "Couldn't save the workout, check your connection and try again"
+  (it showed the browser's "Failed to fetch", or nothing for other failures). The workout stays to save again.
+
 ## 2026-11-10: easier sessions that are really easier, and fixes from a full code review
 
 ### Changed

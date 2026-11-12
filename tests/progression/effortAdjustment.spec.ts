@@ -402,3 +402,23 @@ test('sets that share a weight but were logged at their own: each comes down wit
 	// Was pushed into help by the amount set 1 came down
 	expect(sets.slice(1).map((set) => set.load)).toEqual([0, 0]);
 });
+
+test('sets that share a weight go up together, and only set 1 past the top of the range raises them', () => {
+	const loads = (sets: ReturnType<typeof suggest>) => sets.map((set) => set[1]);
+	for (const setType of ['Straight', 'Myorep'] as const) {
+		const row = (r: Row) => Object.assign(r, { setType });
+		// Set 1 inside the range, later sets past its top: the weight stays (was 60, 62.5, 62.5)
+		expect(loads(suggest(fading(60, 2, 12, 17, 16), { week: 4, row })), setType).toEqual([60, 60, 60]);
+		// Set 1 past the top: all of them go up a step
+		expect(loads(suggest(fading(60, 2, 18, 17, 16), { week: 4, row })), setType).toEqual([62.5, 62.5, 62.5]);
+		// Set 1 skipped last time: the first set with numbers says
+		const skippedFirst = suggest([{ reps: 0, load: 0, RIR: 0, skipped: true }, ...fading(60, 2, 18, 17)], {
+			week: 4,
+			row
+		});
+		expect(loads(skippedFirst).slice(1), setType).toEqual([62.5, 62.5]);
+	}
+	// Sets with a weight of their own still go by their own reps
+	const independent = (r: Row) => Object.assign(r, { setType: 'V2' });
+	expect(loads(suggest(fading(60, 2, 12, 17, 16), { week: 4, row: independent }))).toEqual([60, 62.5, 62.5]);
+});
