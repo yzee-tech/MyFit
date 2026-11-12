@@ -82,12 +82,15 @@ function createWorkoutRunes() {
 		if (savedState) {
 			try {
 				const saved = JSON.parse(savedState);
-				// A workout needs its details and its list of exercises (either may be null between workouts)
+				// A workout has its details and its list of exercises. Either may be null: between workouts, and the
+				// list while a workout just started is still getting its exercises (left then, it was never begun:
+				// nothing is damaged, and Log workout starts it again)
 				if (typeof saved !== 'object' || saved === null || !('workoutData' in saved)) throw new Error();
-				if (saved.workoutData !== null && !Array.isArray(saved.workoutExercises)) throw new Error();
+				const exercises = saved.workoutExercises ?? null;
+				if (saved.workoutData !== null && exercises !== null && !Array.isArray(exercises)) throw new Error();
 				({
 					workoutData,
-					workoutExercises,
+					workoutExercises = null,
 					editingWorkoutId = null,
 					editSnapshot = null,
 					previousWorkoutData,

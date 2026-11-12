@@ -25,6 +25,12 @@ What changed in MyFit, newest first.
 - A custom muscle group can no longer be named like one to pick from ("Whole body", "chest"): pick that one
   instead.
 
+### Fixed
+
+- Leaving a workout in the moment after starting it, before its exercises had loaded, made the app say "A
+  workout saved on this device couldn't be opened" and set it aside as a backup. Nothing was damaged: the
+  workout had no exercises yet. It is no longer reported, and Log workout starts it again.
+
 ## 2026-11-11: fixes from a second code review
 
 ### Fixed
