@@ -26,36 +26,38 @@ model Workout {
 }
 
 model WorkoutExercise {
-  id                  String               @id @default(cuid()) /// @zod.string.cuid2()
-  exerciseIndex       Int
-  name                String
-  workout             Workout              @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  workoutId           String
-  targetMuscleGroup   MuscleGroup
-  customMuscleGroup   String?
-  bodyweightFraction  Float?
-  sets                WorkoutExerciseSet[]
-  setType             SetType
-  changeType          ChangeType?
-  changeAmount        Float?
-  repRangeStart       Int
-  repRangeEnd         Int
+  id                    String               @id @default(cuid()) /// @zod.string.cuid2()
+  exerciseIndex         Int
+  name                  String
+  workout               Workout              @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  workoutId             String
+  targetMuscleGroup     MuscleGroup
+  /// A copy of its exercise's (see Exercise)
+  secondaryMuscleGroups MuscleGroup[]        @default([])
+  customMuscleGroup     String?
+  bodyweightFraction    Float?
+  sets                  WorkoutExerciseSet[]
+  setType               SetType
+  changeType            ChangeType?
+  changeAmount          Float?
+  repRangeStart         Int
+  repRangeEnd           Int
   /// The routine's note for this exercise that day
-  note                String?
+  note                  String?
   /// The exercise's own note that day
-  exerciseNote        String?
-  overloadPercentage  Float?
-  lastSetToFailure    Boolean?
-  forceRIRMatching    Boolean?
-  minimumWeightChange Float?
-  topRepRangeStart    Int?
-  topRepRangeEnd      Int?
+  exerciseNote          String?
+  overloadPercentage    Float?
+  lastSetToFailure      Boolean?
+  forceRIRMatching      Boolean?
+  minimumWeightChange   Float?
+  topRepRangeStart      Int?
+  topRepRangeEnd        Int?
   /// Unit the weights were shown and entered in; loads are always stored in kg
-  weightUnit          WeightUnit           @default(KG)
+  weightUnit            WeightUnit           @default(KG)
   /// Weights that were available (a WeightSet id), used for suggestions while in progress
-  weightSetId         String?
-  exercise            Exercise?            @relation(fields: [exerciseId], references: [id], onDelete: NoAction)
-  exerciseId          String?
+  weightSetId           String?
+  exercise              Exercise?            @relation(fields: [exerciseId], references: [id], onDelete: NoAction)
+  exerciseId            String?
 
   @@index([exerciseId])
 }

@@ -2,7 +2,7 @@ import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHin
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
-import type { DistanceUnit, ExerciseMeasure, WeightUnit } from '$lib/utils/prismaEnums';
+import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
 import { convertWeight, isLevelUnit } from '$lib/utils/weightUnits';
 import { convertDistance, fromMeters, roundDistance } from '$lib/utils/distanceUnits';
 import { isCardioMeasure, measureOfSets } from '$lib/utils/measure';
@@ -395,6 +395,7 @@ function createWorkoutRunes() {
 			name: string;
 			targetMuscleGroup: WorkoutExerciseInProgress['targetMuscleGroup'];
 			customMuscleGroup: string | null;
+			secondaryMuscleGroups?: MuscleGroup[];
 			bodyweightFraction: number | null;
 			note: string | null;
 			measure?: ExerciseMeasure;
@@ -430,6 +431,7 @@ function createWorkoutRunes() {
 			name: exercise.name,
 			targetMuscleGroup: exercise.targetMuscleGroup,
 			customMuscleGroup: exercise.customMuscleGroup,
+			secondaryMuscleGroups: exercise.secondaryMuscleGroups ?? [],
 			bodyweightFraction: exercise.bodyweightFraction,
 			exerciseNote: exercise.note,
 			weightSetId: null,

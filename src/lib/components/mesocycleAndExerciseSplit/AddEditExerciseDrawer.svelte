@@ -182,6 +182,7 @@
 			name: exercise.name,
 			targetMuscleGroup: exercise.targetMuscleGroup,
 			customMuscleGroup: exercise.customMuscleGroup,
+			secondaryMuscleGroups: exercise.secondaryMuscleGroups,
 			bodyweightFraction: exercise.bodyweightFraction,
 			// In a workout, the exercise's own note shows with the routine's
 			...(props.context === 'workout' && { exerciseNote: exercise.note })

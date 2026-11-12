@@ -18,6 +18,9 @@ enum MuscleGroup {
   Abductors
   /// Cardio exercises: counted as intervals, left out of the sets-per-muscle charts
   Cardio
+  /// Lifts that belong to no one muscle (snatches, burpees): their own line in the per-muscle lists, and
+  /// half a set towards each body area
+  WholeBody
   Custom
 }
 

@@ -2,6 +2,28 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-12: secondary muscles and a Whole body muscle group
+
+### Added
+
+- **An exercise can list up to two muscles it also works.** On the exercise's form, under its muscle group,
+  "Also works" takes up to two other muscles (bench press: chest, also triceps and front delts). Each set counts
+  as a full set for the muscle group and half a set for each of the others, on Stats (per muscle and on the
+  radar), in a block's most and least trained muscles, and in the sets-per-muscle charts. Changing them on an
+  exercise recounts its past workouts. Exercises have none until you add them, the built-in ones included.
+- **Whole body is a muscle group**, for exercises like burpees that are no one muscle. Its sets show on their
+  own "Whole body" line, and count half a set for each of the six body areas on the Stats radar; no single
+  muscle's count changes. A block's best, worst, most and least trained muscles leave it out.
+- The CSV export has a new last column, `secondaryMuscleGroups` (e.g. `Triceps|FrontDelts`); the JSON export
+  lists them on each exercise.
+
+### Changed
+
+- Counts of sets per muscle can end in a half (7.5). The Sets total on Stats still counts whole sets done, so
+  the radar's areas can add up to more than it.
+- A custom muscle group can no longer be named like one to pick from ("Whole body", "chest"): pick that one
+  instead.
+
 ## 2026-11-11: fixes from a second code review
 
 ### Fixed

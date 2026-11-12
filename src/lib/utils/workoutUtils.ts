@@ -12,7 +12,7 @@ import {
 	toKg,
 	type MassUnit
 } from './weightUnits';
-import type { DistanceUnit, ExerciseMeasure, WeightUnit } from './prismaEnums';
+import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from './prismaEnums';
 import { fromMeters, roundDistance, toMeters } from './distanceUnits';
 import { isCardioMeasure, measureOfSets } from './measure';
 import {
@@ -283,8 +283,10 @@ type MeasuredSetLike = { skipped: boolean; timeSeconds?: number | null; distance
 
 export type WorkoutExerciseInProgress = Omit<
 	Prisma.WorkoutExerciseCreateWithoutWorkoutInput,
-	'sets' | 'exerciseIndex'
+	'sets' | 'exerciseIndex' | 'secondaryMuscleGroups'
 > & {
+	/** The muscles it also works; missing in a workout begun before they existed */
+	secondaryMuscleGroups?: MuscleGroup[];
 	sets: (Omit<
 		Prisma.WorkoutExerciseSetCreateWithoutWorkoutExerciseInput,
 		'reps' | 'load' | 'RIR' | 'miniSets' | 'setIndex' | 'timeSeconds' | 'distanceMeters'

@@ -1,6 +1,7 @@
-import { arrayAverage, arraySum, averagePercentageChange } from '$lib/utils';
+import { arrayAverage, averagePercentageChange } from '$lib/utils';
 import type { Mesocycle, Workout, WorkoutExercise, WorkoutsOfMesocycle } from './types';
 import { getExerciseVolume, getWorkoutVolume } from './workoutUtils';
+import { muscleShares, WHOLE_BODY } from './muscleShares';
 
 type GroupedExercisesByMuscleGroup = {
 	muscleGroup: string;
@@ -9,7 +10,8 @@ type GroupedExercisesByMuscleGroup = {
 
 export function groupExercisesByMuscleGroup(exercises: WorkoutExercise[]): GroupedExercisesByMuscleGroup {
 	const groupedObject = Object.groupBy(
-		exercises.filter((ex) => ex.targetMuscleGroup !== 'Cardio'),
+		// Cardio isn't a muscle, and whole body is no one muscle to rank against the others
+		exercises.filter((ex) => ex.targetMuscleGroup !== 'Cardio' && ex.targetMuscleGroup !== WHOLE_BODY),
 		({ targetMuscleGroup, customMuscleGroup }) => customMuscleGroup ?? targetMuscleGroup
 	);
 	return Object.entries(groupedObject).map(([muscleGroup, exercises]) => ({
@@ -95,14 +97,23 @@ export function generatePerformanceChangesPerSplitDay(mesocycle: Mesocycle) {
 	return performanceChangesPerSplitDay;
 }
 
+/**
+ * A block's sets per muscle, fewest first: a full set for an exercise's muscle group, half a set for
+ * each muscle it also works. Whole body is left out: it's no one muscle to rank against the others
+ */
 export function getSetsPerformedPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMesocycle) {
-	const allExercises = workoutsOfMesocycle.flatMap((wm) => wm.workout.workoutExercises);
-	const groupedExercisesByMuscleGroup = groupExercisesByMuscleGroup(allExercises);
-
-	const setsPerformedPerMuscleGroup = groupedExercisesByMuscleGroup.map(({ exercises, muscleGroup }) => ({
-		muscleGroup,
+	const totals = new Map<string, number>();
+	for (const exercise of workoutsOfMesocycle.flatMap((wm) => wm.workout.workoutExercises)) {
 		// Sets done: an old workout's skipped sets don't count, as on the Stats page
-		totalSets: arraySum(exercises.map((exercise) => exercise.sets.filter((set) => !set.skipped).length))
+		const sets = exercise.sets.filter((set) => !set.skipped).length;
+		for (const [muscleGroup, share] of Object.entries(muscleShares(exercise).muscles)) {
+			if (muscleGroup === WHOLE_BODY) continue;
+			totals.set(muscleGroup, (totals.get(muscleGroup) ?? 0) + sets * share);
+		}
+	}
+	const setsPerformedPerMuscleGroup = [...totals.entries()].map(([muscleGroup, totalSets]) => ({
+		muscleGroup,
+		totalSets
 	}));
 	setsPerformedPerMuscleGroup.sort((a, b) => a.totalSets - b.totalSets);
 

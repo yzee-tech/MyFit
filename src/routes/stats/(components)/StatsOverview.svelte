@@ -8,6 +8,7 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { convertCamelCaseToNormal } from '$lib/utils';
+	import { formatSetCount } from '$lib/utils/muscleShares';
 	import {
 		BODY_AREAS,
 		progressBars,
@@ -363,7 +364,13 @@
 					Sets per area: {periodWords}
 				{/if}
 			</p>
-			<canvas bind:this={chartCanvas} data-testid="stats-radar"></canvas>
+			<canvas
+				bind:this={chartCanvas}
+				data-areas={Object.entries(overview.current.setsByArea)
+					.map(([area, sets]) => `${area} ${formatSetCount(sets)}`)
+					.join(', ')}
+				data-testid="stats-radar"
+			></canvas>
 		</Card.Root>
 
 		<div class="grid grid-cols-2 gap-2">
@@ -407,14 +414,17 @@
 						<li class="flex justify-between gap-2">
 							<span>{muscle.name}</span>
 							<span class="tabular-nums">
-								<span class="font-semibold">{muscle.current}</span>
+								<span class="font-semibold">{formatSetCount(muscle.current)}</span>
 								{#if overview.previous}
-									<span class="text-muted-foreground"> · {muscle.previous}</span>
+									<span class="text-muted-foreground"> · {formatSetCount(muscle.previous)}</span>
 								{/if}
 							</span>
 						</li>
 					{/each}
 				</ul>
+				<p class="mt-2 text-xs text-muted-foreground" data-testid="stats-muscles-note">
+					A muscle an exercise also works counts half a set. Whole body counts half a set for each area.
+				</p>
 			{/if}
 		</Card.Root>
 	{/if}

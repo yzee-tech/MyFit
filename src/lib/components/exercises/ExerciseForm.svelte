@@ -7,6 +7,8 @@
 		name: string;
 		targetMuscleGroup: MuscleGroup;
 		customMuscleGroup: string | null;
+		/** The muscles it also works, two at most: each counts half a set. None for cardio or whole body */
+		secondaryMuscleGroups: MuscleGroup[];
 		bodyweightFraction: number | null;
 		note: string | null;
 		/** Suggestions only add reps, never weight; a bodyweight share still counts in volume */
@@ -28,8 +30,9 @@
 	/** An exercise as saved: its levels as three fields, its machine's weights and unit as two */
 	export type ExerciseFormInitial = Omit<
 		ExerciseFormDetails,
-		'levels' | 'machine' | 'assisted' | 'measure' | 'distanceUnit'
+		'levels' | 'machine' | 'assisted' | 'measure' | 'distanceUnit' | 'secondaryMuscleGroups'
 	> & {
+		secondaryMuscleGroups?: MuscleGroup[];
 		levelsFrom?: number | null;
 		levelsTo?: number | null;
 		levelStep?: number | null;
@@ -60,6 +63,12 @@
 	import { expandRange, formatWeightList, normalizeWeights, pickableWeightSets } from '$lib/utils/weightSets';
 	import { DISTANCE_UNITS, distanceUnitLabel } from '$lib/utils/distanceUnits';
 	import { sortMuscleGroups } from '$lib/utils/listOrder';
+	import {
+		canBeSecondaryMuscle,
+		canHaveSecondaryMuscles,
+		MAX_SECONDARY_MUSCLES,
+		secondaryMusclesFor
+	} from '$lib/utils/muscleShares';
 	import { isCardioMeasure, measureLabel } from '$lib/utils/measure';
 	import AddIcon from 'virtual:icons/lucide/plus';
 
@@ -87,6 +96,18 @@
 	let name = $state(initial?.name ?? '');
 	let targetMuscleGroup: MuscleGroup | undefined = $state(initial?.targetMuscleGroup);
 	let customMuscleGroup = $state(initial?.customMuscleGroup ?? '');
+	// The muscles it also works. What no longer fits a new muscle group is dropped as it's picked
+	let secondaryMuscleGroups: MuscleGroup[] = $state(initial?.secondaryMuscleGroups ?? []);
+	let secondaryChoices = $derived(
+		sortMuscleGroups(Object.values(MuscleGroups).filter((group) => canBeSecondaryMuscle(group, targetMuscleGroup)))
+	);
+	function toggleSecondary(muscleGroup: MuscleGroup) {
+		if (secondaryMuscleGroups.includes(muscleGroup)) {
+			secondaryMuscleGroups = secondaryMuscleGroups.filter((group) => group !== muscleGroup);
+		} else if (secondaryMuscleGroups.length < MAX_SECONDARY_MUSCLES) {
+			secondaryMuscleGroups = [...secondaryMuscleGroups, muscleGroup];
+		}
+	}
 	let countsBodyweight = $state(initial ? initial.bodyweightFraction !== null : false);
 	let bodyweightPercentage: number | undefined = $state(
 		initial?.bodyweightFraction ? Math.round(initial.bodyweightFraction * 100) : 100
@@ -149,6 +170,7 @@
 		name = suggestion.name;
 		targetMuscleGroup = suggestion.targetMuscleGroup;
 		customMuscleGroup = suggestion.customMuscleGroup ?? '';
+		secondaryMuscleGroups = [];
 		countsBodyweight = typeof suggestion.bodyweightFraction === 'number';
 		bodyweightPercentage = suggestion.bodyweightFraction ? Math.round(suggestion.bodyweightFraction * 100) : 100;
 		note = suggestion.note ?? '';
@@ -210,6 +232,7 @@
 				name: name.trim(),
 				targetMuscleGroup,
 				customMuscleGroup: targetMuscleGroup === 'Custom' ? customMuscleGroup.trim() || null : null,
+				secondaryMuscleGroups: secondaryMusclesFor(targetMuscleGroup, secondaryMuscleGroups),
 				// Reps only can count bodyweight too (e.g. push-ups): only reps suggested, the share still in volume
 				bodyweightFraction: weighted && countsBodyweight && bodyweightPercentage ? bodyweightPercentage / 100 : null,
 				note: note.trim() || null,
@@ -293,6 +316,7 @@
 		<Select.Root
 			onSelectedChange={(v) => {
 				targetMuscleGroup = v?.value;
+				if (targetMuscleGroup) secondaryMuscleGroups = secondaryMusclesFor(targetMuscleGroup, secondaryMuscleGroups);
 				if (targetMuscleGroup === 'Cardio' && measure === 'Reps' && !measureLocked) measure = 'Time';
 			}}
 			required
@@ -321,6 +345,33 @@
 			/>
 		{/if}
 	</div>
+
+	{#if targetMuscleGroup && canHaveSecondaryMuscles(targetMuscleGroup)}
+		<div class="grid gap-1.5" data-testid="secondary-muscles">
+			<div class="grid gap-0.5">
+				<span class="text-sm font-medium" id="exercise-form-secondary-muscles">Also works</span>
+				<span class="text-xs text-muted-foreground">
+					Up to {MAX_SECONDARY_MUSCLES} other muscles. Each set counts as half a set for them.
+				</span>
+			</div>
+			<div class="flex flex-wrap gap-1" role="group" aria-labelledby="exercise-form-secondary-muscles">
+				{#each secondaryChoices as muscleGroup (muscleGroup)}
+					{@const picked = secondaryMuscleGroups.includes(muscleGroup)}
+					<Button
+						class="h-7 px-2 text-xs"
+						aria-pressed={picked}
+						disabled={!picked && secondaryMuscleGroups.length >= MAX_SECONDARY_MUSCLES}
+						onclick={() => toggleSecondary(muscleGroup)}
+						size="sm"
+						type="button"
+						variant={picked ? 'default' : 'outline'}
+					>
+						{convertCamelCaseToNormal(muscleGroup)}
+					</Button>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<div class="grid gap-1.5">
 		<div class="flex items-start justify-between gap-4">

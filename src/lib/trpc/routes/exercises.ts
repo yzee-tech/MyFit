@@ -4,10 +4,19 @@
  */
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
-import { updateExerciseEverywhere } from '$lib/server/exercises';
+import { assertCustomMuscleName, exerciseCopy, updateExerciseEverywhere } from '$lib/server/exercises';
+import { secondaryMusclesFor, secondaryMusclesProblem } from '$lib/utils/muscleShares';
 import { withRoutinesTransaction } from '$lib/server/blockCache';
 import { DistanceUnitSchema, ExerciseMeasureSchema, MuscleGroupSchema } from '$lib/zodSchemas';
-import type { ChangeType, DistanceUnit, ExerciseMeasure, Prisma, SetType, WeightUnit } from '@prisma/client';
+import type {
+	ChangeType,
+	DistanceUnit,
+	ExerciseMeasure,
+	MuscleGroup,
+	Prisma,
+	SetType,
+	WeightUnit
+} from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { isLevelUnit } from '$lib/utils/weightUnits';
 import { DEFAULT_SETS, routineSetCount } from '$lib/utils/routineSets';
@@ -20,6 +29,11 @@ export const exerciseDetailsInput = z
 		name: z.string().trim().min(1).max(100),
 		targetMuscleGroup: MuscleGroupSchema,
 		customMuscleGroup: z.string().trim().max(60).nullable(),
+		/**
+		 * The muscles it also works (two at most; none for cardio or whole body). Missing (an app version
+		 * from before them) leaves the exercise's as they are
+		 */
+		secondaryMuscleGroups: z.array(MuscleGroupSchema).optional(),
 		bodyweightFraction: z.number().min(0.01).max(2).nullable(),
 		note: z.string().trim().max(1000).nullable(),
 		repsOnly: z.boolean().default(false),
@@ -105,6 +119,22 @@ export const exerciseDetailsInput = z
 	.refine((details) => details.targetMuscleGroup !== 'Custom' || details.customMuscleGroup, {
 		message: 'Enter the muscle group'
 	});
+
+/**
+ * The muscles an exercise also works after a save. Sent: they have to hold for the muscle group (or
+ * the save is refused). Not sent (an older app version): the stored ones, less any that no longer
+ * hold, e.g. all of them when the muscle group became cardio or whole body
+ */
+function effectiveSecondaryMuscles(
+	details: { targetMuscleGroup: MuscleGroup; customMuscleGroup: string | null; secondaryMuscleGroups?: MuscleGroup[] },
+	stored: MuscleGroup[]
+): MuscleGroup[] {
+	assertCustomMuscleName(details.targetMuscleGroup, details.customMuscleGroup);
+	if (details.secondaryMuscleGroups === undefined) return secondaryMusclesFor(details.targetMuscleGroup, stored);
+	const problem = secondaryMusclesProblem(details.targetMuscleGroup, details.secondaryMuscleGroups);
+	if (problem) throw new TRPCError({ code: 'BAD_REQUEST', message: problem });
+	return details.secondaryMuscleGroups;
+}
 
 type RoutineSettings = {
 	setType: SetType;
@@ -396,7 +426,10 @@ export const exercises = t.router({
 		if (measure === 'DistanceTime' && input.distanceUnit === null) {
 			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Pick the distance unit' });
 		}
-		return prisma.exercise.create({ data: { ...input, ...machine, measure, userId: ctx.userId } });
+		const secondaryMuscleGroups = effectiveSecondaryMuscles(input, []);
+		return prisma.exercise.create({
+			data: { ...input, ...machine, measure, secondaryMuscleGroups, userId: ctx.userId }
+		});
 	}),
 
 	/** Changes an exercise everywhere: routines, blocks and past workouts (a rename included) */
@@ -411,6 +444,7 @@ export const exercises = t.router({
 			if (input.details.targetMuscleGroup === 'Cardio' && measured.measure === 'Reps')
 				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cardio requires time or distance and time' });
 			if (measured.measure !== 'Reps') machine.assisted = false;
+			const secondaryMuscleGroups = effectiveSecondaryMuscles(input.details, exercise.secondaryMuscleGroups);
 			const {
 				note,
 				repsOnly,
@@ -426,7 +460,7 @@ export const exercises = t.router({
 				...shared
 			} = input.details;
 			await withRoutinesTransaction(async (tx) => {
-				await updateExerciseEverywhere(tx, exercise.id, shared);
+				await updateExerciseEverywhere(tx, exercise.id, { ...shared, secondaryMuscleGroups });
 				await tx.exercise.update({
 					where: { id: exercise.id },
 					data: { note, repsOnly, maxReps, levelsFrom, levelsTo, levelStep, ...machine, ...measured }
@@ -444,14 +478,7 @@ export const exercises = t.router({
 				...DEFAULT_ROUTINE_SETTINGS,
 				from: null
 			};
-			const details = {
-				exerciseId: exercise.id,
-				name: exercise.name,
-				targetMuscleGroup: exercise.targetMuscleGroup,
-				customMuscleGroup: exercise.customMuscleGroup,
-				bodyweightFraction: exercise.bodyweightFraction,
-				...settings
-			};
+			const details = { ...exerciseCopy(exercise), ...settings };
 
 			const added = await withRoutinesTransaction(async (tx) => {
 				const routines = await tx.exerciseSplitDay.findMany({
@@ -529,13 +556,7 @@ export const exercises = t.router({
 			if (from.measure !== into.measure) {
 				throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only exercises measured the same way can be merged' });
 			}
-			const details = {
-				exerciseId: into.id,
-				name: into.name,
-				targetMuscleGroup: into.targetMuscleGroup,
-				customMuscleGroup: into.customMuscleGroup,
-				bodyweightFraction: into.bodyweightFraction
-			};
+			const details = exerciseCopy(into);
 
 			await withRoutinesTransaction(async (tx) => {
 				// A routine in My routines that already has both keeps just the one merged into

@@ -5,35 +5,9 @@
 import type { MuscleGroup, WeightUnit } from './prismaEnums';
 import { getExerciseVolume } from './workoutUtils';
 import { workoutMinutes } from './workoutLength';
+import { BODY_AREAS, muscleShares, type BodyArea } from './muscleShares';
 
-/** The six areas of the radar, in the order drawn (clockwise from the top left) */
-export const BODY_AREAS = ['Back', 'Chest', 'Core', 'Shoulders', 'Arms', 'Legs'] as const;
-export type BodyArea = (typeof BODY_AREAS)[number];
-
-const AREA_OF: Record<Exclude<MuscleGroup, 'Custom' | 'Cardio'>, BodyArea> = {
-	Chest: 'Chest',
-	Lats: 'Back',
-	Traps: 'Back',
-	Neck: 'Back',
-	FrontDelts: 'Shoulders',
-	SideDelts: 'Shoulders',
-	RearDelts: 'Shoulders',
-	Biceps: 'Arms',
-	Triceps: 'Arms',
-	Forearms: 'Arms',
-	Quads: 'Legs',
-	Hamstrings: 'Legs',
-	Glutes: 'Legs',
-	Calves: 'Legs',
-	Adductors: 'Legs',
-	Abductors: 'Legs',
-	Abs: 'Core'
-};
-
-/** A muscle group's area; custom ones have none ("Other"), and cardio isn't a muscle */
-export function bodyAreaOf(muscleGroup: MuscleGroup): BodyArea | null {
-	return muscleGroup === 'Custom' || muscleGroup === 'Cardio' ? null : AREA_OF[muscleGroup];
-}
+export { BODY_AREAS, bodyAreaOf, type BodyArea } from './muscleShares';
 
 type StatsSet = {
 	reps: number;
@@ -49,6 +23,8 @@ export type StatsWorkout = {
 	workoutExercises: {
 		targetMuscleGroup: MuscleGroup;
 		customMuscleGroup: string | null;
+		/** Missing for rows read without it: counted as none */
+		secondaryMuscleGroups?: MuscleGroup[];
 		bodyweightFraction: number | null;
 		weightUnit: WeightUnit;
 		sets: StatsSet[];
@@ -64,7 +40,10 @@ export type PeriodStats = {
 	/** Sets done (cardio intervals included): skipped ones and mini-sets don't count */
 	sets: number;
 	setsByArea: Record<BodyArea, number>;
-	/** Sets per muscle, e.g. "SideDelts" or a custom group's name; cardio isn't a muscle, so it's left out */
+	/**
+	 * Sets per muscle, e.g. "SideDelts", "WholeBody" or a custom group's name; cardio isn't a muscle, so it's
+	 * left out. A muscle an exercise also works gets half a set, so these (and the areas) can end in .5
+	 */
 	setsByMuscle: Record<string, number>;
 };
 
@@ -84,12 +63,14 @@ export function periodStats(workouts: StatsWorkout[]): PeriodStats {
 			const sets = exercise.sets.filter((set) => !set.skipped).length;
 			if (sets === 0) continue;
 			stats.sets += sets;
-			if (exercise.targetMuscleGroup === 'Cardio') continue;
-			const muscle =
-				exercise.targetMuscleGroup === 'Custom' ? (exercise.customMuscleGroup ?? 'Custom') : exercise.targetMuscleGroup;
-			stats.setsByMuscle[muscle] = (stats.setsByMuscle[muscle] ?? 0) + sets;
-			const area = bodyAreaOf(exercise.targetMuscleGroup);
-			if (area) stats.setsByArea[area] += sets;
+			// Its muscle group a full set, the muscles it also works half a set each (see muscleShares)
+			const shares = muscleShares(exercise);
+			for (const [muscle, share] of Object.entries(shares.muscles)) {
+				stats.setsByMuscle[muscle] = (stats.setsByMuscle[muscle] ?? 0) + sets * share;
+			}
+			for (const [area, share] of Object.entries(shares.areas)) {
+				stats.setsByArea[area as BodyArea] += sets * share;
+			}
 		}
 	}
 	return stats;

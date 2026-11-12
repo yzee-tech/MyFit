@@ -138,6 +138,7 @@ export const exerciseSplits = t.router({
 						name: ex.name,
 						targetMuscleGroup: ex.targetMuscleGroup,
 						customMuscleGroup: ex.customMuscleGroup,
+						secondaryMuscleGroups: ex.secondaryMuscleGroups,
 						bodyweightFraction: ex.bodyweightFraction,
 						sets: ex._count.sets || null,
 						setType: ex.setType,
