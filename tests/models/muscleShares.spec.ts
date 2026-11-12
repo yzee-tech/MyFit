@@ -93,7 +93,7 @@ test('a custom muscle group named like a built-in one is refused, with the reaso
 /** A saved workout yesterday: each exercise with `sets` sets of 10 × 50 kg */
 async function seedWorkout(
 	userId: string,
-	exercises: { name: string; muscle: MuscleGroup; secondaries?: MuscleGroup[]; sets: number }[]
+	exercises: { name: string; muscle: MuscleGroup; custom?: string; secondaries?: MuscleGroup[]; sets: number }[]
 ) {
 	const startedAt = new Date(Date.now() - 24 * 60 * 60 * 1000);
 	const linked: { id: string }[] = [];
@@ -104,6 +104,7 @@ async function seedWorkout(
 					userId,
 					name: exercise.name,
 					targetMuscleGroup: exercise.muscle,
+					customMuscleGroup: exercise.custom ?? null,
 					secondaryMuscleGroups: exercise.secondaries ?? []
 				}
 			})
@@ -121,6 +122,7 @@ async function seedWorkout(
 					name: exercise.name,
 					exerciseId: linked[exerciseIndex].id,
 					targetMuscleGroup: exercise.muscle,
+					customMuscleGroup: exercise.custom ?? null,
 					secondaryMuscleGroups: exercise.secondaries ?? [],
 					setType: 'Straight' as const,
 					repRangeStart: 8,
@@ -168,6 +170,27 @@ test('Stats and a saved workout count half sets, with Whole body as its own line
 		'data-sets',
 		'Whole body 4, Chest 3, Triceps 1.5, Front delts 1.5'
 	);
+});
+
+test('Stats: a custom group from before the name rule that reads like a built-in one shares its line', async ({
+	page,
+	userData
+}) => {
+	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
+	// Made before custom groups were kept from built-in names: "Whole body" and "Front delts" typed by hand
+	await seedWorkout(userData.userId, [
+		{ name: 'Old burpees', muscle: 'Custom', custom: 'Whole body', sets: 2 },
+		{ name: 'New burpees', muscle: 'WholeBody', sets: 3 },
+		{ name: 'Old raises', muscle: 'Custom', custom: 'Front delts', sets: 1 },
+		{ name: 'Front raises', muscle: 'FrontDelts', sets: 1 }
+	]);
+	await page.goto('/stats');
+	await page.getByLabel('Last 30 days').click();
+	// The page is there (two lines with one name once left it blank), with one line per name shown
+	await expect(page.getByTestId('stats-sets-current')).toHaveText('7');
+	const muscles = page.getByTestId('stats-muscles').getByRole('listitem');
+	await expect(muscles).toHaveText(['Whole body 5 · 0', 'Front delts 2 · 0']);
+	await expect(page.getByTestId('stats-radar')).toBeVisible();
 });
 
 test('a workout in progress counts the half sets on its finish page, also one begun before the update', async ({

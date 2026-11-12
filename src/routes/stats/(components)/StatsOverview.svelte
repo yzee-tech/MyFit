@@ -155,18 +155,26 @@
 		];
 	});
 
-	/** Muscles worked, most sets first, with last period's sets */
+	/**
+	 * Muscles worked, most sets first, with last period's sets. By the name shown: a custom group from
+	 * before the name rule can read the same as a built-in one ("Whole body"), and the two are one line
+	 */
 	let muscles = $derived.by(() => {
 		if (!overview) return [];
 		const { current, previous } = overview;
-		const names = new Set([...Object.keys(current.setsByMuscle), ...Object.keys(previous?.setsByMuscle ?? {})]);
-		return [...names]
-			.map((name) => ({
-				name: /^[A-Z][a-zA-Z]+$/.test(name) ? convertCamelCaseToNormal(name) : name,
-				current: current.setsByMuscle[name] ?? 0,
-				previous: previous?.setsByMuscle[name] ?? 0
-			}))
-			.sort((a, b) => b.current - a.current || b.previous - a.previous);
+		const shown = (name: string) => (/^[A-Z][a-zA-Z]+$/.test(name) ? convertCamelCaseToNormal(name) : name);
+		const lines = new Map<string, { name: string; current: number; previous: number }>();
+		const add = (sets: Record<string, number>, period: 'current' | 'previous') => {
+			for (const [key, count] of Object.entries(sets)) {
+				const name = shown(key);
+				const line = lines.get(name) ?? { name, current: 0, previous: 0 };
+				line[period] += count;
+				lines.set(name, line);
+			}
+		};
+		add(current.setsByMuscle, 'current');
+		add(previous?.setsByMuscle ?? {}, 'previous');
+		return [...lines.values()].sort((a, b) => b.current - a.current || b.previous - a.previous);
 	});
 
 	let chart: Chart<'radar'> | undefined;
