@@ -201,7 +201,7 @@
 				</Badge>
 				{#if exercise.secondaryMuscleGroups.length > 0}
 					<Badge variant="outline" data-testid="exercise-secondary-muscles">
-						Also works: {exercise.secondaryMuscleGroups.map((group) => convertCamelCaseToNormal(group)).join(', ')}
+						Secondary: {exercise.secondaryMuscleGroups.map((group) => convertCamelCaseToNormal(group)).join(', ')}
 					</Badge>
 				{/if}
 				{#if isCardioMeasure(exercise.measure)}

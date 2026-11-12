@@ -9,8 +9,8 @@ const prisma = new PrismaClient();
  * on its page, and counted as half sets on Stats and the workout's own chart
  */
 
-const alsoWorks = (page: Page) => page.getByTestId('secondary-muscles');
-const muscle = (page: Page, name: string) => alsoWorks(page).getByRole('button', { name, exact: true });
+const secondaryPicker = (page: Page) => page.getByTestId('secondary-muscles');
+const muscle = (page: Page, name: string) => secondaryPicker(page).getByRole('button', { name, exact: true });
 
 async function pickMuscleGroup(page: Page, name: string) {
 	await page.getByRole('combobox', { name: 'Muscle group' }).click();
@@ -25,9 +25,10 @@ test('New exercise: up to two muscles it also works, kept in step with its muscl
 	await page.getByRole('button', { name: 'New exercise' }).click();
 	await page.getByLabel('Name').fill('Close-grip bench');
 	// Nothing to pick before it has a muscle group
-	await expect(alsoWorks(page)).toHaveCount(0);
+	await expect(secondaryPicker(page)).toHaveCount(0);
 	await pickMuscleGroup(page, 'Chest');
-	await expect(alsoWorks(page)).toContainText('Each set counts as half a set for them');
+	await expect(secondaryPicker(page)).toContainText('Secondary muscle group(s)');
+	await expect(page.getByText('Primary muscle group', { exact: true })).toBeVisible();
 	// Single muscles only, and not the muscle group itself
 	for (const name of ['Chest', 'Cardio', 'Custom', 'Whole body']) await expect(muscle(page, name)).toHaveCount(0);
 
@@ -48,13 +49,13 @@ test('New exercise: up to two muscles it also works, kept in step with its muscl
 	await expect(muscle(page, 'Chest')).toHaveAttribute('aria-pressed', 'false');
 	// Whole body and cardio have none
 	await pickMuscleGroup(page, 'Whole body');
-	await expect(alsoWorks(page)).toHaveCount(0);
+	await expect(secondaryPicker(page)).toHaveCount(0);
 	await pickMuscleGroup(page, 'Chest');
-	await expect(alsoWorks(page).getByRole('button', { pressed: true })).toHaveCount(0);
+	await expect(secondaryPicker(page).getByRole('button', { pressed: true })).toHaveCount(0);
 
 	await muscle(page, 'Triceps').click();
 	await page.getByRole('button', { name: 'Create exercise', exact: true }).click();
-	await expect(page.getByTestId('exercise-secondary-muscles')).toHaveText('Also works: Triceps');
+	await expect(page.getByTestId('exercise-secondary-muscles')).toHaveText('Secondary: Triceps');
 	const created = await prisma.exercise.findUniqueOrThrow({
 		where: { userId_name: { userId: userData.userId, name: 'Close-grip bench' } }
 	});
@@ -67,7 +68,7 @@ test('New exercise: up to two muscles it also works, kept in step with its muscl
 	await muscle(page, 'Front delts').click();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Exercise saved everywhere' })).toBeVisible();
-	await expect(page.getByTestId('exercise-secondary-muscles')).toHaveText('Also works: Triceps, Front delts');
+	await expect(page.getByTestId('exercise-secondary-muscles')).toHaveText('Secondary: Triceps, Front delts');
 });
 
 test('a custom muscle group named like a built-in one is refused, with the reason', async ({ page, userData }) => {

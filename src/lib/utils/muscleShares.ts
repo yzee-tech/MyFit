@@ -70,9 +70,10 @@ export function secondaryMusclesProblem(
 			? 'A cardio exercise has no other muscles'
 			: 'A whole body exercise already counts for every area';
 	}
-	if (list.length > MAX_SECONDARY_MUSCLES) return `An exercise also works ${MAX_SECONDARY_MUSCLES} muscles at most`;
+	if (list.length > MAX_SECONDARY_MUSCLES)
+		return `An exercise has ${MAX_SECONDARY_MUSCLES} secondary muscle groups at most`;
 	if (new Set(list).size !== list.length) return 'A muscle is listed twice';
-	if (list.includes(primary)) return 'The muscle group can’t also be one of the others';
+	if (list.includes(primary)) return 'The primary muscle group can’t also be a secondary one';
 	if (list.some((muscle) => NOT_A_MUSCLE.includes(muscle))) return 'Only single muscles can be added';
 	return null;
 }

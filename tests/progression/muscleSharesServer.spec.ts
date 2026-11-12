@@ -85,9 +85,9 @@ test('an exercise is made with the muscles it also works, and without any when n
 test('secondaries that break the rules are refused, on a new exercise and on an edit', async () => {
 	const { userId, caller } = await newPerson();
 	const refused: [MuscleGroup, MuscleGroup[], RegExp][] = [
-		['Chest', ['Triceps', 'FrontDelts', 'Abs'], /2 muscles at most/],
+		['Chest', ['Triceps', 'FrontDelts', 'Abs'], /2 secondary muscle groups at most/],
 		['Chest', ['Triceps', 'Triceps'], /twice/],
-		['Chest', ['Chest'], /can’t also be/],
+		['Chest', ['Chest'], /can’t also be a secondary/],
 		['Chest', ['WholeBody'], /single muscles/],
 		['Chest', ['Cardio'], /single muscles/],
 		['Chest', ['Custom'], /single muscles/],

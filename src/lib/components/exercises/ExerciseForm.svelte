@@ -324,8 +324,8 @@
 				? { value: targetMuscleGroup, label: convertCamelCaseToNormal(targetMuscleGroup) }
 				: undefined}
 		>
-			<Select.Label class="p-0 text-sm font-medium leading-none">Muscle group</Select.Label>
-			<Select.Trigger aria-label="Muscle group">
+			<Select.Label class="p-0 text-sm font-medium leading-none">Primary muscle group</Select.Label>
+			<Select.Trigger aria-label="Primary muscle group">
 				<Select.Value placeholder="Pick one" />
 			</Select.Trigger>
 			<Select.Content class="h-48 overflow-y-auto">
@@ -348,12 +348,7 @@
 
 	{#if targetMuscleGroup && canHaveSecondaryMuscles(targetMuscleGroup)}
 		<div class="grid gap-1.5" data-testid="secondary-muscles">
-			<div class="grid gap-0.5">
-				<span class="text-sm font-medium" id="exercise-form-secondary-muscles">Also works</span>
-				<span class="text-xs text-muted-foreground">
-					Up to {MAX_SECONDARY_MUSCLES} other muscles. Each set counts as half a set for them.
-				</span>
-			</div>
+			<span class="text-sm font-medium" id="exercise-form-secondary-muscles">Secondary muscle group(s)</span>
 			<div class="flex flex-wrap gap-1" role="group" aria-labelledby="exercise-form-secondary-muscles">
 				{#each secondaryChoices as muscleGroup (muscleGroup)}
 					{@const picked = secondaryMuscleGroups.includes(muscleGroup)}

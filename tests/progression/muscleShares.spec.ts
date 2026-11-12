@@ -80,9 +80,9 @@ test('which secondary muscles an exercise may have', () => {
 	expect(problem('Chest', ['Triceps'])).toBeNull();
 	expect(problem('Chest', ['Triceps', 'FrontDelts'])).toBeNull();
 	expect(problem('Custom', ['Calves'])).toBeNull();
-	expect(problem('Chest', ['Triceps', 'FrontDelts', 'Abs'])).toMatch(/2 muscles at most/);
+	expect(problem('Chest', ['Triceps', 'FrontDelts', 'Abs'])).toMatch(/2 secondary muscle groups at most/);
 	expect(problem('Chest', ['Triceps', 'Triceps'])).toMatch(/twice/);
-	expect(problem('Chest', ['Chest'])).toMatch(/can’t also be/);
+	expect(problem('Chest', ['Chest'])).toMatch(/can’t also be a secondary/);
 	for (const notAMuscle of ['Cardio', 'Custom', 'WholeBody'] as const) {
 		expect(problem('Chest', [notAMuscle])).toMatch(/single muscles/);
 	}

@@ -423,7 +423,7 @@
 					{/each}
 				</ul>
 				<p class="mt-2 text-xs text-muted-foreground" data-testid="stats-muscles-note">
-					A muscle an exercise also works counts half a set. Whole body counts half a set for each area.
+					A secondary muscle group counts half a set. Whole body counts half a set for each area.
 				</p>
 			{/if}
 		</Card.Root>

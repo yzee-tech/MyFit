@@ -6,11 +6,12 @@ What changed in MyFit, newest first.
 
 ### Added
 
-- **An exercise can list up to two muscles it also works.** On the exercise's form, under its muscle group,
-  "Also works" takes up to two other muscles (bench press: chest, also triceps and front delts). Each set counts
-  as a full set for the muscle group and half a set for each of the others, on Stats (per muscle and on the
-  radar), in a block's most and least trained muscles, and in the sets-per-muscle charts. Changing them on an
-  exercise recounts its past workouts. Exercises have none until you add them, the built-in ones included.
+- **An exercise can have up to two secondary muscle groups.** On the exercise's form, "Muscle group" is now
+  "Primary muscle group", and under it "Secondary muscle group(s)" takes up to two other muscles (bench press:
+  chest, with triceps and front delts). Each set counts as a full set for the primary muscle group and half a
+  set for each secondary one, on Stats (per muscle and on the radar), in a block's most and least trained
+  muscles, and in the sets-per-muscle charts. Changing them on an exercise recounts its past workouts. Exercises
+  have none until you add them, the built-in ones included.
 - **Whole body is a muscle group**, for exercises like burpees that are no one muscle. Its sets show on their
   own "Whole body" line, and count half a set for each of the six body areas on the Stats radar; no single
   muscle's count changes. A block's best, worst, most and least trained muscles leave it out.
