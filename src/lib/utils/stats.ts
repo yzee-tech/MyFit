@@ -54,7 +54,8 @@ export function periodStats(workouts: StatsWorkout[]): PeriodStats {
 		volume: 0,
 		sets: 0,
 		setsByArea: Object.fromEntries(BODY_AREAS.map((area) => [area, 0])) as Record<BodyArea, number>,
-		setsByMuscle: {}
+		// No inherited keys: a custom group can be named anything ("constructor", "__proto__")
+		setsByMuscle: Object.create(null) as Record<string, number>
 	};
 	for (const workout of workouts) {
 		stats.minutes += workoutMinutes(workout.startedAt, workout.endedAt);

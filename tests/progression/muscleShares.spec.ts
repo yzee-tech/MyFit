@@ -223,3 +223,18 @@ test("a block's best and worst muscle go by each exercise's own muscle group, ne
 	// Triceps is only a secondary here: bench press's progress is the chest's
 	expect(generatePerformanceChangesPerMuscleGroup(data).map((row) => row.muscleGroup)).toEqual(['Chest']);
 });
+
+for (const name of ['Soleus', 'WholeBody', 'constructor', '__proto__', 'toString']) {
+	test(`a custom muscle group named ${name} keeps its sets everywhere they are counted`, () => {
+		const custom = { targetMuscleGroup: 'Custom' as const, customMuscleGroup: name, secondaryMuscleGroups: [] };
+		expect(Object.entries(muscleShares(custom).muscles)).toEqual([[name, 1]]);
+		// A block's most and least sets: also a group from before the name rule, called like Whole body
+		const data = block([['Raises', 'Custom', [], 2]]);
+		data[0].workout.workoutExercises[0].customMuscleGroup = name;
+		expect(getSetsPerformedPerMuscleGroup(data)).toEqual([{ muscleGroup: name, totalSets: 2 }]);
+		// Stats
+		const done = workout([['Custom', undefined, 2]]);
+		done.workoutExercises[0].customMuscleGroup = name;
+		expect(Object.entries(periodStats([done, done]).setsByMuscle)).toEqual([[name, 4]]);
+	});
+}

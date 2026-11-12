@@ -117,7 +117,8 @@ export function muscleShares(exercise: ExerciseMuscles): {
 			areas: Object.fromEntries(BODY_AREAS.map((area) => [area, WHOLE_BODY_AREA_SHARE]))
 		};
 	}
-	const muscles: Record<string, number> = {};
+	// No inherited keys: a custom group can be named anything ("constructor", "__proto__")
+	const muscles: Record<string, number> = Object.create(null);
 	const areas: Partial<Record<BodyArea, number>> = {};
 	const add = (name: string, area: BodyArea | null, share: number) => {
 		muscles[name] = (muscles[name] ?? 0) + share;

@@ -106,8 +106,9 @@ export function getSetsPerformedPerMuscleGroup(workoutsOfMesocycle: WorkoutsOfMe
 	for (const exercise of workoutsOfMesocycle.flatMap((wm) => wm.workout.workoutExercises)) {
 		// Sets done: an old workout's skipped sets don't count, as on the Stats page
 		const sets = exercise.sets.filter((set) => !set.skipped).length;
+		// By its muscle group, not the name counted under: a custom group may be called "WholeBody"
+		if (exercise.targetMuscleGroup === WHOLE_BODY) continue;
 		for (const [muscleGroup, share] of Object.entries(muscleShares(exercise).muscles)) {
-			if (muscleGroup === WHOLE_BODY) continue;
 			totals.set(muscleGroup, (totals.get(muscleGroup) ?? 0) + sets * share);
 		}
 	}
