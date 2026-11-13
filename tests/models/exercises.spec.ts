@@ -171,6 +171,10 @@ test('New exercise: all three measures to pick from, with the note full width be
 	const labelBox = (await page.locator('#exercise-form-measure').boundingBox())!;
 	expect(noteBox.y).toBeGreaterThanOrEqual(pickerBox.y + pickerBox.height - 1);
 	expect(Math.abs(noteBox.x - labelBox.x)).toBeLessThanOrEqual(4);
+	// Only the picker announces "How it's measured" and points to the note; the row around it must not repeat them
+	await expect(page.getByRole('group', { name: "How it's measured" })).toHaveCount(1);
+	await expect(page.locator('[aria-labelledby="exercise-form-measure"]')).toHaveCount(1);
+	await expect(page.locator('[aria-describedby="exercise-form-measure-note"]')).toHaveCount(1);
 });
 
 test('Exercises page: an exercise outside any routine, added to routines, removed, deleted', async ({

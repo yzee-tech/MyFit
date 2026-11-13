@@ -371,9 +371,9 @@
 	<div class="grid gap-1.5">
 		<div
 			class="flex items-center justify-between gap-4"
-			role="group"
-			aria-labelledby="exercise-form-measure"
-			aria-describedby="exercise-form-measure-note"
+			role={measureLocked ? 'group' : undefined}
+			aria-labelledby={measureLocked ? 'exercise-form-measure' : undefined}
+			aria-describedby={measureLocked ? 'exercise-form-measure-note' : undefined}
 		>
 			<span class="text-sm font-medium" id="exercise-form-measure">How it's measured</span>
 			{#if measureLocked}

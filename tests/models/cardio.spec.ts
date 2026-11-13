@@ -900,6 +900,8 @@ test('a locked exercise shows only its fixed measure; the distance unit still ch
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
 	await expect(page.getByRole('radio', { name: /Measured in/ })).toHaveCount(0);
 	await expect(page.getByTestId('exercise-form-measure-fixed')).toHaveText('Distance');
+	// Locked: the row itself is the one labelled group, so the fixed measure reads under "How it's measured"
+	await expect(page.getByRole('group', { name: "How it's measured" })).toHaveCount(1);
 	await expect(page.getByRole('dialog')).toContainText('Fixed once an exercise has workouts');
 	await expect(page.getByRole('radio', { name: 'Distance in km' })).toHaveAttribute('data-state', 'on');
 	await page.getByRole('radio', { name: 'Distance in mi' }).click();
