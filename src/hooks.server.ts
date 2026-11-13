@@ -3,7 +3,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import { PrismaClient } from '@prisma/client';
 import github from '@auth/sveltekit/providers/github';
 import google from '@auth/sveltekit/providers/google';
-import { createContext } from '$lib/trpc/context';
+import { createHttpContext } from '$lib/trpc/context';
 import { router } from '$lib/trpc/router';
 import { createTRPCHandle } from 'trpc-sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
@@ -27,7 +27,7 @@ const { handle: authHandle } = SvelteKitAuth({
 
 const trpcHandle = createTRPCHandle({
 	router,
-	createContext,
+	createContext: createHttpContext,
 	onError: ({ type, path, error }) =>
 		console.error(`Encountered error while trying to process ${type} @ ${path}:`, error)
 });

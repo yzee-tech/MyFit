@@ -34,6 +34,7 @@
 	import { fromKg, roundWeight, toKg, unitLabel } from '$lib/utils/weightUnits';
 	import { pickableWeightSets, type WeightSetLike } from '$lib/utils/weightSets';
 	import * as Select from '$lib/components/ui/select';
+	import { workoutOutbox } from '$lib/workoutOutbox.svelte';
 
 	type TodaysWorkoutData = RouterOutputs['workouts']['getTodaysWorkoutData'];
 	type RoutineOption = NonNullable<TodaysWorkoutData['activeBlock']>['routines'][number];
@@ -245,6 +246,15 @@
 				workoutRunes.workoutData.userBodyweight = userBodyweightKg;
 		}
 		switchRoutineDialogOpen = false;
+
+		// A workout saved with no signal and still waiting goes first, so today's suggestions include it. If it
+		// can't be sent now, the person is told and starts anyway
+		if (mode === 'overwrite' && workoutOutbox.entries.length > 0) {
+			if (workoutOutbox.waiting.length > 0) await workoutOutbox.send('beforeStart');
+			if (workoutOutbox.entries.length > 0) {
+				toast.warning("Your last workout hasn't been sent, so today's suggestions don't include it");
+			}
+		}
 
 		const newWorkoutData = buildWorkoutData();
 		if (newWorkoutData === null) return;

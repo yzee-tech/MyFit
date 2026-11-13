@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto, invalidate } from '$app/navigation';
+	import { page } from '$app/stores';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -15,6 +16,8 @@
 	import { buildWorkoutSaveData, saveWorkoutEdits } from '../saveWorkout';
 	import WorkoutComparisonChart from './(components)/WorkoutComparisonChart.svelte';
 	import Quotes from '$lib/components/settings/Quotes.svelte';
+	import { workoutOutbox, withTimeout } from '$lib/workoutOutbox.svelte';
+	import { classifyFailure, outboxLabel, type OutboxRequest } from '$lib/utils/outbox';
 
 	let { data } = $props();
 
@@ -54,6 +57,46 @@
 		await submitWorkout(createData);
 	}
 
+	/**
+	 * A new workout that couldn't be sent for want of a connection (or a lapsed sign-in): kept on the phone and
+	 * sent when the app can. False when it must stay open instead: the server refused it, or the phone won't
+	 * keep it (then nothing is cleared and the usual message shows)
+	 */
+	async function keepOnPhone(createData: CreateData, clientId: string, error: unknown) {
+		const failure = classifyFailure(error);
+		const session = $page.data.session as { user?: { id?: string }; userId?: string } | null | undefined;
+		const userId = session?.user?.id ?? session?.userId;
+		if (failure.kind === 'refused' || !userId) return false;
+		// The end time is the phone's: fixed now, not when it is finally sent
+		const { startedAt, endedAt } = createData.workoutData;
+		const request = {
+			...createData,
+			clientId,
+			workoutData: {
+				...createData.workoutData,
+				startedAt: new Date(startedAt ?? Date.now()).toISOString(),
+				endedAt: new Date(endedAt ?? Date.now()).toISOString()
+			}
+		} as unknown as OutboxRequest;
+		const added = workoutOutbox.add({
+			clientId,
+			userId,
+			queuedAt: new Date().toISOString(),
+			request,
+			label: outboxLabel(request),
+			state: failure.kind,
+			attempts: 0,
+			lastAttemptAt: null,
+			lastError: failure.kind === 'signIn' ? failure.reason : null
+		});
+		if (!added) return false;
+		// On the list first, then off the screen: it is never in neither place
+		workoutRunes.resetStores();
+		toast.success("Saved on this phone. It will be sent when you're back online.");
+		await goto('/workouts');
+		return true;
+	}
+
 	async function submitWorkout(createData: CreateData) {
 		savingWorkout = true;
 		try {
@@ -61,7 +104,17 @@
 			// A new blank workout (e.g. with a trainer) can be kept as a routine
 			let blankWorkoutId: string | null = null;
 			if (workoutRunes.editingWorkoutId === null) {
-				const created = await trpc().workouts.create.mutate(createData);
+				const clientId = workoutRunes.ensureClientId() ?? undefined;
+				let created;
+				try {
+					created = await withTimeout(trpc().workouts.create.mutate({ ...createData, clientId }));
+				} catch (error) {
+					if (clientId && (await keepOnPhone(createData, clientId, error))) {
+						savingWorkout = false;
+						return;
+					}
+					throw error;
+				}
 				message = created.message;
 				const blank = !createData.workoutData.workoutOfMesocycle && !createData.workoutData.routineName;
 				if (blank && createData.workoutExercises.length > 0) blankWorkoutId = created.workoutId;

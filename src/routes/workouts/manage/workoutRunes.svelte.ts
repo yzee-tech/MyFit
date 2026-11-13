@@ -18,6 +18,7 @@ import {
 	createWorkoutExerciseInProgressFromRoutineExercise
 } from '$lib/utils/workoutUtils';
 import type { Prisma } from '@prisma/client';
+import { createId } from '@paralleldrive/cuid2';
 import type { FullWorkoutWithMesoData } from '../[workoutId]/+page.server';
 
 /** Where a saved workout that couldn't be opened is kept */
@@ -50,7 +51,9 @@ export function registerFollowCarrier(name: string, carry: FollowCarrier) {
 }
 
 function createWorkoutRunes() {
-	let workoutData: RouterOutputs['workouts']['getTodaysWorkoutData'] | null = $state(null);
+	// clientId: the workout's id, made on the phone when it is first saved (so a save sent twice saves once).
+	// Optional, read with a default: a workout in progress from before has none
+	let workoutData: (RouterOutputs['workouts']['getTodaysWorkoutData'] & { clientId?: string }) | null = $state(null);
 	let workoutExercises: WorkoutExerciseInProgress[] | null = $state(null);
 	let editingWorkoutId: string | null = $state(null);
 	let previousWorkoutData: PreviousWorkoutData = $state(null);
@@ -609,6 +612,15 @@ function createWorkoutRunes() {
 			const unreadable = savedWorkoutUnreadable;
 			savedWorkoutUnreadable = false;
 			return unreadable;
+		},
+		/** The workout's own id, made now if it has none; kept with the workout in progress so every Save reuses it */
+		ensureClientId(): string | null {
+			if (workoutData === null) return null;
+			if (!workoutData.clientId) {
+				workoutData.clientId = createId();
+				saveStoresToLocalStorage();
+			}
+			return workoutData.clientId;
 		},
 		get workoutData() {
 			return workoutData;
