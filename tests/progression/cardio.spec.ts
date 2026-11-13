@@ -256,6 +256,7 @@ function cardioExercise(name: string, sets: number, weightUnit: 'KG' | 'LEVEL' =
 		name,
 		targetMuscleGroup: 'Cardio' as const,
 		customMuscleGroup: null,
+		secondaryMuscleGroups: [],
 		bodyweightFraction: null,
 		sets,
 		setType: 'V2' as const,

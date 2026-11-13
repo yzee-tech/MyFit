@@ -6,12 +6,16 @@
 import { prisma } from '$lib/prisma';
 import { TRPCError } from '@trpc/server';
 import type { DistanceUnit, ExerciseMeasure, MuscleGroup, Prisma, PrismaPromise } from '@prisma/client';
+import { MuscleGroupSchema } from '$lib/zodSchemas';
+import { isBuiltInMuscleName, secondaryMusclesFor } from '$lib/utils/muscleShares';
 
 /** The details that belong to the exercise itself, not to a routine or a workout */
 export type ExerciseDetails = {
 	name: string;
 	targetMuscleGroup: MuscleGroup;
 	customMuscleGroup?: string | null;
+	/** A list, or the same list the way a database write spells it */
+	secondaryMuscleGroups?: MuscleGroup[] | { set: MuscleGroup[] };
 	bodyweightFraction?: number | null;
 	/** Only for an exercise the save has to make: how its rows were logged (reps unless said) */
 	measure?: ExerciseMeasure;
@@ -23,13 +27,47 @@ export type ResolvedExercise = {
 	name: string;
 	targetMuscleGroup: MuscleGroup;
 	customMuscleGroup: string | null;
+	secondaryMuscleGroups: MuscleGroup[];
 	bodyweightFraction: number | null;
 };
 
+/**
+ * What a routine entry or a workout row copies from its exercise: the link, the name, the muscles and
+ * the bodyweight share. Every copy goes through here, so a detail added to an exercise can't be left
+ * out of one of them
+ */
+export function exerciseCopy(exercise: ResolvedExercise) {
+	return {
+		exerciseId: exercise.id,
+		name: exercise.name,
+		targetMuscleGroup: exercise.targetMuscleGroup,
+		customMuscleGroup: exercise.customMuscleGroup,
+		secondaryMuscleGroups: exercise.secondaryMuscleGroups,
+		bodyweightFraction: exercise.bodyweightFraction
+	};
+}
+
+/** A custom muscle group can't take the name of a built-in one: the two would read the same everywhere */
+export function assertCustomMuscleName(targetMuscleGroup: MuscleGroup, customMuscleGroup: string | null | undefined) {
+	if (targetMuscleGroup !== 'Custom' || !customMuscleGroup) return;
+	if (isBuiltInMuscleName(customMuscleGroup, MuscleGroupSchema.options)) {
+		throw new TRPCError({
+			code: 'BAD_REQUEST',
+			message: `“${customMuscleGroup.trim()}” is one of the muscle groups to pick from: pick it instead of Custom`
+		});
+	}
+}
+
+/** The details of an exercise a save has to make (it wasn't made on the Exercises page first) */
 function detailsOf(item: ExerciseDetails) {
+	assertCustomMuscleName(item.targetMuscleGroup, item.customMuscleGroup);
+	const secondaries = Array.isArray(item.secondaryMuscleGroups)
+		? item.secondaryMuscleGroups
+		: item.secondaryMuscleGroups?.set;
 	return {
 		targetMuscleGroup: item.targetMuscleGroup,
 		customMuscleGroup: item.customMuscleGroup ?? null,
+		secondaryMuscleGroups: secondaryMusclesFor(item.targetMuscleGroup, secondaries),
 		bodyweightFraction: item.bodyweightFraction ?? null
 	};
 }
@@ -68,6 +106,7 @@ export async function resolveExercises(
 		name: true,
 		targetMuscleGroup: true,
 		customMuscleGroup: true,
+		secondaryMuscleGroups: true,
 		bodyweightFraction: true,
 		archived: true
 	} as const;
@@ -114,12 +153,5 @@ export function linkToExercise<T extends ExerciseDetails>(item: T, byName: Map<s
 		distanceUnit: _distanceUnit,
 		...rest
 	} = item as T & { exercise?: unknown; exerciseId?: unknown };
-	return {
-		...rest,
-		exerciseId: exercise.id,
-		name: exercise.name,
-		targetMuscleGroup: exercise.targetMuscleGroup,
-		customMuscleGroup: exercise.customMuscleGroup,
-		bodyweightFraction: exercise.bodyweightFraction
-	};
+	return { ...rest, ...exerciseCopy(exercise) };
 }

@@ -174,7 +174,8 @@ const CSV_HEADERS = [
 	'bodyweightFraction',
 	'miniSets',
 	'timeSeconds',
-	'distanceMeters'
+	'distanceMeters',
+	'secondaryMuscleGroups'
 ] as const;
 
 function escapeCell(value: string): string {
@@ -250,7 +251,9 @@ export function buildCsvExport(data: ExportData): string {
 						numCell(exercise.bodyweightFraction),
 						escapeCell(miniSets),
 						numCell(set.timeSeconds),
-						numCell(set.distanceMeters)
+						numCell(set.distanceMeters),
+						// The muscles the exercise also works (half a set each), e.g. "Triceps|FrontDelts"
+						textCell(exercise.secondaryMuscleGroups.join('|'))
 					].join(',')
 				);
 			}

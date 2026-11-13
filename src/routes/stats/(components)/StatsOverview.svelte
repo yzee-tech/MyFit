@@ -8,6 +8,7 @@
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { convertCamelCaseToNormal } from '$lib/utils';
+	import { formatSetCount } from '$lib/utils/muscleShares';
 	import {
 		BODY_AREAS,
 		progressBars,
@@ -154,18 +155,26 @@
 		];
 	});
 
-	/** Muscles worked, most sets first, with last period's sets */
+	/**
+	 * Muscles worked, most sets first, with last period's sets. By the name shown: a custom group from
+	 * before the name rule can read the same as a built-in one ("Whole body"), and the two are one line
+	 */
 	let muscles = $derived.by(() => {
 		if (!overview) return [];
 		const { current, previous } = overview;
-		const names = new Set([...Object.keys(current.setsByMuscle), ...Object.keys(previous?.setsByMuscle ?? {})]);
-		return [...names]
-			.map((name) => ({
-				name: /^[A-Z][a-zA-Z]+$/.test(name) ? convertCamelCaseToNormal(name) : name,
-				current: current.setsByMuscle[name] ?? 0,
-				previous: previous?.setsByMuscle[name] ?? 0
-			}))
-			.sort((a, b) => b.current - a.current || b.previous - a.previous);
+		const shown = (name: string) => (/^[A-Z][a-zA-Z]+$/.test(name) ? convertCamelCaseToNormal(name) : name);
+		const lines = new Map<string, { name: string; current: number; previous: number }>();
+		const add = (sets: Record<string, number>, period: 'current' | 'previous') => {
+			for (const [key, count] of Object.entries(sets)) {
+				const name = shown(key);
+				const line = lines.get(name) ?? { name, current: 0, previous: 0 };
+				line[period] += count;
+				lines.set(name, line);
+			}
+		};
+		add(current.setsByMuscle, 'current');
+		add(previous?.setsByMuscle ?? {}, 'previous');
+		return [...lines.values()].sort((a, b) => b.current - a.current || b.previous - a.previous);
 	});
 
 	let chart: Chart<'radar'> | undefined;
@@ -363,7 +372,13 @@
 					Sets per area: {periodWords}
 				{/if}
 			</p>
-			<canvas bind:this={chartCanvas} data-testid="stats-radar"></canvas>
+			<canvas
+				bind:this={chartCanvas}
+				data-areas={Object.entries(overview.current.setsByArea)
+					.map(([area, sets]) => `${area} ${formatSetCount(sets)}`)
+					.join(', ')}
+				data-testid="stats-radar"
+			></canvas>
 		</Card.Root>
 
 		<div class="grid grid-cols-2 gap-2">
@@ -407,14 +422,17 @@
 						<li class="flex justify-between gap-2">
 							<span>{muscle.name}</span>
 							<span class="tabular-nums">
-								<span class="font-semibold">{muscle.current}</span>
+								<span class="font-semibold">{formatSetCount(muscle.current)}</span>
 								{#if overview.previous}
-									<span class="text-muted-foreground"> · {muscle.previous}</span>
+									<span class="text-muted-foreground"> · {formatSetCount(muscle.previous)}</span>
 								{/if}
 							</span>
 						</li>
 					{/each}
 				</ul>
+				<p class="mt-2 text-xs text-muted-foreground" data-testid="stats-muscles-note">
+					A secondary muscle group counts half a set. Whole body counts half a set for each area.
+				</p>
 			{/if}
 		</Card.Root>
 	{/if}

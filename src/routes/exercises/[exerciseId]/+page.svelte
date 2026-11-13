@@ -199,6 +199,11 @@
 				<Badge variant="secondary">
 					{exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup)}
 				</Badge>
+				{#if exercise.secondaryMuscleGroups.length > 0}
+					<Badge variant="outline" data-testid="exercise-secondary-muscles">
+						Secondary: {exercise.secondaryMuscleGroups.map((group) => convertCamelCaseToNormal(group)).join(', ')}
+					</Badge>
+				{/if}
 				{#if isCardioMeasure(exercise.measure)}
 					<Badge variant="outline" data-testid="exercise-measure">
 						{measureLabel(exercise.measure)}{exercise.distanceUnit

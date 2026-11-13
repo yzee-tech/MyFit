@@ -1,9 +1,12 @@
-import type { Prisma } from '@prisma/client';
+import type { MuscleGroup, Prisma } from '@prisma/client';
 
 export type SplitExerciseTemplateWithoutIdsOrIndex = Omit<
 	Prisma.ExerciseTemplateCreateWithoutExerciseSplitDayInput,
-	'exerciseIndex'
->;
+	'exerciseIndex' | 'secondaryMuscleGroups'
+> & {
+	/** The muscles it also works (the exercise's own: the save copies them from it) */
+	secondaryMuscleGroups?: MuscleGroup[];
+};
 /** An exercise as a workout and its suggestions use it: a routine's exercise with its set count */
 export type RoutineExerciseTemplate = Omit<SplitExerciseTemplateWithoutIdsOrIndex, 'sets'> & {
 	sets: number;

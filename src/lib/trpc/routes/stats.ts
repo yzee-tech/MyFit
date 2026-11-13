@@ -91,6 +91,7 @@ export const stats = t.router({
 					select: {
 						targetMuscleGroup: true,
 						customMuscleGroup: true,
+						secondaryMuscleGroups: true,
 						bodyweightFraction: true,
 						weightUnit: true,
 						sets: {

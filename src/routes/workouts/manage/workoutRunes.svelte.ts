@@ -2,7 +2,7 @@ import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHin
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
 import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
-import type { DistanceUnit, ExerciseMeasure, WeightUnit } from '$lib/utils/prismaEnums';
+import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
 import { convertWeight, isLevelUnit } from '$lib/utils/weightUnits';
 import { convertDistance, fromMeters, roundDistance } from '$lib/utils/distanceUnits';
 import { isCardioMeasure, measureOfSets } from '$lib/utils/measure';
@@ -82,12 +82,15 @@ function createWorkoutRunes() {
 		if (savedState) {
 			try {
 				const saved = JSON.parse(savedState);
-				// A workout needs its details and its list of exercises (either may be null between workouts)
+				// A workout has its details and its list of exercises. Either may be null: between workouts, and the
+				// list while a workout just started is still getting its exercises (left then, it was never begun:
+				// nothing is damaged, and Log workout starts it again)
 				if (typeof saved !== 'object' || saved === null || !('workoutData' in saved)) throw new Error();
-				if (saved.workoutData !== null && !Array.isArray(saved.workoutExercises)) throw new Error();
+				const exercises = saved.workoutExercises ?? null;
+				if (saved.workoutData !== null && exercises !== null && !Array.isArray(exercises)) throw new Error();
 				({
 					workoutData,
-					workoutExercises,
+					workoutExercises = null,
 					editingWorkoutId = null,
 					editSnapshot = null,
 					previousWorkoutData,
@@ -395,6 +398,7 @@ function createWorkoutRunes() {
 			name: string;
 			targetMuscleGroup: WorkoutExerciseInProgress['targetMuscleGroup'];
 			customMuscleGroup: string | null;
+			secondaryMuscleGroups?: MuscleGroup[];
 			bodyweightFraction: number | null;
 			note: string | null;
 			measure?: ExerciseMeasure;
@@ -430,6 +434,7 @@ function createWorkoutRunes() {
 			name: exercise.name,
 			targetMuscleGroup: exercise.targetMuscleGroup,
 			customMuscleGroup: exercise.customMuscleGroup,
+			secondaryMuscleGroups: exercise.secondaryMuscleGroups ?? [],
 			bodyweightFraction: exercise.bodyweightFraction,
 			exerciseNote: exercise.note,
 			weightSetId: null,

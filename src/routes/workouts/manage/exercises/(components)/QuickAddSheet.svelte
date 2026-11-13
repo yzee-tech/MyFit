@@ -144,6 +144,7 @@
 				name: exercise.name,
 				targetMuscleGroup: exercise.targetMuscleGroup,
 				customMuscleGroup: exercise.customMuscleGroup,
+				secondaryMuscleGroups: exercise.secondaryMuscleGroups,
 				bodyweightFraction: exercise.bodyweightFraction,
 				exerciseNote: exercise.note,
 				...exercise.routineSettings,

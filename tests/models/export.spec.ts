@@ -73,7 +73,8 @@ const EXPECTED_HEADER = [
 	'bodyweightFraction',
 	'miniSets',
 	'timeSeconds',
-	'distanceMeters'
+	'distanceMeters',
+	'secondaryMuscleGroups'
 ];
 
 function parseCsv(text: string): string[][] {

@@ -12,13 +12,13 @@ import type { Prisma } from '@prisma/client';
 
 export const TransactionIsolationLevelSchema = z.enum(['ReadUncommitted','ReadCommitted','RepeatableRead','Serializable']);
 
-export const ExerciseScalarFieldEnumSchema = z.enum(['id','name','targetMuscleGroup','customMuscleGroup','bodyweightFraction','note','repsOnly','maxReps','levelsFrom','levelsTo','levelStep','machineWeights','machineUnit','assisted','measure','distanceUnit','archived','userId']);
+export const ExerciseScalarFieldEnumSchema = z.enum(['id','name','targetMuscleGroup','secondaryMuscleGroups','customMuscleGroup','bodyweightFraction','note','repsOnly','maxReps','levelsFrom','levelsTo','levelStep','machineWeights','machineUnit','assisted','measure','distanceUnit','archived','userId']);
 
 export const ExerciseSplitScalarFieldEnumSchema = z.enum(['id','name','userId']);
 
 export const ExerciseSplitDayScalarFieldEnumSchema = z.enum(['id','name','dayIndex','weightUnit','exerciseSplitId']);
 
-export const ExerciseTemplateScalarFieldEnumSchema = z.enum(['id','name','exerciseIndex','targetMuscleGroup','customMuscleGroup','bodyweightFraction','sets','setType','repRangeStart','repRangeEnd','changeType','changeAmount','note','exerciseSplitDayId','topRepRangeStart','topRepRangeEnd','weightSetId','exerciseId','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','weightUnit']);
+export const ExerciseTemplateScalarFieldEnumSchema = z.enum(['id','name','exerciseIndex','targetMuscleGroup','secondaryMuscleGroups','customMuscleGroup','bodyweightFraction','sets','setType','repRangeStart','repRangeEnd','changeType','changeAmount','note','exerciseSplitDayId','topRepRangeStart','topRepRangeEnd','weightSetId','exerciseId','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','weightUnit']);
 
 export const MesocycleScalarFieldEnumSchema = z.enum(['id','name','userId','exerciseSplitId','weeklyRIR','startDate','endDate','startOverloadPercentage','lastSetToFailure','forceRIRMatching']);
 
@@ -42,7 +42,7 @@ export const WorkoutOfMesocycleScalarFieldEnumSchema = z.enum(['id','workoutId',
 
 export const WorkoutScalarFieldEnumSchema = z.enum(['id','userBodyweight','startedAt','endedAt','userId','note','isDeload','countsForProgression','routineName']);
 
-export const WorkoutExerciseScalarFieldEnumSchema = z.enum(['id','exerciseIndex','name','workoutId','targetMuscleGroup','customMuscleGroup','bodyweightFraction','setType','changeType','changeAmount','repRangeStart','repRangeEnd','note','exerciseNote','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
+export const WorkoutExerciseScalarFieldEnumSchema = z.enum(['id','exerciseIndex','name','workoutId','targetMuscleGroup','secondaryMuscleGroups','customMuscleGroup','bodyweightFraction','setType','changeType','changeAmount','repRangeStart','repRangeEnd','note','exerciseNote','overloadPercentage','lastSetToFailure','forceRIRMatching','minimumWeightChange','topRepRangeStart','topRepRangeEnd','weightUnit','weightSetId','exerciseId']);
 
 export const WorkoutExerciseSetScalarFieldEnumSchema = z.enum(['id','setIndex','workoutExerciseId','reps','load','RIR','skipped','timeSeconds','distanceMeters']);
 
@@ -54,7 +54,7 @@ export const QueryModeSchema = z.enum(['default','insensitive']);
 
 export const NullsOrderSchema = z.enum(['first','last']);
 
-export const MuscleGroupSchema = z.enum(['Chest','FrontDelts','SideDelts','RearDelts','Lats','Traps','Triceps','Biceps','Forearms','Quads','Hamstrings','Glutes','Calves','Abs','Neck','Adductors','Abductors','Cardio','Custom']);
+export const MuscleGroupSchema = z.enum(['Chest','FrontDelts','SideDelts','RearDelts','Lats','Traps','Triceps','Biceps','Forearms','Quads','Hamstrings','Glutes','Calves','Abs','Neck','Adductors','Abductors','Cardio','WholeBody','Custom']);
 
 export type MuscleGroupType = `${z.infer<typeof MuscleGroupSchema>}`
 
@@ -101,6 +101,10 @@ export type DistanceUnitType = `${z.infer<typeof DistanceUnitSchema>}`
  */
 export const ExerciseSchema = z.object({
   targetMuscleGroup: MuscleGroupSchema,
+  /**
+   * Muscles it also works (two at most): each counts half a set. None for Cardio and WholeBody
+   */
+  secondaryMuscleGroups: MuscleGroupSchema.array(),
   /**
    * The unit printed on the machine (KG or LB): its sets always show in it. Set whenever it has weights
    */
@@ -190,6 +194,10 @@ export type ExerciseSplitDay = z.infer<typeof ExerciseSplitDaySchema>
 
 export const ExerciseTemplateSchema = z.object({
   targetMuscleGroup: MuscleGroupSchema,
+  /**
+   * A copy of its exercise's (see Exercise)
+   */
+  secondaryMuscleGroups: MuscleGroupSchema.array(),
   setType: SetTypeSchema,
   changeType: ChangeTypeSchema.nullable(),
   /**
@@ -439,6 +447,10 @@ export type Workout = z.infer<typeof WorkoutSchema>
 
 export const WorkoutExerciseSchema = z.object({
   targetMuscleGroup: MuscleGroupSchema,
+  /**
+   * A copy of its exercise's (see Exercise)
+   */
+  secondaryMuscleGroups: MuscleGroupSchema.array(),
   setType: SetTypeSchema,
   changeType: ChangeTypeSchema.nullable(),
   /**
@@ -548,6 +560,7 @@ export const ExerciseSelectSchema: z.ZodType<Prisma.ExerciseSelect> = z.object({
   id: z.boolean().optional(),
   name: z.boolean().optional(),
   targetMuscleGroup: z.boolean().optional(),
+  secondaryMuscleGroups: z.boolean().optional(),
   customMuscleGroup: z.boolean().optional(),
   bodyweightFraction: z.boolean().optional(),
   note: z.boolean().optional(),
@@ -654,6 +667,7 @@ export const ExerciseTemplateSelectSchema: z.ZodType<Prisma.ExerciseTemplateSele
   name: z.boolean().optional(),
   exerciseIndex: z.boolean().optional(),
   targetMuscleGroup: z.boolean().optional(),
+  secondaryMuscleGroups: z.boolean().optional(),
   customMuscleGroup: z.boolean().optional(),
   bodyweightFraction: z.boolean().optional(),
   sets: z.boolean().optional(),
@@ -1012,6 +1026,7 @@ export const WorkoutExerciseSelectSchema: z.ZodType<Prisma.WorkoutExerciseSelect
   name: z.boolean().optional(),
   workoutId: z.boolean().optional(),
   targetMuscleGroup: z.boolean().optional(),
+  secondaryMuscleGroups: z.boolean().optional(),
   customMuscleGroup: z.boolean().optional(),
   bodyweightFraction: z.boolean().optional(),
   setType: z.boolean().optional(),
@@ -1107,6 +1122,7 @@ export const ExerciseWhereInputSchema: z.ZodType<Prisma.ExerciseWhereInput> = z.
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
@@ -1131,6 +1147,7 @@ export const ExerciseOrderByWithRelationInputSchema: z.ZodType<Prisma.ExerciseOr
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -1171,6 +1188,7 @@ export const ExerciseWhereUniqueInputSchema: z.ZodType<Prisma.ExerciseWhereUniqu
   NOT: z.union([ z.lazy(() => ExerciseWhereInputSchema),z.lazy(() => ExerciseWhereInputSchema).array() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
@@ -1195,6 +1213,7 @@ export const ExerciseOrderByWithAggregationInputSchema: z.ZodType<Prisma.Exercis
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   note: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -1224,6 +1243,7 @@ export const ExerciseScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Exer
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupWithAggregatesFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
   note: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
@@ -1375,6 +1395,7 @@ export const ExerciseTemplateWhereInputSchema: z.ZodType<Prisma.ExerciseTemplate
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   sets: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
@@ -1403,6 +1424,7 @@ export const ExerciseTemplateOrderByWithRelationInputSchema: z.ZodType<Prisma.Ex
   name: z.lazy(() => SortOrderSchema).optional(),
   exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   sets: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -1437,6 +1459,7 @@ export const ExerciseTemplateWhereUniqueInputSchema: z.ZodType<Prisma.ExerciseTe
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number().int() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   sets: z.union([ z.lazy(() => IntNullableFilterSchema),z.number().int() ]).optional().nullable(),
@@ -1465,6 +1488,7 @@ export const ExerciseTemplateOrderByWithAggregationInputSchema: z.ZodType<Prisma
   name: z.lazy(() => SortOrderSchema).optional(),
   exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   sets: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -1499,6 +1523,7 @@ export const ExerciseTemplateScalarWhereWithAggregatesInputSchema: z.ZodType<Pri
   name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   exerciseIndex: z.union([ z.lazy(() => IntWithAggregatesFilterSchema),z.number() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupWithAggregatesFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
   sets: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
@@ -2347,6 +2372,7 @@ export const WorkoutExerciseWhereInputSchema: z.ZodType<Prisma.WorkoutExerciseWh
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
@@ -2376,6 +2402,7 @@ export const WorkoutExerciseOrderByWithRelationInputSchema: z.ZodType<Prisma.Wor
   name: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   setType: z.lazy(() => SortOrderSchema).optional(),
@@ -2411,6 +2438,7 @@ export const WorkoutExerciseWhereUniqueInputSchema: z.ZodType<Prisma.WorkoutExer
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
@@ -2440,6 +2468,7 @@ export const WorkoutExerciseOrderByWithAggregationInputSchema: z.ZodType<Prisma.
   name: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   bodyweightFraction: z.union([ z.lazy(() => SortOrderSchema),z.lazy(() => SortOrderInputSchema) ]).optional(),
   setType: z.lazy(() => SortOrderSchema).optional(),
@@ -2474,6 +2503,7 @@ export const WorkoutExerciseScalarWhereWithAggregatesInputSchema: z.ZodType<Pris
   name: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupWithAggregatesFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableWithAggregatesFilterSchema),z.number() ]).optional().nullable(),
   setType: z.union([ z.lazy(() => EnumSetTypeWithAggregatesFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
@@ -2646,6 +2676,7 @@ export const ExerciseCreateInputSchema: z.ZodType<Prisma.ExerciseCreateInput> = 
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -2669,6 +2700,7 @@ export const ExerciseUncheckedCreateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -2692,6 +2724,7 @@ export const ExerciseUpdateInputSchema: z.ZodType<Prisma.ExerciseUpdateInput> = 
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -2715,6 +2748,7 @@ export const ExerciseUncheckedUpdateInputSchema: z.ZodType<Prisma.ExerciseUnchec
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -2738,6 +2772,7 @@ export const ExerciseCreateManyInputSchema: z.ZodType<Prisma.ExerciseCreateManyI
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -2759,6 +2794,7 @@ export const ExerciseUpdateManyMutationInputSchema: z.ZodType<Prisma.ExerciseUpd
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -2779,6 +2815,7 @@ export const ExerciseUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ExerciseUn
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -2909,6 +2946,7 @@ export const ExerciseTemplateCreateInputSchema: z.ZodType<Prisma.ExerciseTemplat
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -2935,6 +2973,7 @@ export const ExerciseTemplateUncheckedCreateInputSchema: z.ZodType<Prisma.Exerci
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -2961,6 +3000,7 @@ export const ExerciseTemplateUpdateInputSchema: z.ZodType<Prisma.ExerciseTemplat
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -2987,6 +3027,7 @@ export const ExerciseTemplateUncheckedUpdateInputSchema: z.ZodType<Prisma.Exerci
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -3013,6 +3054,7 @@ export const ExerciseTemplateCreateManyInputSchema: z.ZodType<Prisma.ExerciseTem
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -3039,6 +3081,7 @@ export const ExerciseTemplateUpdateManyMutationInputSchema: z.ZodType<Prisma.Exe
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -3063,6 +3106,7 @@ export const ExerciseTemplateUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Ex
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -3886,6 +3930,7 @@ export const WorkoutExerciseCreateInputSchema: z.ZodType<Prisma.WorkoutExerciseC
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -3914,6 +3959,7 @@ export const WorkoutExerciseUncheckedCreateInputSchema: z.ZodType<Prisma.Workout
   name: z.string(),
   workoutId: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -3940,6 +3986,7 @@ export const WorkoutExerciseUpdateInputSchema: z.ZodType<Prisma.WorkoutExerciseU
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -3968,6 +4015,7 @@ export const WorkoutExerciseUncheckedUpdateInputSchema: z.ZodType<Prisma.Workout
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -3995,6 +4043,7 @@ export const WorkoutExerciseCreateManyInputSchema: z.ZodType<Prisma.WorkoutExerc
   name: z.string(),
   workoutId: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -4020,6 +4069,7 @@ export const WorkoutExerciseUpdateManyMutationInputSchema: z.ZodType<Prisma.Work
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -4045,6 +4095,7 @@ export const WorkoutExerciseUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Wor
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -4236,6 +4287,14 @@ export const EnumMuscleGroupFilterSchema: z.ZodType<Prisma.EnumMuscleGroupFilter
   not: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => NestedEnumMuscleGroupFilterSchema) ]).optional(),
 }).strict();
 
+export const EnumMuscleGroupNullableListFilterSchema: z.ZodType<Prisma.EnumMuscleGroupNullableListFilter> = z.object({
+  equals: z.lazy(() => MuscleGroupSchema).array().optional().nullable(),
+  has: z.lazy(() => MuscleGroupSchema).optional().nullable(),
+  hasEvery: z.lazy(() => MuscleGroupSchema).array().optional(),
+  hasSome: z.lazy(() => MuscleGroupSchema).array().optional(),
+  isEmpty: z.boolean().optional()
+}).strict();
+
 export const StringNullableFilterSchema: z.ZodType<Prisma.StringNullableFilter> = z.object({
   equals: z.string().optional().nullable(),
   in: z.string().array().optional().nullable(),
@@ -4346,6 +4405,7 @@ export const ExerciseCountOrderByAggregateInputSchema: z.ZodType<Prisma.Exercise
   id: z.lazy(() => SortOrderSchema).optional(),
   name: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
   bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
   note: z.lazy(() => SortOrderSchema).optional(),
@@ -4690,6 +4750,7 @@ export const ExerciseTemplateCountOrderByAggregateInputSchema: z.ZodType<Prisma.
   name: z.lazy(() => SortOrderSchema).optional(),
   exerciseIndex: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
   bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
   sets: z.lazy(() => SortOrderSchema).optional(),
@@ -5428,6 +5489,7 @@ export const WorkoutExerciseCountOrderByAggregateInputSchema: z.ZodType<Prisma.W
   name: z.lazy(() => SortOrderSchema).optional(),
   workoutId: z.lazy(() => SortOrderSchema).optional(),
   targetMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
+  secondaryMuscleGroups: z.lazy(() => SortOrderSchema).optional(),
   customMuscleGroup: z.lazy(() => SortOrderSchema).optional(),
   bodyweightFraction: z.lazy(() => SortOrderSchema).optional(),
   setType: z.lazy(() => SortOrderSchema).optional(),
@@ -5639,6 +5701,10 @@ export const WorkoutExerciseMiniSetSumOrderByAggregateInputSchema: z.ZodType<Pri
   RIR: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
+export const ExerciseCreatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.ExerciseCreatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array()
+}).strict();
+
 export const ExerciseCreatemachineWeightsInputSchema: z.ZodType<Prisma.ExerciseCreatemachineWeightsInput> = z.object({
   set: z.number().array()
 }).strict();
@@ -5683,6 +5749,11 @@ export const StringFieldUpdateOperationsInputSchema: z.ZodType<Prisma.StringFiel
 
 export const EnumMuscleGroupFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumMuscleGroupFieldUpdateOperationsInput> = z.object({
   set: z.lazy(() => MuscleGroupSchema).optional()
+}).strict();
+
+export const ExerciseUpdatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.ExerciseUpdatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array().optional(),
+  push: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
 }).strict();
 
 export const NullableStringFieldUpdateOperationsInputSchema: z.ZodType<Prisma.NullableStringFieldUpdateOperationsInput> = z.object({
@@ -5956,6 +6027,10 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseSplitDayNestedInp
   deleteMany: z.union([ z.lazy(() => ExerciseTemplateScalarWhereInputSchema),z.lazy(() => ExerciseTemplateScalarWhereInputSchema).array() ]).optional(),
 }).strict();
 
+export const ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.ExerciseTemplateCreatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array()
+}).strict();
+
 export const ExerciseSplitDayCreateNestedOneWithoutExercisesInputSchema: z.ZodType<Prisma.ExerciseSplitDayCreateNestedOneWithoutExercisesInput> = z.object({
   create: z.union([ z.lazy(() => ExerciseSplitDayCreateWithoutExercisesInputSchema),z.lazy(() => ExerciseSplitDayUncheckedCreateWithoutExercisesInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => ExerciseSplitDayCreateOrConnectWithoutExercisesInputSchema).optional(),
@@ -5966,6 +6041,11 @@ export const ExerciseCreateNestedOneWithoutExerciseTemplatesInputSchema: z.ZodTy
   create: z.union([ z.lazy(() => ExerciseCreateWithoutExerciseTemplatesInputSchema),z.lazy(() => ExerciseUncheckedCreateWithoutExerciseTemplatesInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => ExerciseCreateOrConnectWithoutExerciseTemplatesInputSchema).optional(),
   connect: z.lazy(() => ExerciseWhereUniqueInputSchema).optional()
+}).strict();
+
+export const ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.ExerciseTemplateUpdatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array().optional(),
+  push: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
 }).strict();
 
 export const EnumSetTypeFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumSetTypeFieldUpdateOperationsInput> = z.object({
@@ -6717,6 +6797,10 @@ export const WorkoutExerciseUncheckedUpdateManyWithoutWorkoutNestedInputSchema: 
   deleteMany: z.union([ z.lazy(() => WorkoutExerciseScalarWhereInputSchema),z.lazy(() => WorkoutExerciseScalarWhereInputSchema).array() ]).optional(),
 }).strict();
 
+export const WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.WorkoutExerciseCreatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array()
+}).strict();
+
 export const WorkoutCreateNestedOneWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.WorkoutCreateNestedOneWithoutWorkoutExercisesInput> = z.object({
   create: z.union([ z.lazy(() => WorkoutCreateWithoutWorkoutExercisesInputSchema),z.lazy(() => WorkoutUncheckedCreateWithoutWorkoutExercisesInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => WorkoutCreateOrConnectWithoutWorkoutExercisesInputSchema).optional(),
@@ -6741,6 +6825,11 @@ export const WorkoutExerciseSetUncheckedCreateNestedManyWithoutWorkoutExerciseIn
   connectOrCreate: z.union([ z.lazy(() => WorkoutExerciseSetCreateOrConnectWithoutWorkoutExerciseInputSchema),z.lazy(() => WorkoutExerciseSetCreateOrConnectWithoutWorkoutExerciseInputSchema).array() ]).optional(),
   createMany: z.lazy(() => WorkoutExerciseSetCreateManyWorkoutExerciseInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => WorkoutExerciseSetWhereUniqueInputSchema),z.lazy(() => WorkoutExerciseSetWhereUniqueInputSchema).array() ]).optional(),
+}).strict();
+
+export const WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema: z.ZodType<Prisma.WorkoutExerciseUpdatesecondaryMuscleGroupsInput> = z.object({
+  set: z.lazy(() => MuscleGroupSchema).array().optional(),
+  push: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
 }).strict();
 
 export const WorkoutUpdateOneRequiredWithoutWorkoutExercisesNestedInputSchema: z.ZodType<Prisma.WorkoutUpdateOneRequiredWithoutWorkoutExercisesNestedInput> = z.object({
@@ -7287,6 +7376,7 @@ export const ExerciseTemplateCreateWithoutExerciseInputSchema: z.ZodType<Prisma.
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -7312,6 +7402,7 @@ export const ExerciseTemplateUncheckedCreateWithoutExerciseInputSchema: z.ZodTyp
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -7347,6 +7438,7 @@ export const WorkoutExerciseCreateWithoutExerciseInputSchema: z.ZodType<Prisma.W
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -7374,6 +7466,7 @@ export const WorkoutExerciseUncheckedCreateWithoutExerciseInputSchema: z.ZodType
   name: z.string(),
   workoutId: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -7475,6 +7568,7 @@ export const ExerciseTemplateScalarWhereInputSchema: z.ZodType<Prisma.ExerciseTe
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   exerciseIndex: z.union([ z.lazy(() => IntFilterSchema),z.number() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   sets: z.union([ z.lazy(() => IntNullableFilterSchema),z.number() ]).optional().nullable(),
@@ -7521,6 +7615,7 @@ export const WorkoutExerciseScalarWhereInputSchema: z.ZodType<Prisma.WorkoutExer
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   workoutId: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   setType: z.union([ z.lazy(() => EnumSetTypeFilterSchema),z.lazy(() => SetTypeSchema) ]).optional(),
@@ -7759,6 +7854,7 @@ export const ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema: z.ZodType
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -7784,6 +7880,7 @@ export const ExerciseTemplateUncheckedCreateWithoutExerciseSplitDayInputSchema: 
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -7899,6 +7996,7 @@ export const ExerciseCreateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -7921,6 +8019,7 @@ export const ExerciseUncheckedCreateWithoutExerciseTemplatesInputSchema: z.ZodTy
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -7986,6 +8085,7 @@ export const ExerciseUpdateWithoutExerciseTemplatesInputSchema: z.ZodType<Prisma
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -8008,6 +8108,7 @@ export const ExerciseUncheckedUpdateWithoutExerciseTemplatesInputSchema: z.ZodTy
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -8672,6 +8773,7 @@ export const ExerciseCreateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseCrea
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -8694,6 +8796,7 @@ export const ExerciseUncheckedCreateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -8936,6 +9039,7 @@ export const ExerciseScalarWhereInputSchema: z.ZodType<Prisma.ExerciseScalarWher
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   name: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => EnumMuscleGroupFilterSchema),z.lazy(() => MuscleGroupSchema) ]).optional(),
+  secondaryMuscleGroups: z.lazy(() => EnumMuscleGroupNullableListFilterSchema).optional(),
   customMuscleGroup: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
   bodyweightFraction: z.union([ z.lazy(() => FloatNullableFilterSchema),z.number() ]).optional().nullable(),
   note: z.union([ z.lazy(() => StringNullableFilterSchema),z.string() ]).optional().nullable(),
@@ -9510,6 +9614,7 @@ export const WorkoutExerciseCreateWithoutWorkoutInputSchema: z.ZodType<Prisma.Wo
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -9536,6 +9641,7 @@ export const WorkoutExerciseUncheckedCreateWithoutWorkoutInputSchema: z.ZodType<
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -9720,6 +9826,7 @@ export const ExerciseCreateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -9742,6 +9849,7 @@ export const ExerciseUncheckedCreateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -9848,6 +9956,7 @@ export const ExerciseUpdateWithoutWorkoutExercisesInputSchema: z.ZodType<Prisma.
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -9870,6 +9979,7 @@ export const ExerciseUncheckedUpdateWithoutWorkoutExercisesInputSchema: z.ZodTyp
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -9893,6 +10003,7 @@ export const WorkoutExerciseCreateWithoutSetsInputSchema: z.ZodType<Prisma.Worko
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -9920,6 +10031,7 @@ export const WorkoutExerciseUncheckedCreateWithoutSetsInputSchema: z.ZodType<Pri
   name: z.string(),
   workoutId: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -9987,6 +10099,7 @@ export const WorkoutExerciseUpdateWithoutSetsInputSchema: z.ZodType<Prisma.Worko
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10014,6 +10127,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutSetsInputSchema: z.ZodType<Pri
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10131,6 +10245,7 @@ export const ExerciseTemplateCreateManyExerciseInputSchema: z.ZodType<Prisma.Exe
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -10157,6 +10272,7 @@ export const WorkoutExerciseCreateManyExerciseInputSchema: z.ZodType<Prisma.Work
   name: z.string(),
   workoutId: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -10181,6 +10297,7 @@ export const ExerciseTemplateUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10206,6 +10323,7 @@ export const ExerciseTemplateUncheckedUpdateWithoutExerciseInputSchema: z.ZodTyp
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10231,6 +10349,7 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseInputSchema: z.Zo
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10256,6 +10375,7 @@ export const WorkoutExerciseUpdateWithoutExerciseInputSchema: z.ZodType<Prisma.W
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10283,6 +10403,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutExerciseInputSchema: z.ZodType
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10309,6 +10430,7 @@ export const WorkoutExerciseUncheckedUpdateManyWithoutExerciseInputSchema: z.Zod
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   workoutId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10417,6 +10539,7 @@ export const ExerciseTemplateCreateManyExerciseSplitDayInputSchema: z.ZodType<Pr
   name: z.string(),
   exerciseIndex: z.number().int(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   sets: z.number().int().optional().nullable(),
@@ -10442,6 +10565,7 @@ export const ExerciseTemplateUpdateWithoutExerciseSplitDayInputSchema: z.ZodType
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10467,6 +10591,7 @@ export const ExerciseTemplateUncheckedUpdateWithoutExerciseSplitDayInputSchema: 
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10492,6 +10617,7 @@ export const ExerciseTemplateUncheckedUpdateManyWithoutExerciseSplitDayInputSche
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseTemplateUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sets: z.union([ z.number().int(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10649,6 +10775,7 @@ export const ExerciseCreateManyUserInputSchema: z.ZodType<Prisma.ExerciseCreateM
   id: z.string().cuid2().optional(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
@@ -10838,6 +10965,7 @@ export const ExerciseUpdateWithoutUserInputSchema: z.ZodType<Prisma.ExerciseUpda
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10860,6 +10988,7 @@ export const ExerciseUncheckedUpdateWithoutUserInputSchema: z.ZodType<Prisma.Exe
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10882,6 +11011,7 @@ export const ExerciseUncheckedUpdateManyWithoutUserInputSchema: z.ZodType<Prisma
   id: z.union([ z.string().cuid2(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => ExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   note: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -10903,6 +11033,7 @@ export const WorkoutExerciseCreateManyWorkoutInputSchema: z.ZodType<Prisma.Worko
   exerciseIndex: z.number().int(),
   name: z.string(),
   targetMuscleGroup: z.lazy(() => MuscleGroupSchema),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseCreatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.string().optional().nullable(),
   bodyweightFraction: z.number().optional().nullable(),
   setType: z.lazy(() => SetTypeSchema),
@@ -10928,6 +11059,7 @@ export const WorkoutExerciseUpdateWithoutWorkoutInputSchema: z.ZodType<Prisma.Wo
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10954,6 +11086,7 @@ export const WorkoutExerciseUncheckedUpdateWithoutWorkoutInputSchema: z.ZodType<
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),
@@ -10980,6 +11113,7 @@ export const WorkoutExerciseUncheckedUpdateManyWithoutWorkoutInputSchema: z.ZodT
   exerciseIndex: z.union([ z.number().int(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   targetMuscleGroup: z.union([ z.lazy(() => MuscleGroupSchema),z.lazy(() => EnumMuscleGroupFieldUpdateOperationsInputSchema) ]).optional(),
+  secondaryMuscleGroups: z.union([ z.lazy(() => WorkoutExerciseUpdatesecondaryMuscleGroupsInputSchema),z.lazy(() => MuscleGroupSchema).array() ]).optional(),
   customMuscleGroup: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   bodyweightFraction: z.union([ z.number(),z.lazy(() => NullableFloatFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   setType: z.union([ z.lazy(() => SetTypeSchema),z.lazy(() => EnumSetTypeFieldUpdateOperationsInputSchema) ]).optional(),

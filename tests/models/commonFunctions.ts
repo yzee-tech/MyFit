@@ -8,6 +8,7 @@ const builtInExercises = commonExercisePerMuscleGroup.flatMap((group) => group.e
 type ExerciseDetails = {
 	targetMuscleGroup: MuscleGroup;
 	customMuscleGroup?: string | null;
+	secondaryMuscleGroups?: MuscleGroup[];
 	bodyweightFraction?: number | null;
 	note?: string | null;
 	measure?: ExerciseMeasure;

@@ -29,6 +29,7 @@ const ALPHABETICAL_MUSCLE_GROUPS = [
 	'Side delts',
 	'Traps',
 	'Triceps',
+	'Whole body',
 	'Custom'
 ];
 

@@ -2,38 +2,40 @@
 /// bodyweight share are the same everywhere; routines and workouts keep a copy of them that the
 /// server keeps in sync (see $lib/server/exercises.ts)
 model Exercise {
-  id                 String      @id @default(cuid()) /// @zod.string.cuid2()
-  name               String
-  targetMuscleGroup  MuscleGroup
-  customMuscleGroup  String?
-  bodyweightFraction Float?
+  id                    String          @id @default(cuid()) /// @zod.string.cuid2()
+  name                  String
+  targetMuscleGroup     MuscleGroup
+  /// Muscles it also works (two at most): each counts half a set. None for Cardio and WholeBody
+  secondaryMuscleGroups MuscleGroup[]   @default([])
+  customMuscleGroup     String?
+  bodyweightFraction    Float?
   /// How to do it, shown wherever it's used
-  note               String?
+  note                  String?
   /// Suggestions only ever add reps, never weight (e.g. sit-ups); a bodyweight share still counts in volume
-  repsOnly           Boolean     @default(false)
+  repsOnly              Boolean         @default(false)
   /// Reps-only cap: suggestions stop at this many reps; none means no cap
-  maxReps            Int?
+  maxReps               Int?
   /// A machine that shows levels instead of weights: its lowest and highest level, and the step
   /// between them (1 or 0.5). All three or none; never with reps only
-  levelsFrom         Float?
-  levelsTo           Float?
-  levelStep          Float?
+  levelsFrom            Float?
+  levelsTo              Float?
+  levelStep             Float?
   /// A machine with its own weights (a stack): the weights in `machineUnit`, sorted ascending; empty for
   /// none. Never with levels or reps only
-  machineWeights     Float[]     @default([])
+  machineWeights        Float[]         @default([])
   /// The unit printed on the machine (KG or LB): its sets always show in it. Set whenever it has weights
-  machineUnit        WeightUnit?
+  machineUnit           WeightUnit?
   /// An assisted machine: its weights are help (logged as negative loads), or with levels, a higher level
   /// is more help
-  assisted           Boolean     @default(false)
+  assisted              Boolean         @default(false)
   /// How it's measured: reps and weight (default), time, or distance and time. Fixed once it has history
-  measure            ExerciseMeasure @default(Reps)
+  measure               ExerciseMeasure @default(Reps)
   /// A DistanceTime exercise's display unit; distances are stored in metres
-  distanceUnit       DistanceUnit?
+  distanceUnit          DistanceUnit?
   /// Deleted but kept for the workouts that used it
-  archived           Boolean     @default(false)
-  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId             String
+  archived              Boolean         @default(false)
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
 
   exerciseTemplates ExerciseTemplate[]
   workoutExercises  WorkoutExercise[]

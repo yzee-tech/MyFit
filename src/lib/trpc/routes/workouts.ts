@@ -1,7 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { t } from '$lib/trpc/t';
 import { resolveExerciseUnit } from '$lib/utils/weightUnits';
-import { linkToExercise, resolveExercises } from '$lib/server/exercises';
+import { exerciseCopy, linkToExercise, resolveExercises } from '$lib/server/exercises';
 import { routineSetCount } from '$lib/utils/routineSets';
 import { isValidDistanceMeters, isValidTimeSeconds } from '$lib/utils/distanceUnits';
 import { isCardioMeasure, measureOfSets } from '$lib/utils/measure';
@@ -824,11 +824,7 @@ export const workouts = t.router({
 				},
 				exercises: [
 					{
-						exerciseId: exercise.id,
-						name: exercise.name,
-						targetMuscleGroup: exercise.targetMuscleGroup,
-						customMuscleGroup: exercise.customMuscleGroup,
-						bodyweightFraction: exercise.bodyweightFraction,
+						...exerciseCopy(exercise),
 						note: null,
 						sets: input.sets,
 						setType: input.setType,
