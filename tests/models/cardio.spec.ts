@@ -852,7 +852,8 @@ test('once a cardio exercise has workouts its measure is fixed; the stats chart 
 	await page.goto(`/exercises/${run.id}`);
 	await page.getByLabel('exercise-options').click();
 	await page.getByRole('menuitem', { name: 'Edit' }).click();
-	await expect(page.getByRole('radio', { name: 'Measured in time' })).toBeDisabled();
+	await expect(page.getByRole('radio', { name: /Measured in/ })).toHaveCount(0);
+	await expect(page.getByTestId('exercise-form-measure-fixed')).toHaveText('Distance');
 	await expect(page.getByRole('dialog')).toContainText('Fixed once an exercise has workouts');
 	await page.keyboard.press('Escape');
 
@@ -881,6 +882,38 @@ test('once a cardio exercise has workouts its measure is fixed; the stats chart 
 	await expect(sheet).toContainText('Replace Run');
 	await sheet.getByRole('button', { name: 'Barbell rows', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Barbell rows is measured differently' })).toBeVisible();
+});
+
+test('a locked exercise shows only its fixed measure; the distance unit still changes', async ({ page, userData }) => {
+	const userId = userData.userId;
+	await createExercises(userId, [
+		{ name: 'Run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'KM' },
+		{ name: 'Bike', targetMuscleGroup: 'Cardio', measure: 'Time', levelsFrom: 1, levelsTo: 20, levelStep: 1 }
+	]);
+	await logPastCardio(userId);
+	const run = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Run' } } });
+	const bike = await prisma.exercise.findUniqueOrThrow({ where: { userId_name: { userId, name: 'Bike' } } });
+
+	// A distance exercise: "Distance" as plain text, no measure radios, and the unit still changes
+	await page.goto(`/exercises/${run.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByRole('radio', { name: /Measured in/ })).toHaveCount(0);
+	await expect(page.getByTestId('exercise-form-measure-fixed')).toHaveText('Distance');
+	await expect(page.getByRole('dialog')).toContainText('Fixed once an exercise has workouts');
+	await expect(page.getByRole('radio', { name: 'Distance in km' })).toHaveAttribute('data-state', 'on');
+	await page.getByRole('radio', { name: 'Distance in mi' }).click();
+	await expect(page.getByRole('radio', { name: 'Distance in mi' })).toHaveAttribute('data-state', 'on');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect(page.getByTestId('exercise-measure')).toHaveText('Distance & time in mi');
+
+	// A time exercise: "Time" as plain text, no radios
+	await page.goto(`/exercises/${bike.id}`);
+	await page.getByLabel('exercise-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await expect(page.getByRole('radio', { name: /Measured in/ })).toHaveCount(0);
+	await expect(page.getByTestId('exercise-form-measure-fixed')).toHaveText('Time');
+	await page.keyboard.press('Escape');
 });
 
 test('an all-skipped cardio row can be corrected into completed intervals', async ({ page, userData }) => {

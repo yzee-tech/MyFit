@@ -2,6 +2,14 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-13: a locked measure shows just its fixed type
+
+### Changed
+
+- On an exercise's form, once the exercise has workouts, "How it's measured" shows just its fixed type
+  ("Reps", "Time" or "Distance") instead of the greyed-out choices, and the explanation under it runs the
+  full width, under the whole row, in every state. The distance unit can still be changed, as before.
+
 ## 2026-11-12: secondary muscles and a Whole body muscle group
 
 ### Added
