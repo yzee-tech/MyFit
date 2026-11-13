@@ -119,7 +119,7 @@
 	</div>
 {/each}
 
-<ResponsiveDialog title="Discard this workout?" bind:open={discardOpen}>
+<ResponsiveDialog cancelLabel="Cancel" title="Discard this workout?" bind:open={discardOpen}>
 	{#snippet description()}
 		{#if discarding}
 			{formatWorkoutDate(discarding.request.workoutData.startedAt ?? discarding.queuedAt)}, {discarding.label}

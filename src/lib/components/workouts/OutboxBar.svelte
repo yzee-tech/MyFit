@@ -53,7 +53,7 @@
 </script>
 
 <!-- Asked before signing out with workouts waiting: signing out clears everything stored on this phone -->
-<ResponsiveDialog title="Sign out?" bind:open={workoutOutbox.signOutQuestionOpen}>
+<ResponsiveDialog cancelLabel="Cancel" title="Sign out?" bind:open={workoutOutbox.signOutQuestionOpen}>
 	{#snippet description()}
 		{workoutOutbox.everythingWaiting === 1
 			? "1 workout hasn't been sent yet. Signing out deletes it from this phone for good."

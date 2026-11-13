@@ -2,6 +2,35 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-13: a workout saved with no signal is sent when you're back online
+
+### Added
+
+- **Saving a workout with no signal no longer fails.** If the workout can't be sent (no connection, a slow or
+  failing server, or a sign-in that has lapsed), it is kept on the phone and the finish page says "Saved on this
+  phone". It is sent by itself while MyFit is open: when the app opens, when the connection returns, when you
+  come back to the app, every minute, and before you start your next workout (if it still can't be sent, you are
+  told and can start anyway, but today's suggestions won't include it).
+- **Each workout is saved once.** A workout sent twice (for instance when the answer got lost on the way back)
+  is saved once. Its length is the one it had when you pressed Save, not the time it was finally sent.
+- **The Workouts list shows what is waiting.** A workout not yet sent is at the top with "Not sent yet" and
+  Send now; a bar at the bottom of other screens says how many are waiting. One the server refuses is marked
+  "Couldn't be sent" with the reason and **Retry**, **Discard** (asks first) and **Copy details** (a readable
+  summary to retype by hand).
+- If the block a waiting workout belonged to was deleted meanwhile, it is saved as an ordinary workout and you
+  are told. Signing out with workouts waiting asks first, because signing out clears what is stored on the phone.
+
+### Changed
+
+- A save made while you are signed out (or after the sign-in lapsed) now answers "not signed in" instead of a
+  server error.
+
+### Limits
+
+- A waiting workout lives only on that phone: clearing the browser's data or removing the app before it is sent
+  loses it. Nothing is sent while MyFit is closed. Starting a workout, or reopening the app, with no signal
+  still needs a connection.
+
 ## 2026-11-13: a locked measure shows just its fixed type
 
 ### Changed

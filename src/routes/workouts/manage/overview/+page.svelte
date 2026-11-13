@@ -25,6 +25,9 @@
 		data.userSettings.motivationalQuotesEnabled && data.userSettings.quotesDisplayModes.includes('POST_WORKOUT');
 
 	let savingWorkout = $state(false);
+	// The id of a workout just kept on the phone: this page then says so, and has no workout left to show
+	let keptOnPhoneId: string | null = $state(null);
+	let sentFromPhone = $derived(keptOnPhoneId !== null && !workoutOutbox.has(keptOnPhoneId));
 	let workoutExercises = $derived(workoutRunes.workoutExercises ?? []);
 
 	function preProcessSetData() {
@@ -90,10 +93,11 @@
 			lastError: failure.kind === 'signIn' ? failure.reason : null
 		});
 		if (!added) return false;
-		// On the list first, then off the screen: it is never in neither place
+		// On the list first, then off the screen: it is never in neither place. This page stays (the Workouts list
+		// needs the server, which a phone with no signal can't reach): it says where the workout is
+		keptOnPhoneId = clientId;
 		workoutRunes.resetStores();
 		toast.success("Saved on this phone. It will be sent when you're back online.");
-		await goto('/workouts');
 		return true;
 	}
 
@@ -147,53 +151,76 @@
 	}
 </script>
 
-<H3>Overview</H3>
+{#if keptOnPhoneId !== null}
+	<H3>{sentFromPhone ? 'Workout sent' : 'Saved on this phone'}</H3>
+	<div class="flex w-full flex-col gap-3 rounded-md border bg-card p-4" data-testid="saved-on-phone">
+		<p>
+			{#if sentFromPhone}
+				It reached your account.
+			{:else}
+				Your workout is kept on this phone and will be sent when you're back online. Open MyFit then to send it, or tap
+				Send now.
+			{/if}
+		</p>
+		<div class="grid grid-cols-2 gap-1">
+			{#if !sentFromPhone}
+				<Button disabled={workoutOutbox.sending} onclick={() => workoutOutbox.send('manual')} variant="secondary">
+					Send now
+				</Button>
+			{/if}
+			<Button class={sentFromPhone ? 'col-span-2' : ''} onclick={() => goto('/workouts')}>Back to workouts</Button>
+		</div>
+	</div>
+{:else}
+	<H3>Overview</H3>
 
-{#if shouldShowQuote}
-	<Quotes mode="POST_WORKOUT" class="mb-6" />
-{/if}
+	{#if shouldShowQuote}
+		<Quotes mode="POST_WORKOUT" class="mb-6" />
+	{/if}
 
-<Tabs.Root class="w-full" value="progression">
-	<Tabs.List class="grid grid-cols-2">
-		<Tabs.Trigger value="progression">Progression</Tabs.Trigger>
-		<Tabs.Trigger value="basic">Muscles</Tabs.Trigger>
-	</Tabs.List>
-	<Tabs.Content value="progression">
-		{#if workoutRunes.previousWorkoutData && workoutRunes.workoutExercises && workoutRunes.workoutData?.userBodyweight}
-			<WorkoutComparisonChart
-				previousWorkoutData={workoutRunes.previousWorkoutData}
-				currentWorkoutData={{
-					exercises: workoutRunes.workoutExercises,
-					userBodyweight: workoutRunes.workoutData.userBodyweight
-				}}
+	<Tabs.Root class="w-full" value="progression">
+		<Tabs.List class="grid grid-cols-2">
+			<Tabs.Trigger value="progression">Progression</Tabs.Trigger>
+			<Tabs.Trigger value="basic">Muscles</Tabs.Trigger>
+		</Tabs.List>
+		<Tabs.Content value="progression">
+			{#if workoutRunes.previousWorkoutData && workoutRunes.workoutExercises && workoutRunes.workoutData?.userBodyweight}
+				<WorkoutComparisonChart
+					previousWorkoutData={workoutRunes.previousWorkoutData}
+					currentWorkoutData={{
+						exercises: workoutRunes.workoutExercises,
+						userBodyweight: workoutRunes.workoutData.userBodyweight
+					}}
+				/>
+			{:else}
+				<div class="muted-text-box">No previous workout available to compare</div>
+			{/if}
+		</Tabs.Content>
+		<Tabs.Content class="rounded-md border bg-card p-4" value="basic">
+			<SetsPerMuscleChart
+				exercises={workoutExercises.map((exercise) => ({
+					...exercise,
+					sets: exercise.sets.filter((set) => !set.skipped && set.reps !== undefined).length
+				}))}
+				label="Sets done"
 			/>
-		{:else}
-			<div class="muted-text-box">No previous workout available to compare</div>
-		{/if}
-	</Tabs.Content>
-	<Tabs.Content class="rounded-md border bg-card p-4" value="basic">
-		<SetsPerMuscleChart
-			exercises={workoutExercises.map((exercise) => ({
-				...exercise,
-				sets: exercise.sets.filter((set) => !set.skipped && set.reps !== undefined).length
-			}))}
-			label="Sets done"
-		/>
-	</Tabs.Content>
-</Tabs.Root>
+		</Tabs.Content>
+	</Tabs.Root>
 
-<div class="mt-4 flex w-full flex-col gap-1.5">
-	<Label for="workout-note">Workout note</Label>
-	<Textarea id="workout-note" placeholder="Type here (optional)" bind:value={workoutRunes.workoutData!.note}></Textarea>
-</div>
+	<div class="mt-4 flex w-full flex-col gap-1.5">
+		<Label for="workout-note">Workout note</Label>
+		<Textarea id="workout-note" placeholder="Type here (optional)" bind:value={workoutRunes.workoutData!.note}
+		></Textarea>
+	</div>
 
-<div class="mt-auto grid grid-cols-2 gap-1">
-	<Button onclick={() => window.history.back()} variant="secondary">Previous</Button>
-	<Button disabled={savingWorkout} onclick={saveWorkout}>
-		{#if savingWorkout}
-			<LoaderCircle class="animate-spin" />
-		{:else}
-			Save
-		{/if}
-	</Button>
-</div>
+	<div class="mt-auto grid grid-cols-2 gap-1">
+		<Button onclick={() => window.history.back()} variant="secondary">Previous</Button>
+		<Button disabled={savingWorkout} onclick={saveWorkout}>
+			{#if savingWorkout}
+				<LoaderCircle class="animate-spin" />
+			{:else}
+				Save
+			{/if}
+		</Button>
+	</div>
+{/if}

@@ -11,6 +11,7 @@ import type { RouterInputs } from '$lib/trpc/router';
 import {
 	byStartedAt,
 	readOutbox,
+	retryWaitMs,
 	runOutbox,
 	workoutSummaryText,
 	writeOutbox,
@@ -146,6 +147,9 @@ function createWorkoutOutbox() {
 			const next = [...stored, entry];
 			if (!writeOutbox(localStorage, next)) return false;
 			all = next;
+			// A first try after the first pause (5 s): a send whose answer was lost, with the connection fine, shouldn't
+			// wait for the minute's timer. A phone with no connection skips it
+			setTimeout(() => void send('timer'), retryWaitMs(1) + 100);
 			return true;
 		},
 		send,
