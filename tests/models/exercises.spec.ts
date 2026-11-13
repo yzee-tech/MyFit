@@ -157,6 +157,26 @@ test('renaming an exercise renames it everywhere and keeps its progression', asy
 	expect(await prisma.exercise.count({ where: { userId: userData.userId, name: 'Bent-over rows' } })).toEqual(1);
 });
 
+test('New exercise: all three measures to pick from, with the note full width below them', async ({ page }) => {
+	await page.goto('/exercises');
+	await page.getByRole('button', { name: 'New exercise', exact: true }).click();
+	await expect(page.getByRole('radio', { name: 'Measured in reps and weight' })).toBeEnabled();
+	await expect(page.getByRole('radio', { name: 'Measured in time' })).toBeEnabled();
+	await expect(page.getByRole('radio', { name: 'Measured in distance and time' })).toBeEnabled();
+	// The note sits full width under the whole label + picker row, not squeezed next to the picker
+	const note = page.locator('#exercise-form-measure-note');
+	await expect(note).toBeVisible();
+	const noteBox = (await note.boundingBox())!;
+	const pickerBox = (await page.getByRole('radio', { name: 'Measured in time' }).boundingBox())!;
+	const labelBox = (await page.locator('#exercise-form-measure').boundingBox())!;
+	expect(noteBox.y).toBeGreaterThanOrEqual(pickerBox.y + pickerBox.height - 1);
+	expect(Math.abs(noteBox.x - labelBox.x)).toBeLessThanOrEqual(4);
+	// Only the picker announces "How it's measured" and points to the note; the row around it must not repeat them
+	await expect(page.getByRole('group', { name: "How it's measured" })).toHaveCount(1);
+	await expect(page.locator('[aria-labelledby="exercise-form-measure"]')).toHaveCount(1);
+	await expect(page.locator('[aria-describedby="exercise-form-measure-note"]')).toHaveCount(1);
+});
+
 test('Exercises page: an exercise outside any routine, added to routines, removed, deleted', async ({
 	page,
 	userData

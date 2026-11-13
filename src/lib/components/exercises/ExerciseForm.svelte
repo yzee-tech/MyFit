@@ -369,41 +369,50 @@
 	{/if}
 
 	<div class="grid gap-1.5">
-		<div class="flex items-start justify-between gap-4">
-			<div class="grid gap-0.5">
-				<span class="text-sm font-medium" id="exercise-form-measure">How it's measured</span>
-				<span class="text-xs text-muted-foreground">
-					{#if measureLocked}
-						Fixed once an exercise has workouts. For a change, make a new exercise.
-					{:else if measure === 'Time'}
-						Each set is a timed interval, e.g. a plank or 30 s on the bike.
-					{:else if measure === 'DistanceTime'}
-						Each set is a distance and a time; the pace is worked out for you.
-					{:else}
-						Reps with a weight. Cardio logs time, or distance and time, instead.
-					{/if}
+		<div
+			class="flex items-center justify-between gap-4"
+			role={measureLocked ? 'group' : undefined}
+			aria-labelledby={measureLocked ? 'exercise-form-measure' : undefined}
+			aria-describedby={measureLocked ? 'exercise-form-measure-note' : undefined}
+		>
+			<span class="text-sm font-medium" id="exercise-form-measure">How it's measured</span>
+			{#if measureLocked}
+				<span class="text-sm" data-testid="exercise-form-measure-fixed">
+					{measure === 'DistanceTime' ? 'Distance' : measure}
 				</span>
-			</div>
-			<ToggleGroup.Root
-				class="shrink-0 flex-wrap justify-end"
-				aria-labelledby="exercise-form-measure"
-				disabled={measureLocked}
-				onValueChange={(value) => {
-					if (value === 'Reps' || value === 'Time' || value === 'DistanceTime') measure = value;
-				}}
-				type="single"
-				value={measure}
-				variant="outline"
-			>
-				<ToggleGroup.Item
-					aria-label="Measured in reps and weight"
-					disabled={targetMuscleGroup === 'Cardio'}
-					value="Reps">Reps</ToggleGroup.Item
+			{:else}
+				<ToggleGroup.Root
+					class="shrink-0 flex-wrap justify-end"
+					aria-labelledby="exercise-form-measure"
+					aria-describedby="exercise-form-measure-note"
+					onValueChange={(value) => {
+						if (value === 'Reps' || value === 'Time' || value === 'DistanceTime') measure = value;
+					}}
+					type="single"
+					value={measure}
+					variant="outline"
 				>
-				<ToggleGroup.Item aria-label="Measured in time" value="Time">Time</ToggleGroup.Item>
-				<ToggleGroup.Item aria-label="Measured in distance and time" value="DistanceTime">Distance</ToggleGroup.Item>
-			</ToggleGroup.Root>
+					<ToggleGroup.Item
+						aria-label="Measured in reps and weight"
+						disabled={targetMuscleGroup === 'Cardio'}
+						value="Reps">Reps</ToggleGroup.Item
+					>
+					<ToggleGroup.Item aria-label="Measured in time" value="Time">Time</ToggleGroup.Item>
+					<ToggleGroup.Item aria-label="Measured in distance and time" value="DistanceTime">Distance</ToggleGroup.Item>
+				</ToggleGroup.Root>
+			{/if}
 		</div>
+		<span class="text-xs text-muted-foreground" id="exercise-form-measure-note">
+			{#if measureLocked}
+				Fixed once an exercise has workouts. For a change, make a new exercise.
+			{:else if measure === 'Time'}
+				Each set is a timed interval, e.g. a plank or 30 s on the bike.
+			{:else if measure === 'DistanceTime'}
+				Each set is a distance and a time; the pace is worked out for you.
+			{:else}
+				Reps with a weight. Cardio logs time, or distance and time, instead.
+			{/if}
+		</span>
 		{#if measure === 'DistanceTime'}
 			<div class="mt-1 flex items-center justify-between gap-4">
 				<span class="text-sm font-medium" id="exercise-form-distance-unit">Distance unit</span>
