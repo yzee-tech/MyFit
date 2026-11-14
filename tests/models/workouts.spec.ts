@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { mesocycleDefaults } from '../support/blocks';
+import { mesocycleDefaults, seedTemplateSplitAndMeso } from '../support/blocks';
 import {
 	boxNumber,
 	createExercises,
@@ -516,7 +516,9 @@ test('ask-each-time routine: pick lb at the gym; next time in kg converts to rea
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	// Seeded, not clicked through: the same setup, without spending the test's budget on it
+	await seedTemplateSplitAndMeso(userData.userId);
+	await page.goto('/workouts');
 	// "Ask each time" in My routines, which the mesocycle uses
 	await prisma.exerciseSplitDay.updateMany({
 		where: { name: 'Pull A', exerciseSplit: { userId: userData.userId } },
@@ -1128,7 +1130,8 @@ test('add and remove sets in a workout: saved as done, and My routines keeps its
 	page,
 	userData
 }) => {
-	await createSplitAndMesoForTest(page);
+	await seedTemplateSplitAndMeso(userData.userId);
+	await page.goto('/workouts');
 	const routineBefore = await prisma.exerciseTemplate.findMany({
 		where: { exerciseSplitDay: { name: 'Pull A', exerciseSplit: { userId: userData.userId } } },
 		orderBy: { exerciseIndex: 'asc' }

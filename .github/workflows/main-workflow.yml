@@ -78,8 +78,10 @@ jobs:
         timeout-minutes: 10
         run: pnpm exec playwright install-deps chromium
 
-      - name: Verify first-failure capture and privacy boundary
-        run: node --test tests/diagnostics/capture.test.cjs
+      - name: Verify first-failure capture, retry summary and privacy boundary
+        run: |
+          node --test tests/diagnostics/capture.test.cjs
+          node --test tests/diagnostics/retried-tests-summary.test.cjs
 
       - name: Run Playwright tests
         run: pnpm exec playwright test
@@ -89,6 +91,12 @@ jobs:
         id: safe_evidence
         if: always()
         run: node tests/diagnostics/safe-artifacts.cjs playwright-diagnostics
+
+      # Lists each test that needed a retry in the run's summary, so flakes are visible without opening logs.
+      # Reads only the validated diagnostics above; it collects nothing new.
+      - name: Summarize retried tests
+        if: always()
+        run: node tests/diagnostics/retried-tests-summary.cjs playwright-diagnostics
 
       - name: Upload safe Playwright evidence
         uses: actions/upload-artifact@v4

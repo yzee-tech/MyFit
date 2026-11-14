@@ -19,7 +19,14 @@ What changed in MyFit, newest first.
   Escape only once it lands inside it, so a press during the open could be ignored.
 - The workout-panel test waits for the switched routine's exercises to load before leaving the workout:
   leaving earlier catches the workout before it has begun, when the panel is deliberately hidden.
-- No app behavior, timeout limit, retry policy or CI setting changed; fail-on-flaky stays on.
+- The warm-up sheet tests wait for the sheet's open focus before pressing Escape: the same timing hole
+  as the quick-add sheet had, where a press during the open could be ignored.
+- The two slowest workout tests (the ask-each-time units test and the add-and-remove-sets test) seed
+  their routines and block through the same server calls the screens make, instead of spending their
+  time budget clicking through the template and block setup. What each test checks is unchanged.
+- No app behavior, timeout limit or retry policy changed; fail-on-flaky stays on. The only CI change is
+  a run summary listing the tests that needed a retry, built from the already-validated failure
+  diagnostics, so flakes are visible without opening logs; it collects nothing new.
 
 ## 2026-11-13: a locked measure shows just its fixed type
 
