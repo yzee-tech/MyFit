@@ -8,6 +8,7 @@ import {
 	editWorkoutExercise,
 	expectBox,
 	expectBoxNot,
+	openExercisePicker,
 	pickRoutine,
 	quickAdd,
 	saveRoutine,
@@ -616,7 +617,7 @@ test('New exercise in a routine: picking one already on your list keeps what you
 	await page.locator('#exercise-note').fill('seat on 4');
 
 	// Start a new exercise, then pick Sit-ups from your list instead
-	await page.getByLabel('Pick an exercise').click();
+	await openExercisePicker(page);
 	await page.getByRole('button', { name: 'New exercise' }).click();
 	await page.locator('#exercise-form-name').fill('Sit');
 	await page.getByTestId('existing-exercise-matches').getByRole('button', { name: 'Sit-ups' }).click();

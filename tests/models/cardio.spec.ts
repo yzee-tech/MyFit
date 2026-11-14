@@ -1,6 +1,14 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createExercises, editWorkoutExercise, expectBox, pickRoutine, quickAdd, saveWorkout } from './commonFunctions';
+import {
+	createExercises,
+	editWorkoutExercise,
+	expectBox,
+	pickExercise,
+	pickRoutine,
+	quickAdd,
+	saveWorkout
+} from './commonFunctions';
 import { holdFirstResponse } from '../support/holdFirstResponse';
 
 const prisma = new PrismaClient();
@@ -513,9 +521,7 @@ test('"Previous" repeats last time’s intervals, tap to copy; History copies th
 		data: { userId, name: 'Trail run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'MI' }
 	});
 	await editWorkoutExercise(page, 'Run');
-	await page.getByLabel('Pick an exercise').click();
-	await page.getByPlaceholder('Search your exercises').fill('Trail run');
-	await page.getByRole('option', { name: 'Trail run', exact: true }).click();
+	await pickExercise(page, 'Trail run');
 	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(page.getByTestId('Trail run-distance-unit')).toHaveText('MI');
 	await expect(box(page, 'Trail run', 1, 'distance')).toHaveValue('3.107');
@@ -549,9 +555,7 @@ test('a typed-over distance suggestion is remembered in the new unit after a dis
 		data: { userId, name: 'Trail run', targetMuscleGroup: 'Cardio', measure: 'DistanceTime', distanceUnit: 'MI' }
 	});
 	await editWorkoutExercise(page, 'Run');
-	await page.getByLabel('Pick an exercise').click();
-	await page.getByPlaceholder('Search your exercises').fill('Trail run');
-	await page.getByRole('option', { name: 'Trail run', exact: true }).click();
+	await pickExercise(page, 'Trail run');
 	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(box(page, 'Trail run', 1, 'distance')).toHaveValue('4.35');
 	// Emptied, the box shows the suggestion in miles, not the old 5 km
@@ -577,9 +581,7 @@ test("swapping a cardio exercise for a strength one drops the old measure's numb
 	// Typed over the suggestion, so the old measure's remembered numbers exist to be dropped
 	await box(page, 'Run', 1, 'distance').fill('7');
 	await editWorkoutExercise(page, 'Run');
-	await page.getByLabel('Pick an exercise').click();
-	await page.getByPlaceholder('Search your exercises').fill('Push-up');
-	await page.getByRole('option', { name: 'Push-up', exact: true }).click();
+	await pickExercise(page, 'Push-up');
 	await page.getByRole('button', { name: 'Update' }).click();
 	// Reps & weight now: empty, and nothing of the run's suggestion shows or lingers
 	await expectBox(page.locator('[id="Push-up-set-1-reps"]'), '');
@@ -637,9 +639,7 @@ test("swapping a strength exercise for a cardio one drops the old measure's numb
 	expect(beforeSwap.workoutExercises[0].sets[0].suggested).toBeDefined();
 	expect(beforeSwap.workoutExercises[0].sets[0].hintBase).toBeDefined();
 	await editWorkoutExercise(page, 'Bench press');
-	await page.getByLabel('Pick an exercise').click();
-	await page.getByPlaceholder('Search your exercises').fill('Run');
-	await page.getByRole('option', { name: 'Run', exact: true }).click();
+	await pickExercise(page, 'Run');
 	await page.getByRole('button', { name: 'Update' }).click();
 	// Distance and time now: empty, and nothing of the lift's numbers, suggestion or hint lingers
 	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('');

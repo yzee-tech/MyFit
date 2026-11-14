@@ -2,6 +2,25 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-14: steadier workout tests
+
+### Tests
+
+- Quick add retries each checkbox click until the tick lands (checking first so a landed tick isn't
+  toggled back off), and afterwards checks that only the requested exercises are ticked, naming any
+  stray row. The exact Add count check is unchanged.
+- The 390px layout check waits for the resize to take effect, then retries the whole measurement,
+  re-querying every tick box and remove button on each attempt and naming the element in any failure.
+  The width, overflow and required-element assertions are unchanged.
+- The nine places that tapped "Pick an exercise" directly now use the retry-hardened picker helpers:
+  pickExercise where the test simply picks an exercise, and the new openExercisePicker where the test
+  goes on to check search, the clear button or the keyboard itself. What each test checks is unchanged.
+- The quick-add sheet test waits for the sheet's open focus before pressing Escape: the dialog acts on
+  Escape only once it lands inside it, so a press during the open could be ignored.
+- The workout-panel test waits for the switched routine's exercises to load before leaving the workout:
+  leaving earlier catches the workout before it has begun, when the panel is deliberately hidden.
+- No app behavior, timeout limit, retry policy or CI setting changed; fail-on-flaky stays on.
+
 ## 2026-11-13: a locked measure shows just its fixed type
 
 ### Changed
