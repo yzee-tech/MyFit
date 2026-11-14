@@ -10,6 +10,7 @@ import {
 	editWorkoutExercise,
 	expectBox,
 	expectBoxNot,
+	pickExercise,
 	pickRoutine,
 	quickAdd,
 	saveRoutine,
@@ -934,20 +935,29 @@ test('save a blank workout as a routine: added to My routines, a taken name gets
 /** At phone width every set row fits: nothing scrolls sideways and every tick box is on screen */
 async function expectSetsFitPhone(page: Page) {
 	await page.setViewportSize({ width: 390, height: 844 });
-	const overflow = await page.evaluate(
-		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
-	);
-	expect(overflow).toBeLessThanOrEqual(0);
-	const boxes = page.getByRole('checkbox');
-	expect(await boxes.count()).toBeGreaterThan(0);
-	// The tick boxes, and the remove buttons after them (where shown)
-	const removeButtons = page.locator('[data-testid$="-remove"]:visible');
-	for (const box of [...(await boxes.all()), ...(await removeButtons.all())]) {
-		const rect = await box.boundingBox();
-		expect(rect).not.toBeNull();
-		expect(rect!.x).toBeGreaterThanOrEqual(0);
-		expect(rect!.x + rect!.width).toBeLessThanOrEqual(390);
-	}
+	// The resize isn't instant: measure only once the page really is 390px wide
+	await page.waitForFunction(() => window.innerWidth === 390);
+	// Right after ticking sets an element can be hidden or detached for a moment, so retry the
+	// whole measurement, re-querying every box on each attempt. The assertions themselves are
+	// unchanged: a persistent layout fault still fails, now naming the element.
+	await expect(async () => {
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+		expect(overflow, 'the page scrolls sideways at 390px').toBeLessThanOrEqual(0);
+		const boxes = page.getByRole('checkbox');
+		expect(await boxes.count(), 'no tick boxes found').toBeGreaterThan(0);
+		// The tick boxes, and the remove buttons after them (where shown)
+		const removeButtons = page.locator('[data-testid$="-remove"]:visible');
+		for (const box of [...(await boxes.all()), ...(await removeButtons.all())]) {
+			const name =
+				(await box.getAttribute('data-testid')) ?? (await box.getAttribute('aria-label')) ?? 'unknown';
+			const rect = await box.boundingBox();
+			expect(rect, `${name} cannot be measured`).not.toBeNull();
+			expect(rect!.x, `${name} starts off the left edge`).toBeGreaterThanOrEqual(0);
+			expect(rect!.x + rect!.width, `${name} sticks out past 390px`).toBeLessThanOrEqual(390);
+		}
+	}).toPass({ timeout: 5000 });
 }
 
 async function fillSet(
@@ -2108,9 +2118,7 @@ test('a measure change on the Exercises page drops every follow to set 1', async
 	// Back in the workout, a drawer Edit re-picking the exercise brings the new measure in
 	await page.goto('/workouts/manage/exercises');
 	await editWorkoutExercise(page, 'Sled push');
-	await page.getByLabel('Pick an exercise').click();
-	await page.getByPlaceholder('Search your exercises').fill('Sled push');
-	await page.getByRole('option', { name: 'Sled push', exact: true }).click();
+	await pickExercise(page, 'Sled push');
 	await page.getByRole('button', { name: 'Update' }).click();
 	// The old measure's numbers are gone, persisted included. No suggestion or hint can exist here
 	// to drop: the Exercises page only allows the change while the exercise has no workouts, so

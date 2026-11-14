@@ -4,6 +4,7 @@ import {
 	createTemplateExerciseSplit,
 	deleteRoutine,
 	editRoutine,
+	openExercisePicker,
 	pickExercise,
 	saveRoutine
 } from './commonFunctions';
@@ -76,7 +77,7 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 
 	// A new exercise, made from the picker
 	await page.getByLabel('add-exercise').click();
-	await page.getByLabel('Pick an exercise').click();
+	await openExercisePicker(page);
 	await page.getByRole('button', { name: 'New exercise' }).click();
 	await page.locator('#exercise-form-name').fill('Custom exercise');
 	await page.getByRole('combobox', { name: 'Muscle group' }).click();
