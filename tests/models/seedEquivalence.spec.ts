@@ -6,8 +6,9 @@ import { seedTemplateSplitAndMeso } from '../support/blocks';
 const prisma = new PrismaClient();
 
 /**
- * The saved routines-and-block state, stripped of every database id and timestamp, so two ways of
- * building the same setup can be compared on what a real user gets, not on row identity
+ * The saved routines-and-block state, with every database id removed and every timestamp reduced to its
+ * semantic state (unset vs set), so two ways of building the same setup can be compared on what a real
+ * user gets, not on row identity or clock time
  */
 async function snapshotSettings(userId: string) {
 	const split = await prisma.exerciseSplit.findUnique({
@@ -23,12 +24,19 @@ async function snapshotSettings(userId: string) {
 		where: { userId },
 		include: { mesocycleCyclicSetChanges: true }
 	});
+	// Reduce the block-to-split link to its semantics before ids are stripped: linked to this split,
+	// linked elsewhere, or not linked (exerciseSplitId itself is removed below with the other ids)
+	if (meso)
+		(meso as unknown as Record<string, unknown>).splitLink =
+			meso.exerciseSplitId == null ? null : meso.exerciseSplitId === split?.id ? '<linked>' : '<other>';
 	return JSON.parse(
-		JSON.stringify({ split, meso }, (key, value) =>
-			['id', 'userId', 'exerciseSplitId', 'exerciseSplitDayId', 'exerciseId', 'mesocycleId', 'startDate'].includes(key)
-				? undefined
-				: value
-		)
+		JSON.stringify({ split, meso }, (key, value) => {
+			if (['id', 'userId', 'exerciseSplitId', 'exerciseSplitDayId', 'exerciseId', 'mesocycleId'].includes(key))
+				return undefined;
+			// A started block's startDate always differs by clock time; what matters is started vs unstarted
+			if (key === 'startDate' || key === 'endDate') return value == null ? null : true;
+			return value;
+		})
 	);
 }
 
