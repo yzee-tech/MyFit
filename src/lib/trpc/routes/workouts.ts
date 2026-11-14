@@ -262,7 +262,16 @@ const workoutInputDataSchema = z.object({
 	note: z.string().optional()
 });
 
-const createWorkoutSchema = z.strictObject({
+/**
+ * A new workout as the server takes it. A workout saved with no signal waits on the phone as exactly this
+ * input (see $lib/workoutOutbox) and is sent after app updates too, so a change to it must stay additive
+ * and optional: tests/progression/offlineSaving.spec.ts keeps a sample of a queued request parsing
+ */
+export const createWorkoutSchema = z.strictObject({
+	/** The workout's id, made on the phone: sending the same workout twice saves it once */
+	clientId: z.string().cuid2().optional(),
+	/** Only for a workout sent late from the phone: if its block is gone by then, save it outside any block */
+	ifBlockGone: z.literal('saveOutsideBlock').optional(),
 	timeZone: z.string().optional().catch(undefined),
 	workoutData: workoutInputDataSchema,
 	workoutExercises: z.array(ignoreExerciseLink(WorkoutExerciseCreateWithoutWorkoutInputSchema)),
@@ -292,6 +301,22 @@ function assertListsLineUp(input: z.infer<typeof createWorkoutSchema>) {
  */
 function routineNameOf(workoutData: z.infer<typeof workoutInputDataSchema>) {
 	return workoutData.routineName ?? workoutData.workoutOfMesocycle?.splitDayName ?? null;
+}
+
+/**
+ * A workout this person's phone already sent (same id): the answer for it, nothing written. Another
+ * account's id is refused in general words, so an id says nothing about whose workout it is
+ */
+async function alreadySavedWorkout(userId: string, workoutId: string) {
+	const existing = await prisma.workout.findUnique({ where: { id: workoutId }, select: { userId: true } });
+	if (!existing) return null;
+	if (existing.userId !== userId) throw new TRPCError({ code: 'CONFLICT', message: 'This workout can’t be saved' });
+	return {
+		message: 'Workout saved already',
+		workoutId,
+		alreadySaved: true,
+		savedOutsideBlock: false
+	};
 }
 
 /** A new workout's end time: the one given (its last ticked set), kept between its start and now */
@@ -863,11 +888,16 @@ export const workouts = t.router({
 		}),
 
 	create: t.procedure.input(createWorkoutSchema).mutation(async ({ ctx, input }) => {
+		// A workout the phone already sent: saved once, whatever the second request says (first write wins)
+		if (input.clientId) {
+			const already = await alreadySavedWorkout(ctx.userId, input.clientId);
+			if (already) return already;
+		}
 		await assertSetsMatchMeasures(ctx.userId, input);
 		const startedAt = new Date(input.workoutData.startedAt ?? new Date());
 		const routineName = routineNameOf(input.workoutData);
 		const workout: Prisma.WorkoutUncheckedCreateInput = {
-			id: createId(),
+			id: input.clientId ?? createId(),
 			userId: ctx.userId,
 			startedAt,
 			endedAt: newWorkoutEnd(startedAt, input.workoutData.endedAt),
@@ -914,30 +944,57 @@ export const workouts = t.router({
 
 		// One transaction: the block is locked and its plan-end pause made, the workout's block and week decided, and
 		// the workout written, with nothing able to change the block in between (a Finish waits for the lock)
-		await prisma.$transaction(async (tx) => {
-			if (workoutOfMesocycle) {
-				// Only one of the user's own blocks
-				const membership = await blockMembershipForWorkoutInTx(
-					tx,
-					ctx.userId,
-					workoutOfMesocycle.mesocycle.id,
-					startedAt,
-					input.timeZone
-				);
-				if (!membership.found) throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
-				// A workout started while the block was paused is an ordinary one, not part of the block
-				if (membership.inBlock) {
-					workout.isDeload = membership.isDeload;
-					workout.workoutOfMesocycle = { create: { mesocycleId: workoutOfMesocycle.mesocycle.id } };
+		let savedOutsideBlock = false;
+		try {
+			await prisma.$transaction(async (tx) => {
+				if (workoutOfMesocycle) {
+					// Only one of the user's own blocks
+					const membership = await blockMembershipForWorkoutInTx(
+						tx,
+						ctx.userId,
+						workoutOfMesocycle.mesocycle.id,
+						startedAt,
+						input.timeZone
+					);
+					if (!membership.found) {
+						// A workout sent late from the phone, its block gone meanwhile: an ordinary workout, and the
+						// answer says so. A live save still gets the error
+						if (input.ifBlockGone !== 'saveOutsideBlock') {
+							throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' });
+						}
+						savedOutsideBlock = true;
+					}
+					// A workout started while the block was paused is an ordinary one, not part of the block
+					else if (membership.inBlock) {
+						workout.isDeload = membership.isDeload;
+						workout.workoutOfMesocycle = { create: { mesocycleId: workoutOfMesocycle.mesocycle.id } };
+					}
 				}
+				await lifecycleTestHooks.beforeWorkoutWrite?.();
+				await tx.workout.create({ data: workout });
+				await tx.workoutExercise.createMany({ data: workoutExercises });
+				await tx.workoutExerciseSet.createMany({ data: workoutExercisesSets });
+				await tx.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets });
+			}, ROUTINES_TRANSACTION_OPTIONS);
+		} catch (error) {
+			// Two sends of one workout at once: the one that lost the race finds it saved
+			// (P2002 a duplicate id, P2034 a write conflict)
+			if (
+				input.clientId &&
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				(error.code === 'P2002' || error.code === 'P2034')
+			) {
+				const already = await alreadySavedWorkout(ctx.userId, input.clientId);
+				if (already) return already;
 			}
-			await lifecycleTestHooks.beforeWorkoutWrite?.();
-			await tx.workout.create({ data: workout });
-			await tx.workoutExercise.createMany({ data: workoutExercises });
-			await tx.workoutExerciseSet.createMany({ data: workoutExercisesSets });
-			await tx.workoutExerciseMiniSet.createMany({ data: workoutExercisesMiniSets });
-		}, ROUTINES_TRANSACTION_OPTIONS);
-		return { message: 'Workout created successfully', workoutId: workout.id as string };
+			throw error;
+		}
+		return {
+			message: 'Workout created successfully',
+			workoutId: workout.id as string,
+			alreadySaved: false,
+			savedOutsideBlock
+		};
 	}),
 
 	/** Turns a saved workout's use for progression on or off: it stays in history and stats either way */

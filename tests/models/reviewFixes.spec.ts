@@ -288,7 +288,7 @@ test('History: an answer for the exercise opened before isn’t added to the one
 	await expect(sheet.getByLabel('Copy these sets')).toHaveCount(1);
 });
 
-test('a save that can’t reach the server says so and keeps the workout; Save again saves it', async ({
+test('a save that can’t reach the server is kept on the phone, and sent by itself a few seconds later', async ({
 	page,
 	userData
 }) => {
@@ -299,10 +299,10 @@ test('a save that can’t reach the server says so and keeps the workout; Save a
 	await page.getByRole('button', { name: 'Next' }).click();
 	await failFirstRequest(page, /workouts\.create/);
 	await page.getByRole('button', { name: 'Save' }).click();
-	// Was the browser's own "Failed to fetch" (and nothing at all for any other kind of error)
-	await expect(page.getByText("Couldn't save the workout, check your connection and try again")).toBeVisible();
+	// Was the browser's own "Failed to fetch", then "Couldn't save the workout...": now it is kept, and says where
+	await expect(page.getByTestId('saved-on-phone')).toContainText('kept on this phone');
 	expect(await prisma.workout.count({ where: { userId: userData.userId } })).toEqual(2);
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Workout created successfully' })).toBeVisible();
+	// The first try after the first pause finds the server again
+	await expect(page.getByRole('status').filter({ hasText: 'Workout sent' })).toBeVisible({ timeout: 20000 });
 	expect(await prisma.workout.count({ where: { userId: userData.userId } })).toEqual(3);
 });
