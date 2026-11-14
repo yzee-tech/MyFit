@@ -29,6 +29,10 @@
 	let keptOnPhoneId: string | null = $state(null);
 	let sentFromPhone = $derived(keptOnPhoneId !== null && !workoutOutbox.has(keptOnPhoneId));
 	let workoutExercises = $derived(workoutRunes.workoutExercises ?? []);
+	// No workout here (the page was reloaded after the workout was kept on the phone, or the app was closed in
+	// between): nothing to show but where it is, and with nothing waiting either, a way back to the list
+	let noWorkout = $derived(workoutRunes.workoutData === null);
+	let showKept = $derived(keptOnPhoneId !== null || (noWorkout && workoutOutbox.entries.length > 0));
 
 	function preProcessSetData() {
 		if (workoutRunes.workoutData === null || workoutRunes.workoutExercises === null) return;
@@ -151,7 +155,7 @@
 	}
 </script>
 
-{#if keptOnPhoneId !== null}
+{#if showKept}
 	<H3>{sentFromPhone ? 'Workout sent' : 'Saved on this phone'}</H3>
 	<div class="flex w-full flex-col gap-3 rounded-md border bg-card p-4" data-testid="saved-on-phone">
 		<p>
@@ -171,7 +175,7 @@
 			<Button class={sentFromPhone ? 'col-span-2' : ''} onclick={() => goto('/workouts')}>Back to workouts</Button>
 		</div>
 	</div>
-{:else}
+{:else if !noWorkout}
 	<H3>Overview</H3>
 
 	{#if shouldShowQuote}
@@ -222,5 +226,11 @@
 				Save
 			{/if}
 		</Button>
+	</div>
+{:else}
+	<H3>No workout here</H3>
+	<div class="flex w-full flex-col gap-3 rounded-md border bg-card p-4" data-testid="no-workout-here">
+		<p>There's no workout in progress to show. Your finished workouts are on the Workouts page.</p>
+		<Button onclick={() => goto('/workouts')}>Back to workouts</Button>
 	</div>
 {/if}

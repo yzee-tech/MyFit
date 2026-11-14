@@ -4,6 +4,8 @@
  * sent when the app is open and online. Sending it twice saves it once (the server checks the id).
  * The reactive store and the sender are in $lib/workoutOutbox.svelte.ts
  */
+import type { WeightUnit } from './prismaEnums';
+import { fromKg, isLevelUnit, unitLabel } from './weightUnits';
 import { blankWorkoutName } from './workoutNames';
 
 export const OUTBOX_KEY = 'workoutOutbox:v1';
@@ -25,7 +27,7 @@ export type OutboxRequest = {
 		countsForProgression?: boolean;
 		workoutOfMesocycle?: { mesocycle: { id: string }; splitDayName?: string };
 	};
-	workoutExercises: { name: string }[];
+	workoutExercises: { name: string; weightUnit?: WeightUnit | null }[];
 	workoutExercisesSets: OutboxSet[][];
 	workoutExercisesMiniSets: OutboxSet[][][];
 	ifBlockGone?: 'saveOutsideBlock';
@@ -251,7 +253,7 @@ function two(n: number) {
 }
 
 /**
- * A waiting workout as plain text to retype by hand: for a person, not an import. Loads are in kg as stored,
+ * A waiting workout as plain text to retype by hand: for a person, not an import. Loads are in the exercise's unit (kg, lb or a machine's level),
  * the date and time in the phone's language
  */
 export function workoutSummaryText(entry: Pick<OutboxEntry, 'label' | 'request'>, locale?: string): string {
@@ -263,7 +265,7 @@ export function workoutSummaryText(entry: Pick<OutboxEntry, 'label' | 'request'>
 	const lines = [
 		`${entry.label}, ${day}, ${two(started.getHours())}:${two(started.getMinutes())}, ${minutes} min, bodyweight ${request.workoutData.userBodyweight} kg`
 	];
-	const setLine = (index: number, set: OutboxSet, indent: string) => {
+	const setLine = (index: number, set: OutboxSet, indent: string, unit: WeightUnit | null | undefined) => {
 		const label = `${indent}${index + 1}:`;
 		if (set.skipped) return `${label} skipped`;
 		const hasCardio = set.timeSeconds !== undefined && set.timeSeconds !== null;
@@ -275,14 +277,19 @@ export function workoutSummaryText(entry: Pick<OutboxEntry, 'label' | 'request'>
 			const level = set.load ? `, level ${set.load}` : '';
 			return `${label} ${time}${distance}${level}`;
 		}
-		return `${label} ${set.reps ?? 0} x ${set.load ?? 0} kg, RIR ${set.RIR ?? 0}`;
+		const load = set.load ?? 0;
+		// Loads are stored in kg and shown in the exercise's unit; a machine's level is a number, not a weight
+		const shown = isLevelUnit(unit)
+			? `level ${load}`
+			: `${Math.round(fromKg(load, unit ?? 'KG') * 100) / 100} ${unitLabel(unit ?? 'KG')}`;
+		return `${label} ${set.reps ?? 0} x ${shown}, RIR ${set.RIR ?? 0}`;
 	};
 	request.workoutExercises.forEach((exercise, exerciseIndex) => {
 		lines.push('', exercise.name);
 		(request.workoutExercisesSets[exerciseIndex] ?? []).forEach((set, setIndex) => {
-			lines.push(setLine(setIndex, set, '  '));
+			lines.push(setLine(setIndex, set, '  ', exercise.weightUnit));
 			(request.workoutExercisesMiniSets[exerciseIndex]?.[setIndex] ?? []).forEach((mini, miniIndex) => {
-				lines.push(setLine(miniIndex, mini, '    mini-set '));
+				lines.push(setLine(miniIndex, mini, '    mini-set ', exercise.weightUnit));
 			});
 		});
 	});

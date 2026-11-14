@@ -25,6 +25,15 @@ What changed in MyFit, newest first.
 - A save made while you are signed out (or after the sign-in lapsed) now answers "not signed in" instead of a
   server error.
 
+### Fixed
+
+- **"Update app" no longer deletes workouts waiting to be sent.** Updating clears what is stored on the phone but
+  now keeps the waiting workouts (and their backups).
+- **Reloading the "Saved on this phone" page no longer shows a blank screen.** It says the workout is kept on the
+  phone (or, with nothing waiting, that there is no workout here, with a button back to the Workouts page).
+- **Copy details shows each exercise's own unit**: kg, lb, or "level 8" for a machine's level (it printed every
+  load as kg).
+
 ### Limits
 
 - A waiting workout lives only on that phone: clearing the browser's data or removing the app before it is sent

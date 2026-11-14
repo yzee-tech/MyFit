@@ -358,7 +358,11 @@ test('starting the next workout sends the waiting one first; if it can’t be se
 	reachable = true;
 	await page.evaluate(() => localStorage.removeItem('workoutRunes'));
 	await page.goto('/workouts');
-	await page.getByLabel('create-workout').click();
+	// Tap until the start sheet is open: a tap before the page is ready can miss
+	await expect(async () => {
+		if (!(await page.getByPlaceholder('Type here').isVisible())) await page.getByLabel('create-workout').click();
+		await expect(page.getByPlaceholder('Type here')).toBeVisible({ timeout: 1000 });
+	}).toPass();
 	await page.getByPlaceholder('Type here').fill('80');
 	if (await page.getByRole('radio', { name: /^Blank workout/ }).count()) await pickRoutine(page, 'Blank workout');
 	await page.getByRole('button', { name: 'Next' }).click();
@@ -436,4 +440,37 @@ test('a signed-in save over HTTP is unchanged: it answers with the workout', asy
 	const answer = await page.request.post('/trpc/workouts.create', { data: createBody(clientId) });
 	expect(answer.status()).toBe(200);
 	expect((await savedWorkouts(userData.userId)).map((workout) => workout.id)).toEqual([clientId]);
+});
+
+test('reloading the "Saved on this phone" page keeps saying so; with nothing waiting it says so and leads back to the list', async ({
+	page,
+	context,
+	userData
+}) => {
+	await finishPageWithOneSet(page);
+	await context.setOffline(true);
+	await press(page).click();
+	await expect(page.getByTestId('saved-on-phone')).toBeVisible();
+	// The server is reachable again but the save is still refused (aborted): the workout keeps waiting
+	await page.route(CREATE, (route) => route.abort());
+	await context.setOffline(false);
+	// Reloaded with the workout waiting: a message, no blank page
+	const errors: string[] = [];
+	page.on('pageerror', (error) => errors.push(error.message));
+	await page.reload();
+	await expect(page.getByTestId('saved-on-phone')).toContainText('kept on this phone');
+	expect(errors).toEqual([]);
+	// Once it is sent (by Send now, or by a try the app makes by itself) nothing waits: the page says there is no
+	// workout here, with a way back to the list
+	await page.unroute(CREATE);
+	await expect(async () => {
+		const sendNow = page.getByTestId('saved-on-phone').getByRole('button', { name: 'Send now' });
+		if (await sendNow.isEnabled({ timeout: 500 }).catch(() => false)) await sendNow.click({ timeout: 1000 });
+		await expect(page.getByTestId('no-workout-here')).toBeVisible({ timeout: 2000 });
+	}).toPass({ timeout: 30000 });
+	expect(await savedWorkouts(userData.userId)).toHaveLength(1);
+	expect(errors).toEqual([]);
+	await page.reload();
+	await page.getByTestId('no-workout-here').getByRole('button', { name: 'Back to workouts' }).click();
+	await page.waitForURL('/workouts');
 });

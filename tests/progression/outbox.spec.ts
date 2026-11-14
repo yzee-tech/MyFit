@@ -13,6 +13,7 @@ import {
 	type OutboxRequest,
 	type SendResult
 } from '../../src/lib/utils/outbox';
+import { clearStorageForUpdate } from '../../src/lib/utils/clearForUpdate';
 
 /**
  * The waiting list for workouts saved with no signal: what a failed send means, what is kept and what never
@@ -311,4 +312,50 @@ test('Copy details: a readable text to retype, with skipped sets, cardio, mini-s
 			'Note: Hotel gym'
 		].join('\n')
 	);
+});
+
+test('Copy details shows each exercise in its own unit: kg, lb, or a machine’s level', () => {
+	const base = request('a', '2026-11-13T09:12:00');
+	const text = workoutSummaryText({
+		label: 'Machines',
+		request: {
+			...base,
+			workoutExercises: [
+				{ name: 'Chest press', weightUnit: 'LEVEL' },
+				{ name: 'Curls', weightUnit: 'LB' },
+				{ name: 'Rows', weightUnit: 'KG' }
+			],
+			workoutExercisesSets: [
+				[{ reps: 12, load: 8, RIR: 2, skipped: false }],
+				[{ reps: 10, load: 13.6078, RIR: 1, skipped: false }],
+				[{ reps: 8, load: 40, RIR: 0, skipped: false }]
+			],
+			workoutExercisesMiniSets: [[[{ reps: 5, load: 7, RIR: 0 }]], [[]], [[]]]
+		}
+	});
+	expect(text).toContain('  1: 12 x level 8, RIR 2');
+	expect(text).toContain('mini-set 1: 5 x level 7, RIR 0');
+	expect(text).toContain('  1: 10 x 30 lb, RIR 1');
+	expect(text).toContain('  1: 8 x 40 kg, RIR 0');
+	expect(text).not.toMatch(/level 8 kg|8 kg/);
+});
+
+test('updating the app keeps the waiting workouts and their backups, and clears the rest', () => {
+	const store = new FakeStorage();
+	store.items.set('workoutOutbox:v1', '[{"clientId":"a"}]');
+	store.items.set('workoutOutbox:backup:123', 'unreadable');
+	store.items.set('workoutRunes', '{}');
+	store.items.set('theme', 'dark');
+	const asStorage = {
+		get length() {
+			return store.items.size;
+		},
+		key: (i: number) => [...store.items.keys()][i] ?? null,
+		getItem: (key: string) => store.items.get(key) ?? null,
+		setItem: (key: string, value: string) => void store.items.set(key, value),
+		clear: () => store.items.clear()
+	};
+	clearStorageForUpdate(asStorage);
+	expect([...store.items.keys()].sort()).toEqual(['workoutOutbox:backup:123', 'workoutOutbox:v1', 'workoutRunes']);
+	expect(store.items.get('workoutOutbox:v1')).toBe('[{"clientId":"a"}]');
 });
