@@ -93,9 +93,10 @@ jobs:
         run: node tests/diagnostics/safe-artifacts.cjs playwright-diagnostics
 
       # Lists each test that needed a retry in the run's summary, so flakes are visible without opening logs.
-      # Reads only the validated diagnostics above; it collects nothing new.
+      # Runs only when the privacy boundary above succeeded, and the script re-validates each record
+      # with the same strict validator before rendering it; it collects nothing new.
       - name: Summarize retried tests
-        if: always()
+        if: ${{ always() && steps.safe_evidence.outcome == 'success' }}
         run: node tests/diagnostics/retried-tests-summary.cjs playwright-diagnostics
 
       - name: Upload safe Playwright evidence

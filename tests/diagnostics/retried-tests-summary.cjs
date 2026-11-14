@@ -2,27 +2,34 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Node CLI entry points use CommonJS. */
 /**
  * Lists the run's retried tests in the GitHub step summary, so flakes are visible without opening logs.
- * Reads only the validated playwright-diagnostics JSON (file, line, retry, status); it collects nothing new.
+ * Reads only playwright-diagnostics JSON (file, line, retry, status); it collects nothing new.
+ * Every record is re-validated with the same strict validator as safe-artifacts.cjs before anything is
+ * rendered, so a record the privacy boundary would reject can never reach the summary, and the workflow
+ * step runs only when that boundary step succeeded.
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { validateArtifact } = require('./safe-artifacts.cjs');
 
 /**
  * One entry per test that needed more than one attempt: where it is, how many attempts, how it ended.
- * Reads every <name>.json in dir; files that are not diagnostics records are skipped.
+ * Reads every <name>.json in dir; files that are not diagnostics records, or that fail the strict
+ * validator, are skipped (counted, never rendered).
  */
 function summarizeRetried(dir) {
-	if (!fs.existsSync(dir)) return { entries: [], missing: true };
+	if (!fs.existsSync(dir)) return { entries: [], missing: true, rejected: 0 };
 	const attemptsByTest = new Map();
+	let rejected = 0;
 	for (const name of fs.readdirSync(dir)) {
 		if (!name.endsWith('.json')) continue;
 		let data;
 		try {
 			data = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+			validateArtifact(data);
 		} catch {
+			if (data && typeof data === 'object' && !Array.isArray(data)) rejected += 1;
 			continue;
 		}
-		if (typeof data.file !== 'string' || typeof data.line !== 'number' || typeof data.retry !== 'number') continue;
 		const where = `${data.file}:${data.line}`;
 		if (!attemptsByTest.has(where)) attemptsByTest.set(where, []);
 		attemptsByTest.get(where).push({ retry: data.retry, status: data.status });
@@ -39,11 +46,11 @@ function summarizeRetried(dir) {
 		});
 	}
 	entries.sort((a, b) => a.where.localeCompare(b.where));
-	return { entries, missing: false };
+	return { entries, missing: false, rejected };
 }
 
 /** The markdown appended to the run's summary */
-function render({ entries, missing }) {
+function render({ entries, missing, rejected }) {
 	const body = missing
 		? ['No diagnostics found: the tests never ran, so there is nothing to summarize.']
 		: entries.length === 0
@@ -52,6 +59,7 @@ function render({ entries, missing }) {
 					`${entries.length} test(s) needed a retry:`,
 					...entries.map((entry) => `- \`${entry.where}\` — ${entry.attempts} attempts, ${entry.outcome}`)
 				];
+	if (rejected > 0) body.push(`${rejected} record(s) failed the strict diagnostics validator and were omitted.`);
 	return ['## Retried tests', '', ...body, ''].join('\n');
 }
 

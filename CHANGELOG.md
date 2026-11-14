@@ -25,8 +25,9 @@ What changed in MyFit, newest first.
   their routines and block through the same server calls the screens make, instead of spending their
   time budget clicking through the template and block setup. What each test checks is unchanged.
 - No app behavior, timeout limit or retry policy changed; fail-on-flaky stays on. The only CI change is
-  a run summary listing the tests that needed a retry, built from the already-validated failure
-  diagnostics, so flakes are visible without opening logs; it collects nothing new.
+  a run summary listing the tests that needed a retry, so flakes are visible without opening logs; it
+  collects nothing new. It runs only when the failure-evidence privacy validation succeeded, and every
+  record is re-validated with the same strict validator before anything is rendered.
 
 ## 2026-11-13: a locked measure shows just its fixed type
 
