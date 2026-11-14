@@ -950,8 +950,7 @@ async function expectSetsFitPhone(page: Page) {
 		// The tick boxes, and the remove buttons after them (where shown)
 		const removeButtons = page.locator('[data-testid$="-remove"]:visible');
 		for (const box of [...(await boxes.all()), ...(await removeButtons.all())]) {
-			const name =
-				(await box.getAttribute('data-testid')) ?? (await box.getAttribute('aria-label')) ?? 'unknown';
+			const name = (await box.getAttribute('data-testid')) ?? (await box.getAttribute('aria-label')) ?? 'unknown';
 			const rect = await box.boundingBox();
 			expect(rect, `${name} cannot be measured`).not.toBeNull();
 			expect(rect!.x, `${name} starts off the left edge`).toBeGreaterThanOrEqual(0);
@@ -1266,6 +1265,9 @@ test('workout panel: on Log workout after Back and on every screen, resumes the 
 	await page.getByRole('dialog').getByRole('button', { name: 'Switch', exact: true }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
 	await expect.poll(async () => (await savedWorkoutState(page)).workoutData.routineName).toBe('Push A');
+	// The exercises load after the switch; leaving before they land catches the workout before it
+	// has begun, when the panel is deliberately hidden
+	await expect.poll(async () => (await savedWorkoutState(page))?.workoutExercises?.length ?? 0).toBeGreaterThan(0);
 
 	// The trash asks first
 	await page.goto('/workouts');
@@ -2322,6 +2324,9 @@ test('Quick add: several at once in the order ticked, 1 set each, from the last 
 	await expect(sheet.getByRole('checkbox', { name: 'Barbell rows' })).toBeDisabled();
 	await expect(sheet.getByTestId('Barbell rows-starts-with')).toHaveText('In this workout');
 	await expect(sheet.getByRole('checkbox', { name: 'Face pulls' })).toBeEnabled();
+	// The dialog acts on Escape only when it lands inside it, and its open focus can trail the
+	// rows appearing: wait for the focus before pressing Escape, or the press can be ignored
+	await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
 	await page.keyboard.press('Escape');
 	await expect(sheet).toHaveCount(0);
 
