@@ -21,6 +21,8 @@ What changed in MyFit, newest first.
   leaving earlier catches the workout before it has begun, when the panel is deliberately hidden.
 - The warm-up sheet tests wait for the sheet's open focus before pressing Escape: the same timing hole
   as the quick-add sheet had, where a press during the open could be ignored.
+- A drift guard test builds the template and block through the real wizard and through the seed helper
+  and checks the saved settings match, so the helper can't quietly drift from the wizard's defaults.
 - The two slowest workout tests (the ask-each-time units test and the add-and-remove-sets test) seed
   their routines and block through the same server calls the screens make, instead of spending their
   time budget clicking through the template and block setup. What each test checks is unchanged.
