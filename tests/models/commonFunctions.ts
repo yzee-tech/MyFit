@@ -42,8 +42,8 @@ export async function createExercises(userId: string, exercises: (string | ({ na
 	});
 }
 
-/** Picks one of your exercises in the add/edit exercise editor */
-export async function pickExercise(page: Page, name: string) {
+/** Opens the exercise picker in the add/edit exercise editor, ready for a search or its buttons */
+export async function openExercisePicker(page: Page) {
 	// The editor slides in: a tap while it's moving can miss, so tap until the picker is open
 	await expect(async () => {
 		if (!(await page.getByPlaceholder('Search your exercises').isVisible())) {
@@ -51,6 +51,11 @@ export async function pickExercise(page: Page, name: string) {
 		}
 		await expect(page.getByPlaceholder('Search your exercises')).toBeVisible({ timeout: 1000 });
 	}).toPass();
+}
+
+/** Picks one of your exercises in the add/edit exercise editor */
+export async function pickExercise(page: Page, name: string) {
+	await openExercisePicker(page);
 	await page.getByPlaceholder('Search your exercises').fill(name);
 	await page.getByRole('option', { name, exact: true }).click();
 }
@@ -62,9 +67,27 @@ export async function quickAdd(page: Page, names: string[]) {
 	for (const name of names) {
 		await sheet.getByPlaceholder('Search your exercises').fill(name);
 		const checkbox = sheet.getByRole('checkbox', { name, exact: true });
-		await checkbox.click();
-		await expect(checkbox).toBeChecked();
+		// The list re-renders as the filter applies and a click during that update can miss, so
+		// retry until the tick lands; check first so a tick that landed isn't toggled off
+		await expect(async () => {
+			if (!(await checkbox.isChecked())) await checkbox.click();
+			await expect(checkbox).toBeChecked({ timeout: 1000 });
+		}).toPass({ timeout: 10000 });
 	}
+	// A retry's stray click must not have ticked another row: with the search cleared, only the
+	// requested exercises may be ticked (rows already in the workout are disabled and not counted).
+	// Retried because the list re-renders after the search clears.
+	await sheet.getByPlaceholder('Search your exercises').fill('');
+	await expect(async () => {
+		const tickedNames: (string | null)[] = [];
+		for (const box of await sheet.getByRole('checkbox', { checked: true, disabled: false }).all()) {
+			tickedNames.push(await box.getAttribute('aria-label'));
+		}
+		expect(
+			tickedNames.sort(),
+			`ticked ${JSON.stringify(tickedNames)} in the quick-add sheet, expected exactly ${JSON.stringify(names)}`
+		).toEqual([...names].sort());
+	}).toPass({ timeout: 5000 });
 	const addLabel = `Add ${names.length} ${names.length === 1 ? 'exercise' : 'exercises'}`;
 	await sheet.getByRole('button', { name: addLabel, exact: true }).click();
 	await expect(sheet).toHaveCount(0);
