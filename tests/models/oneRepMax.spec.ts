@@ -212,6 +212,18 @@ async function openWarmUp(page: Page, exercise: string) {
 const warmUpSheet = (page: Page) => page.getByRole('dialog').filter({ hasText: 'Total warm-up sets' });
 
 async function closeWarmUp(page: Page) {
+	// The sheet acts on Escape only when the keydown lands inside it, and its open focus can trail the
+	// sheet appearing: wait for the focus before pressing Escape, or the press can be ignored
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const sheet = [...document.querySelectorAll('[role="dialog"]')].find((dialog) =>
+					dialog.textContent?.includes('Total warm-up sets')
+				);
+				return sheet?.contains(document.activeElement) ?? false;
+			})
+		)
+		.toBe(true);
 	await page.keyboard.press('Escape');
 	await expect(warmUpSheet(page)).toHaveCount(0);
 	await expect(page.getByRole('menu')).toHaveCount(0);

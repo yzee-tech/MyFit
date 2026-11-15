@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../fixtures';
 import { PrismaClient } from '@prisma/client';
-import { createExercises } from './commonFunctions';
+import { createExercises, openExercisePicker } from './commonFunctions';
 import { mesocycleDefaults } from '../support/blocks';
 
 const prisma = new PrismaClient();
@@ -74,7 +74,7 @@ test('Filter by muscle group: its buttons are A to Z in Add exercises and in the
 	// The picker of the routine editor
 	await page.goto('/exercise-splits/edit?new');
 	await page.getByLabel('add-exercise').click();
-	await page.getByLabel('Pick an exercise').click();
+	await openExercisePicker(page);
 	await expect(page.getByRole('option', { name: 'Curl', exact: true })).toBeVisible();
 	await page.getByLabel('Filter by muscle group').click();
 	await expect.poll(buttons).toEqual(SPREAD_GROUPS);
