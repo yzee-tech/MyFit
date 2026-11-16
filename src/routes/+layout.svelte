@@ -11,6 +11,7 @@
 	import UpdateDataLossDialog from './(components)/layout/UpdateDataLossDialog.svelte';
 	import TermsOfServiceDialog from '$lib/components/TermsOfServiceDialog.svelte';
 	import WorkoutPanel from '$lib/components/workouts/WorkoutPanel.svelte';
+	import OutboxBar from '$lib/components/workouts/OutboxBar.svelte';
 
 	import { overrideItemIdKeyNameBeforeInitialisingDndZones } from 'svelte-dnd-action';
 	overrideItemIdKeyNameBeforeInitialisingDndZones('name');
@@ -46,6 +47,7 @@
 <TermsOfServiceDialog />
 
 {#snippet footer()}
+	<OutboxBar />
 	<WorkoutPanel />
 {/snippet}
 

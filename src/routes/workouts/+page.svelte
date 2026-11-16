@@ -37,6 +37,7 @@
 		type CalendarMonth
 	} from '$lib/utils/calendarDays';
 	import { onMount } from 'svelte';
+	import OutboxCards from './(components)/OutboxCards.svelte';
 
 	let { data } = $props();
 
@@ -287,6 +288,8 @@
 		{/if}
 	{/await}
 	<div class="flex h-px grow flex-col gap-1 overflow-y-auto">
+		<!-- Workouts saved with no signal that are still waiting to be sent -->
+		<OutboxCards />
 		{#each workouts as workout}
 			<!-- Date and name, then length and volume -->
 			<Button
