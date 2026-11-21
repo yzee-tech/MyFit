@@ -253,9 +253,11 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 		],
 		workoutExercisesMiniSets: [[[], [], []]]
 	});
-	expect(
-		await prisma.workout.findUnique({ where: { id: workoutId }, include: { workoutOfMesocycle: true } })
-	).toMatchObject({ routineName: 'Legs A', workoutOfMesocycle: { mesocycleId: block.id } });
+	const saved = await prisma.workout.findUniqueOrThrow({
+		where: { id: workoutId },
+		include: { workoutOfMesocycle: true }
+	});
+	expect(saved).toMatchObject({ routineName: 'Legs A', workoutOfMesocycle: { mesocycleId: block.id } });
 
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();
@@ -272,8 +274,23 @@ test('add routines mid-block; trained routines keep their workouts', async ({ pa
 	await saveRoutine(page);
 
 	// Legs A still shows its workout; Push A is gone; the new routine can be picked
+	// The saved workout may be on the previous local date if this test crosses midnight.
+	// Pin only the display clock so it cannot cross another midnight between load and assertion.
+	const displayedAt = new Date();
+	await page.clock.setFixedTime(displayedAt);
+	const expectedStatus = await page.evaluate(
+		({ startedAt, displayedAt }) => {
+			const calendarDay = (instant: string) => {
+				const date = new Date(instant);
+				return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
+			};
+			const days = calendarDay(displayedAt) - calendarDay(startedAt);
+			return days <= 0 ? 'Done today' : days === 1 ? 'Done yesterday' : `Done ${days} days ago`;
+		},
+		{ startedAt: saved.startedAt.toISOString(), displayedAt: displayedAt.toISOString() }
+	);
 	await page.goto('/workouts/manage/start');
-	await expect(page.getByRole('main')).toContainText('Legs A Done today');
+	await expect(page.getByRole('radio', { name: /^Legs A/ })).toContainText(expectedStatus);
 	await expect(page.getByRole('main')).not.toContainText('Push A');
 	await expect(page.getByRole('main')).toContainText('Hotel gym - Full body Not done yet');
 	await page.getByPlaceholder('Type here').fill('100');

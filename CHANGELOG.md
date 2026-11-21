@@ -14,6 +14,9 @@ What changed in MyFit, newest first.
 
 ### Tests
 
+- The routine-edit test derives its done-status label from the saved workout date in the browser's timezone,
+  with the display clock fixed during the check, so a run crossing midnight does not assume "today".
+
 - The interrupted-workout-start test disables service workers only for its own browser context and
   holds only the exercises page's navigation-data request, rather than all navigation/API requests. It checks
   that no service worker controls the page, preserving the incomplete-load and restart assertions
