@@ -7,7 +7,8 @@ What changed in MyFit, newest first.
 ### Changed
 
 - Returning from New exercise in a workout focuses the exercise list instead of the search box,
-  without changing the search, filters or ticked exercises. The new exercise stays ticked.
+  without changing the search, filters or ticked exercises. Search controls cannot receive even brief
+  focus while returning from the form. The new exercise stays ticked.
 - The exercise selector ignores outside interactions from the nested New exercise form and its menus,
   so choosing a muscle group on a phone does not close the selector behind the form.
 

@@ -1,6 +1,17 @@
 import { test, expect, type Page } from '../fixtures';
 import { createExercises, pickRoutine } from './commonFunctions';
 
+async function watchSearchFocus(page: Page) {
+	await page.evaluate(() => {
+		const search = document.querySelector<HTMLInputElement>('input[placeholder="Search your exercises"]');
+		if (!search) throw new Error('Picker search missing');
+		search.dataset.returnFocusCount = '0';
+		search.addEventListener('focus', () => {
+			search.dataset.returnFocusCount = String(Number(search.dataset.returnFocusCount) + 1);
+		});
+	});
+}
+
 async function openPicker(page: Page) {
 	await page.goto('/workouts');
 	await page.getByLabel('create-workout').click();
@@ -34,16 +45,19 @@ for (const viewport of [
 			await page.getByRole('option', { name: 'Biceps', exact: true }).click();
 			// Leave a text field focused, as with the soft keyboard on a phone.
 			await form.getByLabel('Exercise note').fill('Keep this note');
+			await watchSearchFocus(page);
 			await form.getByRole('button', { name: 'Create exercise', exact: true }).click();
 			await expect(form).toHaveCount(0);
 			await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
 			await expect(search).not.toBeFocused();
+			await expect(search).toHaveAttribute('data-return-focus-count', '0');
 			await expect(search).toHaveValue('Focus');
 			await expect(sheet.getByRole('checkbox', { name: 'Focus row', exact: true })).toBeChecked();
 			await expect(sheet.getByRole('checkbox', { name: 'Focus curl', exact: true })).toBeChecked();
 			// The success toast covers the bottom button at phone width. Move off it so it can expire.
 			await page.mouse.move(0, 0);
 			await expect(page.getByText('Exercise created', { exact: true })).toBeHidden();
+			await expect(search).toHaveAttribute('data-return-focus-count', '0');
 			await sheet.getByRole('button', { name: 'Add 2 exercises', exact: true }).click();
 			await expect(sheet).toHaveCount(0);
 			await expect(page.getByTestId(/-summary$/)).toHaveCount(2);
@@ -78,10 +92,12 @@ for (const viewport of [
 			await sheet.getByRole('button', { name: 'New exercise', exact: true }).click();
 			const form = page.getByRole('dialog', { name: 'New exercise', exact: true });
 			await form.getByLabel('Name', { exact: true }).fill('Not saved');
+			await watchSearchFocus(page);
 			await form.getByRole('button', { name: viewport.width < 768 ? 'Cancel' : 'Close', exact: true }).click();
 			await expect(form).toHaveCount(0);
 			await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
 			await expect(search).toHaveValue('Focus');
+			await expect(search).toHaveAttribute('data-return-focus-count', '0');
 			await expect(sheet.getByRole('checkbox', { name: 'Focus row', exact: true })).not.toBeChecked();
 			await sheet.getByRole('button', { name: 'New exercise', exact: true }).click();
 			await form.getByLabel('Name', { exact: true }).fill('Focus row');
@@ -92,6 +108,7 @@ for (const viewport of [
 			await expect(form).toHaveCount(0);
 			await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
 			await expect(sheet.getByRole('checkbox', { name: 'Focus row', exact: true })).toBeChecked();
+			await expect(search).toHaveAttribute('data-return-focus-count', '0');
 			await sheet.getByRole('button', { name: 'Clear search' }).click();
 			await expect(search).toHaveValue('');
 			await expect(search).toBeFocused();

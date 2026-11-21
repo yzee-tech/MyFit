@@ -35,19 +35,22 @@
 	let newExerciseOpen = $state(false);
 	let exerciseList: HTMLDivElement | undefined = $state();
 	let wasNewExerciseOpen = false;
+	let returningFromForm = $state(false);
 
 	$effect(() => {
 		const returningToPicker = wasNewExerciseOpen && !newExerciseOpen;
 		wasNewExerciseOpen = newExerciseOpen;
+		if (newExerciseOpen) returningFromForm = true;
 		if (!returningToPicker) return;
 		let cancelled = false;
 		let focusTimer: ReturnType<typeof setTimeout> | undefined;
-		// Closing the child resumes the sheet's focus trap, which otherwise picks its first
-		// tabbable element (search). Run after that deferred focus, not before the child closes.
+		// Keep search inert through the child's close and the parent trap's deferred resume.
+		// The trap must never briefly focus an editable field and request the phone keyboard.
 		void tick().then(() => {
 			if (cancelled) return;
 			focusTimer = setTimeout(() => {
 				if (open && !newExerciseOpen && exerciseList?.isConnected) exerciseList.focus({ preventScroll: true });
+				returningFromForm = false;
 			}, 0);
 		});
 		return () => {
@@ -216,7 +219,7 @@
 		<Sheet.Header class="text-left">
 			<Sheet.Title>{replacingName ? `Replace ${replacingName}` : 'Add exercises'}</Sheet.Title>
 		</Sheet.Header>
-		<div class="mt-3 flex items-center gap-1">
+		<div class="mt-3 flex items-center gap-1" inert={newExerciseOpen || returningFromForm}>
 			<SearchInput placeholder="Search your exercises" bind:value={search} />
 			<Popover.Root bind:open={filterOpen}>
 				<Popover.Trigger>
