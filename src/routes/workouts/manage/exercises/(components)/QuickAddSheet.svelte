@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import { invalidate } from '$app/navigation';
+	import { tick } from 'svelte';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
 	import type { RoutineExerciseTemplate } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -32,6 +33,28 @@
 	let selectedMuscleGroups: MuscleGroup[] = $state([]);
 	let filterOpen = $state(false);
 	let newExerciseOpen = $state(false);
+	let exerciseList: HTMLDivElement | undefined = $state();
+	let wasNewExerciseOpen = false;
+
+	$effect(() => {
+		const returningToPicker = wasNewExerciseOpen && !newExerciseOpen;
+		wasNewExerciseOpen = newExerciseOpen;
+		if (!returningToPicker) return;
+		let cancelled = false;
+		let focusTimer: ReturnType<typeof setTimeout> | undefined;
+		// Closing the child resumes the sheet's focus trap, which otherwise picks its first
+		// tabbable element (search). Run after that deferred focus, not before the child closes.
+		void tick().then(() => {
+			if (cancelled) return;
+			focusTimer = setTimeout(() => {
+				if (open && !newExerciseOpen && exerciseList?.isConnected) exerciseList.focus({ preventScroll: true });
+			}, 0);
+		});
+		return () => {
+			cancelled = true;
+			clearTimeout(focusTimer);
+		};
+	});
 	// In the order they were ticked: that's the order they're added in
 	let ticked: string[] = $state([]);
 
@@ -181,7 +204,14 @@
 </script>
 
 <!-- Opens on the list, not the search box: no keyboard popping up and pushing the list down -->
-<Sheet.Root openFocus="#quick-add-list" bind:open>
+<Sheet.Root
+	onOutsideClick={(event) => {
+		// The nested form and its portalled menus are outside this sheet, not outside the flow.
+		if (newExerciseOpen) event.preventDefault();
+	}}
+	openFocus="#quick-add-list"
+	bind:open
+>
 	<Sheet.Content class="flex h-[85dvh] flex-col gap-0 rounded-t-xl px-4 pb-4 pt-5" side="bottom">
 		<Sheet.Header class="text-left">
 			<Sheet.Title>{replacingName ? `Replace ${replacingName}` : 'Add exercises'}</Sheet.Title>
@@ -230,7 +260,13 @@
 				</Popover.Content>
 			</Popover.Root>
 		</div>
-		<div id="quick-add-list" class="mt-2 grow overflow-y-auto outline-none" data-testid="quick-add-list" tabindex="-1">
+		<div
+			bind:this={exerciseList}
+			id="quick-add-list"
+			class="mt-2 grow overflow-y-auto outline-none"
+			data-testid="quick-add-list"
+			tabindex="-1"
+		>
 			{#each groups as [group, groupExercises] (group)}
 				<div class="mb-0.5 mt-3 text-xs font-semibold text-muted-foreground">{group}</div>
 				{#each groupExercises ?? [] as exercise (exercise.id)}

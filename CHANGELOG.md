@@ -2,6 +2,20 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-21: return to the exercise list without the keyboard
+
+### Changed
+
+- Returning from New exercise in a workout focuses the exercise list instead of the search box,
+  without changing the search, filters or ticked exercises. The new exercise stays ticked.
+- The exercise selector ignores outside interactions from the nested New exercise form and its menus,
+  so choosing a muscle group on a phone does not close the selector behind the form.
+
+### Tests
+
+- Added phone-width and desktop coverage for creating, cancelling, picking an existing exercise,
+  keeping earlier ticks and search, clearing search, and retrying a failed save.
+
 ## 2026-11-14: steadier workout tests
 
 ### Tests
