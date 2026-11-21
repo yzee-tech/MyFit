@@ -14,6 +14,11 @@ What changed in MyFit, newest first.
 
 ### Tests
 
+- The interrupted-workout-start test disables service workers only for its own browser context and
+  holds only the exercises page's navigation-data request, rather than all navigation/API requests. It checks
+  that no service worker controls the page, preserving the incomplete-load and restart assertions
+  without a race with the PWA network handler. CI's fail-on-flaky policy is unchanged.
+
 - Added phone-width and desktop coverage for creating, cancelling, picking an existing exercise,
   keeping earlier ticks and search, clearing search, and retrying a failed save.
 

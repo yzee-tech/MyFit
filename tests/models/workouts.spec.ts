@@ -2777,37 +2777,44 @@ test('a blank workout’s "Weights here" lists the gym’s weights, not a machin
 	await expect(page.getByRole('option')).toHaveCount(2);
 });
 
-test('leaving a just-started workout before its exercises load is not reported as a damaged workout', async ({
-	page
-}) => {
-	await createSplitAndMesoForTest(page);
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
-	// The exercises' answer never arrives: the phone holds a started workout with no exercise list yet
-	let held = 0;
-	await page.route(/__data\.json|trpc/, () => {
-		held++;
+test.describe('leaving during the initial exercise load', () => {
+	// Scoped to this routing test: other workouts still exercise the PWA's service worker.
+	test.use({ serviceWorkers: 'block' });
+
+	test('leaving a just-started workout before its exercises load is not reported as a damaged workout', async ({
+		page
+	}) => {
+		await createSplitAndMesoForTest(page);
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('100');
+		await pickRoutine(page, 'Pull A');
+		// A worker-controlled response bypasses page.route, so this test must own the network.
+		await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller === null)).toBe(true);
+		const exercisePageData = (url: URL) => url.pathname === '/workouts/manage/exercises/__data.json';
+		// Freeze this navigation before the exercises page mounts, not its later suggestions request.
+		// Cancelling that later request would instead create a retryable failed-load workout.
+		await page.route(exercisePageData, () => {});
+		const requested = page.waitForRequest((request) => exercisePageData(new URL(request.url())));
+		await page.getByRole('button', { name: 'Next' }).click();
+		await requested;
+		const saved = await savedWorkoutState(page);
+		expect(saved.workoutData.routineName).toBe('Pull A');
+		expect(saved.workoutExercises).toBeNull();
+		await page.unroute(exercisePageData);
+
+		// Elsewhere in the app: nothing was damaged, so nothing is said or set aside, and there is no workout to resume
+		await page.goto('/workouts');
+		await expect(page.getByLabel('create-workout')).toBeVisible();
+		expect(await page.evaluate(() => localStorage.getItem('workoutRunes:backup'))).toBeNull();
+		await expect(page.getByText("couldn't be opened")).toHaveCount(0);
+		await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+
+		// Starting it again works as ever
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('100');
+		await pickRoutine(page, 'Pull A');
+		await page.getByRole('button', { name: 'Next' }).click();
+		await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
+		expect((await savedWorkoutState(page)).workoutExercises.length).toBeGreaterThan(0);
 	});
-	await page.getByRole('button', { name: 'Next' }).click();
-	await expect.poll(() => held).toBeGreaterThan(0);
-	const saved = await savedWorkoutState(page);
-	expect(saved.workoutData.routineName).toBe('Pull A');
-	expect(saved.workoutExercises).toBeNull();
-	await page.unroute(/__data\.json|trpc/);
-
-	// Elsewhere in the app: nothing was damaged, so nothing is said or set aside, and there is no workout to resume
-	await page.goto('/workouts');
-	await expect(page.getByLabel('create-workout')).toBeVisible();
-	expect(await page.evaluate(() => localStorage.getItem('workoutRunes:backup'))).toBeNull();
-	await expect(page.getByText("couldn't be opened")).toHaveCount(0);
-	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
-
-	// Starting it again works as ever
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
-	expect((await savedWorkoutState(page)).workoutExercises.length).toBeGreaterThan(0);
 });
