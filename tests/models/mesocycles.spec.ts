@@ -9,9 +9,10 @@ import {
 	expectBox,
 	pickExercise,
 	pickRoutine,
-	saveRoutine,
-	saveWorkout
+	saveRoutine
 } from './commonFunctions';
+
+import { createCaller } from '../../src/lib/trpc/router';
 
 const prisma = new PrismaClient();
 
@@ -225,24 +226,36 @@ test('a block starts with My routines as they are when it starts', async ({ page
 test('add routines mid-block; trained routines keep their workouts', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell bench press']);
 	await createMesocycle(page, { exerciseSplitCreated: true });
-	await page.getByRole('link', { name: 'Workouts' }).click();
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Legs A');
-	await page.getByRole('button', { name: 'Next' }).click();
-	for (const exercise of ['Barbell good mornings', 'Barbell squats', 'Leg extensions']) {
-		await page.getByTestId(`${exercise}-menu-button`).click();
-		await page.getByRole('menuitem', { name: 'Delete' }).click();
-	}
-	await page.locator('[id="Calf\\ raises-set-1-reps"]').fill('12');
-	await page.locator('[id="Calf\\ raises-set-2-reps"]').fill('12');
-	await page.locator('[id="Calf\\ raises-set-3-reps"]').fill('11');
-	await page.locator('[id="Calf\\ raises-set-1-load"]').fill('50');
-	await page.getByTestId('Calf raises-set-1-action').click();
-	await page.getByTestId('Calf raises-set-2-action').click();
-	await page.getByTestId('Calf raises-set-3-action').click();
-	await page.getByRole('button', { name: 'Next' }).click();
-	await saveWorkout(page);
+	// Saving a workout is covered in workouts.spec.ts; here it is the prerequisite for editing routines.
+	const block = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
+	const caller = createCaller({ event: {} as never, userId: userData.userId });
+	const { workoutId } = await caller.workouts.create({
+		timeZone: 'UTC',
+		workoutData: {
+			userBodyweight: 100,
+			routineName: 'Legs A',
+			startedAt: new Date(),
+			workoutOfMesocycle: { mesocycle: { id: block.id } }
+		},
+		workoutExercises: [
+			{
+				name: 'Calf raises',
+				targetMuscleGroup: 'Calves',
+				bodyweightFraction: 1,
+				setType: 'Straight',
+				repRangeStart: 10,
+				repRangeEnd: 20,
+				exerciseIndex: 0
+			}
+		],
+		workoutExercisesSets: [
+			[12, 12, 11].map((reps, setIndex) => ({ setIndex, reps, load: 50, RIR: setIndex === 2 ? 0 : 3, skipped: false }))
+		],
+		workoutExercisesMiniSets: [[[], [], []]]
+	});
+	expect(
+		await prisma.workout.findUnique({ where: { id: workoutId }, include: { workoutOfMesocycle: true } })
+	).toMatchObject({ routineName: 'Legs A', workoutOfMesocycle: { mesocycleId: block.id } });
 
 	await page.getByRole('link', { name: 'Mesocycles' }).click();
 	await page.getByRole('link', { name: 'MyMeso Active' }).first().click();

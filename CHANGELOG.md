@@ -19,6 +19,11 @@ What changed in MyFit, newest first.
   that no service worker controls the page, preserving the incomplete-load and restart assertions
   without a race with the PWA network handler. CI's fail-on-flaky policy is unchanged.
 
+- Combined the failed-save/retry and successful-return focus checks at each viewport width, and
+  combined filter ordering with restarted-block selection. The suite now collects 637 tests instead of 640.
+- Shortened the active-block blank-workout test to its opt-out checks, kept panel navigation and
+  resume-start checks in one journey, and seeded the routine-edit test's prior workout through the save API.
+  Generic workout-save details, all panel screens, clock/nudge/last-tick checks and filter assertions remain covered.
 - Added phone-width and desktop coverage for creating, cancelling, picking an existing exercise,
   keeping earlier ticks and search, clearing search, and retrying a failed save.
 

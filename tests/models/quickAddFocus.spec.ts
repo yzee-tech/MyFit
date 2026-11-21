@@ -32,53 +32,48 @@ for (const viewport of [
 	test.describe(`Quick add focus at ${viewport.width}px`, () => {
 		test.use({ viewport });
 
-		test('creating an exercise returns focus to the list and keeps earlier ticks', async ({ page, userData }) => {
-			await createExercises(userData.userId, [{ name: 'Focus row', targetMuscleGroup: 'Traps' }]);
-			const sheet = await openPicker(page);
-			await sheet.getByRole('checkbox', { name: 'Focus row', exact: true }).click();
-			const search = sheet.getByPlaceholder('Search your exercises');
-			await search.fill('Focus');
-			await sheet.getByRole('button', { name: 'New exercise', exact: true }).click();
-			const form = page.getByRole('dialog', { name: 'New exercise', exact: true });
-			await form.getByLabel('Name', { exact: true }).fill('Focus curl');
-			await form.getByRole('combobox', { name: 'Primary muscle group', exact: true }).click();
-			await page.getByRole('option', { name: 'Biceps', exact: true }).click();
-			// Leave a text field focused, as with the soft keyboard on a phone.
-			await form.getByLabel('Exercise note').fill('Keep this note');
-			await watchSearchFocus(page);
-			await form.getByRole('button', { name: 'Create exercise', exact: true }).click();
-			await expect(form).toHaveCount(0);
-			await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
-			await expect(search).not.toBeFocused();
-			await expect(search).toHaveAttribute('data-return-focus-count', '0');
-			await expect(search).toHaveValue('Focus');
-			await expect(sheet.getByRole('checkbox', { name: 'Focus row', exact: true })).toBeChecked();
-			await expect(sheet.getByRole('checkbox', { name: 'Focus curl', exact: true })).toBeChecked();
-			// The success toast covers the bottom button at phone width. Move off it so it can expire.
-			await page.mouse.move(0, 0);
-			await expect(page.getByText('Exercise created', { exact: true })).toBeHidden();
-			await expect(search).toHaveAttribute('data-return-focus-count', '0');
-			await sheet.getByRole('button', { name: 'Add 2 exercises', exact: true }).click();
-			await expect(sheet).toHaveCount(0);
-			await expect(page.getByTestId(/-summary$/)).toHaveCount(2);
-		});
-
-		test('a failed save keeps the form and its text for retry', async ({ page, userData }) => {
-			await createExercises(userData.userId, [{ name: 'Focus row', targetMuscleGroup: 'Traps' }]);
-			const sheet = await openPicker(page);
-			await sheet.getByRole('button', { name: 'New exercise', exact: true }).click();
-			const form = page.getByRole('dialog', { name: 'New exercise', exact: true });
-			await form.getByLabel('Name', { exact: true }).fill('Unsaved focus curl');
-			await form.getByRole('combobox', { name: 'Primary muscle group', exact: true }).click();
-			await page.getByRole('option', { name: 'Biceps', exact: true }).click();
-			await form.getByLabel('Exercise note').fill('Keep my input');
-			await page.route('**/trpc/exercises.create*', (route) => route.abort());
-			await form.getByRole('button', { name: 'Create exercise', exact: true }).click();
-			await expect(page.getByText('Failed to fetch', { exact: true })).toBeVisible();
-			await expect(form).toBeVisible();
-			await expect(form.getByLabel('Name', { exact: true })).toHaveValue('Unsaved focus curl');
-			await expect(form.getByLabel('Exercise note')).toHaveValue('Keep my input');
-			await expect(form.getByRole('button', { name: 'Create exercise', exact: true })).toBeEnabled();
+		test.describe('save and retry', () => {
+			test.use({ serviceWorkers: 'block' });
+			test('retrying creation returns focus to the list and keeps earlier ticks', async ({ page, userData }) => {
+				await createExercises(userData.userId, [{ name: 'Focus row', targetMuscleGroup: 'Traps' }]);
+				const sheet = await openPicker(page);
+				await sheet.getByRole('checkbox', { name: 'Focus row', exact: true }).click();
+				const search = sheet.getByPlaceholder('Search your exercises');
+				await search.fill('Focus');
+				await sheet.getByRole('button', { name: 'New exercise', exact: true }).click();
+				const form = page.getByRole('dialog', { name: 'New exercise', exact: true });
+				await form.getByLabel('Name', { exact: true }).fill('Focus curl');
+				await form.getByRole('combobox', { name: 'Primary muscle group', exact: true }).click();
+				await page.getByRole('option', { name: 'Biceps', exact: true }).click();
+				// Leave a text field focused, as with the soft keyboard on a phone.
+				await form.getByLabel('Exercise note').fill('Keep this note');
+				// One failed attempt and its retry share this form, at both viewport widths.
+				await page.route('**/trpc/exercises.create*', (route) => route.abort(), { times: 1 });
+				await form.getByRole('button', { name: 'Create exercise', exact: true }).click();
+				await expect(page.getByText('Failed to fetch', { exact: true })).toBeVisible();
+				await expect(form).toBeVisible();
+				await expect(form.getByLabel('Name', { exact: true })).toHaveValue('Focus curl');
+				await expect(form.getByLabel('Exercise note')).toHaveValue('Keep this note');
+				await expect(form.getByRole('button', { name: 'Create exercise', exact: true })).toBeEnabled();
+				// Restore a focused text input before the successful retry, as with the phone keyboard.
+				await form.getByLabel('Exercise note').focus();
+				await watchSearchFocus(page);
+				await form.getByRole('button', { name: 'Create exercise', exact: true }).click();
+				await expect(form).toHaveCount(0);
+				await expect(sheet.getByTestId('quick-add-list')).toBeFocused();
+				await expect(search).not.toBeFocused();
+				await expect(search).toHaveAttribute('data-return-focus-count', '0');
+				await expect(search).toHaveValue('Focus');
+				await expect(sheet.getByRole('checkbox', { name: 'Focus row', exact: true })).toBeChecked();
+				await expect(sheet.getByRole('checkbox', { name: 'Focus curl', exact: true })).toBeChecked();
+				// The success toast covers the bottom button at phone width. Move off it so it can expire.
+				await page.mouse.move(0, 0);
+				await expect(page.getByText('Exercise created', { exact: true })).toBeHidden();
+				await expect(search).toHaveAttribute('data-return-focus-count', '0');
+				await sheet.getByRole('button', { name: 'Add 2 exercises', exact: true }).click();
+				await expect(sheet).toHaveCount(0);
+				await expect(page.getByTestId(/-summary$/)).toHaveCount(2);
+			});
 		});
 
 		test('cancelling or picking an existing exercise returns to the list, while clear search still allows typing', async ({

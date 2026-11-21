@@ -122,31 +122,6 @@ async function seedBlock(
 	return mesocycle;
 }
 
-test('Workouts filter: blocks A to Z, one restarted newest first, "Non-meso workouts" first', async ({
-	page,
-	userData
-}) => {
-	const userId = userData.userId;
-	await prisma.workout.deleteMany({ where: { userId } });
-	await prisma.mesocycle.deleteMany({ where: { userId } });
-	const zeta = await seedBlock(userId, 'Zeta', new Date(2026, 0, 5, 9));
-	const olderAlpha = await seedBlock(userId, 'Alpha', new Date(2026, 2, 2, 9));
-	const newerAlpha = await seedBlock(userId, 'Alpha', new Date(2026, 2, 12, 9));
-	await page.goto('/workouts');
-	await page.getByLabel('search').click();
-	await page.getByRole('combobox').click();
-	const started = (date: Date) =>
-		date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-	expect(await optionTexts(page)).toEqual([
-		'Non-meso workouts',
-		`Alpha · ${started(newerAlpha.startDate!)}`,
-		`Alpha · ${started(olderAlpha.startDate!)}`,
-		zeta.name
-	]);
-	await prisma.workout.deleteMany({ where: { userId } });
-	await prisma.mesocycle.deleteMany({ where: { userId } });
-});
-
 async function openStatsFor(page: Page, exercise: string) {
 	await page.goto(`/stats?exercise=${encodeURIComponent(exercise)}`);
 	await expect(page.getByRole('combobox').filter({ hasText: exercise })).toBeVisible();
