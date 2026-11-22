@@ -15,19 +15,21 @@ export const KEPT_ON_UPDATE = [
 /** Prefix of the waiting list and its backups (see $lib/utils/outbox.ts) */
 const KEPT_PREFIX = 'workoutOutbox:';
 
-type ClearableStorage = Pick<Storage, 'getItem' | 'setItem' | 'clear' | 'key' | 'length'>;
+type ClearableStorage = Pick<Storage, 'removeItem' | 'key' | 'length'>;
 
+/**
+ * Removes everything except the kept keys, one removal at a time. The kept keys are never rewritten, so a
+ * failed write can no longer lose a workout in progress or the waiting list, and a failed removal throws so
+ * the caller can abort the update instead of updating on top of half-cleaned storage
+ */
 export function clearStorageForUpdate(storage: ClearableStorage) {
-	const keys = [...KEPT_ON_UPDATE];
+	const keys: string[] = [];
 	for (let i = 0; i < storage.length; i++) {
 		const key = storage.key(i);
-		if (key?.startsWith(KEPT_PREFIX)) keys.push(key);
+		if (key !== null) keys.push(key);
 	}
-	const kept = new Map<string, string>();
 	for (const key of keys) {
-		const value = storage.getItem(key);
-		if (value !== null) kept.set(key, value);
+		if ((KEPT_ON_UPDATE as readonly string[]).includes(key) || key.startsWith(KEPT_PREFIX)) continue;
+		storage.removeItem(key);
 	}
-	storage.clear();
-	for (const [key, value] of kept) storage.setItem(key, value);
 }
