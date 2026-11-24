@@ -23,13 +23,29 @@ import { clearStorageForUpdate } from '../../src/lib/utils/clearForUpdate';
 class FakeStorage {
 	items = new Map<string, string>();
 	failWrites = false;
+	failRemovals = false;
 	getItem = (key: string) => this.items.get(key) ?? null;
 	setItem = (key: string, value: string) => {
 		if (this.failWrites) throw new Error('QuotaExceededError');
 		this.items.set(key, value);
 	};
 	removeItem = (key: string) => {
+		if (this.failRemovals) throw new Error('SecurityError');
 		this.items.delete(key);
+	};
+	clear = () => this.items.clear();
+}
+
+function storageOf(store: FakeStorage) {
+	return {
+		get length() {
+			return store.items.size;
+		},
+		key: (i: number) => [...store.items.keys()][i] ?? null,
+		getItem: store.getItem,
+		setItem: store.setItem,
+		removeItem: store.removeItem,
+		clear: store.clear
 	};
 }
 
@@ -346,16 +362,29 @@ test('updating the app keeps the waiting workouts and their backups, and clears 
 	store.items.set('workoutOutbox:backup:123', 'unreadable');
 	store.items.set('workoutRunes', '{}');
 	store.items.set('theme', 'dark');
-	const asStorage = {
-		get length() {
-			return store.items.size;
-		},
-		key: (i: number) => [...store.items.keys()][i] ?? null,
-		getItem: (key: string) => store.items.get(key) ?? null,
-		setItem: (key: string, value: string) => void store.items.set(key, value),
-		clear: () => store.items.clear()
-	};
-	clearStorageForUpdate(asStorage);
+	clearStorageForUpdate(storageOf(store));
 	expect([...store.items.keys()].sort()).toEqual(['workoutOutbox:backup:123', 'workoutOutbox:v1', 'workoutRunes']);
 	expect(store.items.get('workoutOutbox:v1')).toBe('[{"clientId":"a"}]');
+});
+
+test('updating the app never rewrites the kept keys, so a storage that fails every write is still cleaned', () => {
+	const store = new FakeStorage();
+	store.items.set('workoutOutbox:v1', '[{"clientId":"a"}]');
+	store.items.set('workoutOutbox:backup:123', 'unreadable');
+	store.items.set('workoutRunes', '{}');
+	store.items.set('theme', 'dark');
+	store.failWrites = true;
+	expect(() => clearStorageForUpdate(storageOf(store))).not.toThrow();
+	expect([...store.items.keys()].sort()).toEqual(['workoutOutbox:backup:123', 'workoutOutbox:v1', 'workoutRunes']);
+	expect(store.items.get('workoutOutbox:v1')).toBe('[{"clientId":"a"}]');
+});
+
+test('a failed cleanup aborts the update, leaving the kept keys and what was not yet removed in place', () => {
+	const store = new FakeStorage();
+	store.items.set('workoutRunes', '{}');
+	store.items.set('theme', 'dark');
+	store.failRemovals = true;
+	expect(() => clearStorageForUpdate(storageOf(store))).toThrow('SecurityError');
+	expect(store.items.get('workoutRunes')).toBe('{}');
+	expect(store.items.get('theme')).toBe('dark');
 });

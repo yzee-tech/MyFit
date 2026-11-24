@@ -2,6 +2,16 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-22: updating the app can no longer lose a workout in progress
+
+### Fixed
+
+- "Update app" no longer clears all of the phone's storage and rewrites the kept entries one by one: a
+  failed write midway through used to lose the workout in progress, the routine being edited and the
+  workouts still waiting to be sent. It now removes only what isn't kept and never touches the kept keys.
+- If the cleanup itself fails, the update aborts with a message saying nothing was lost, instead of leaving
+  the dialog stuck on its spinner.
+
 ## 2026-11-21: return to the exercise list without the keyboard
 
 ### Changed
