@@ -269,40 +269,29 @@ test('create a workout with active mesocycle', async ({ page }) => {
 	);
 });
 
-test('create workout without using active mesocycle', async ({ page, userData }) => {
+test('a blank workout saved while a block is active is not attached to that block', async ({ page, userData }) => {
 	await createExercises(userData.userId, ['Barbell bench press']);
-	await createSplitAndMesoForTest(page);
-	await page.getByLabel('create-workout').click();
+	await seedTemplateSplitAndMeso(userData.userId);
+	const activeBlock = await prisma.mesocycle.findFirstOrThrow({ where: { userId: userData.userId } });
+	await page.goto('/workouts/manage/start');
 	await pickRoutine(page, 'Blank workout');
-	await page.getByPlaceholder('Type here').click();
 	await page.getByPlaceholder('Type here').fill('100');
 	await page.getByRole('button', { name: 'Next' }).click();
-
 	await quickAdd(page, ['Barbell bench press']);
-	await editWorkoutExercise(page, 'Barbell bench press');
-	await page.getByLabel('Sets').fill('2');
-	await page.getByRole('button', { name: 'Update' }).click();
-
-	await page.locator('[id="Barbell\\ bench\\ press-set-1-reps"]').fill('9');
-	await page.locator('[id="Barbell\\ bench\\ press-set-1-load"]').fill('100');
-	await page.locator('[id="Barbell\\ bench\\ press-set-1-RIR"]').fill('2');
-	await page.locator('[id="Barbell\\ bench\\ press-set-2-reps"]').fill('8');
-	await page.locator('[id="Barbell\\ bench\\ press-set-2-load"]').fill('95');
-	await page.locator('[id="Barbell\\ bench\\ press-set-2-RIR"]').fill('1');
-	await page.getByTestId('Barbell bench press-set-1-action').click();
-	await page.getByTestId('Barbell bench press-set-2-action').click();
-
+	await fillSet(page, 'Barbell bench press', 1, { reps: '9', load: '100', RIR: '2' });
+	await setBox(page, 'Barbell bench press', 1).click();
 	await page.getByRole('button', { name: 'Next' }).click();
-	await page.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByRole('status')).toContainText('Workout created successfully');
+	await saveWorkout(page);
+	const saved = await prisma.workout.findFirstOrThrow({
+		where: { userId: userData.userId },
+		include: { workoutOfMesocycle: true }
+	});
+	expect(saved.workoutOfMesocycle).toBeNull();
+	expect(saved.routineName).toBeNull();
+	expect(saved.userBodyweight).toBe(100);
 	await page.getByRole('link', { name: `${getTodaysDateString()}` }).click();
-	await expect(page.getByRole('tabpanel')).toContainText(
-		/Mesocycle No mesocycle (Morning|Noon|Afternoon|Evening) workout User bodyweight 100 kg/
-	);
-	await page.getByRole('tab', { name: 'Exercises' }).click();
-	await expect(page.getByRole('tabpanel')).toContainText(
-		'Barbell bench press 2 Independent sets of 8 to 15 reps Chest Feet flat, back arched, grip just outside shoulders. Lower bar to mid-chest, press up explosively. Load (kg) Reps RIR 1 100 9 2 2 95 8 1'
-	);
+	await expect(page.getByRole('tabpanel')).toContainText('No mesocycle');
+	expect(await prisma.mesocycle.findUnique({ where: { id: activeBlock.id } })).toMatchObject({ endDate: null });
 });
 
 test('progression carries over between routines that share an exercise', async ({ page }) => {
@@ -1220,6 +1209,7 @@ test('workout panel: on Log workout after Back and on every screen, resumes the 
 	await page.getByRole('button', { name: 'Next' }).click();
 	await fillSet(page, 'Barbell rows', 1, { reps: '11', load: '40' });
 	const panel = page.getByTestId('workout-panel');
+	const { startedAt } = (await savedWorkoutState(page)).workoutData;
 	// Not on the workout's own page
 	await expect(panel).toHaveCount(0);
 
@@ -1239,12 +1229,14 @@ test('workout panel: on Log workout after Back and on every screen, resumes the 
 	);
 	await page.getByPlaceholder('Type here').fill('98');
 	await continueButton.click();
+	expect((await savedWorkoutState(page)).workoutData.startedAt).toEqual(startedAt);
 	await expectBox(page.locator('[id="Barbell\\ rows-set-1-reps"]'), '11');
 
 	// Elsewhere in the app; tapping it goes back to the workout
-	for (const path of ['/workouts', '/dashboard', '/exercises']) {
+	for (const path of ['/workouts', '/dashboard', '/exercises', '/exercise-splits', '/settings']) {
 		await page.goto(path);
 		await expect(panel).toContainText('Workout');
+		await expect(page.getByTestId('workout-panel-detail')).toHaveText(firstExercise);
 	}
 	await page.getByTestId('workout-panel-detail').click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
@@ -1368,10 +1360,7 @@ test('no mesocycle: pick a routine from My routines, suggestions from last time,
 	await expect(page.getByRole('radio', { name: /^Pull A/ })).toContainText('Done today');
 });
 
-test('workout panel: shown on every screen, resuming keeps its start, a nudge after 2 hours, it ends at the last tick', async ({
-	page,
-	userData
-}) => {
+test('workout panel: a nudge after 2 hours, it ends at the last tick', async ({ page, userData }) => {
 	await page.goto('/exercise-splits');
 	await createTemplateExerciseSplit(page);
 	await page.goto('/workouts');
@@ -1381,22 +1370,6 @@ test('workout panel: shown on every screen, resuming keeps its start, a nudge af
 	await page.getByRole('button', { name: 'Next' }).click();
 	await page.waitForURL(/\/workouts\/manage\/exercises/);
 	await expect(page.locator('[id="Barbell\\ rows-set-1-reps"]')).toBeVisible();
-	// Not on the workout's own pages
-	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
-	const { startedAt } = (await savedWorkoutState(page)).workoutData;
-	const firstExercise = (await savedWorkoutState(page)).workoutExercises[0].name;
-
-	for (const path of ['/exercise-splits', '/exercises', '/settings']) {
-		await page.goto(path);
-		await expect(page.getByTestId('workout-panel-detail')).toHaveText(firstExercise);
-	}
-
-	// Back to setup and Continue: the same workout, the same start
-	await page.goto('/workouts/manage/start');
-	await page.getByRole('button', { name: 'Continue workout' }).click();
-	await page.waitForURL(/\/workouts\/manage\/exercises/);
-	expect((await savedWorkoutState(page)).workoutData.startedAt).toEqual(startedAt);
-
 	// Ticked a set an hour ago; started 2.5 hours ago and never saved
 	await fillSet(page, 'Barbell rows', 1, { reps: '12', load: '40', RIR: '2' });
 	await setBox(page, 'Barbell rows', 1).click();
@@ -1951,24 +1924,30 @@ test('Workouts list filter: blocks with the same name, even restarted in the sam
 	await prisma.workout.deleteMany({ where: { userId } });
 	await prisma.mesocycle.deleteMany({ where: { userId } });
 	// Started, ended after a week, started again the same month
-	const earlier = await blockWithWorkout(userId, 'Hypertrophy', new Date(2026, 2, 2, 9), 'Push earlier');
-	const later = await blockWithWorkout(userId, 'Hypertrophy', new Date(2026, 2, 12, 9), 'Push later');
+	const zeta = await blockWithWorkout(userId, 'Zeta', new Date(2026, 0, 5, 9), 'Zeta workout');
+	const earlier = await blockWithWorkout(userId, 'Alpha', new Date(2026, 2, 2, 9), 'Push earlier');
+	const later = await blockWithWorkout(userId, 'Alpha', new Date(2026, 2, 12, 9), 'Push later');
 	await page.goto('/workouts');
-	await expect(page.getByTestId('workout-name')).toHaveText(['Push later', 'Push earlier']);
+	await expect(page.getByTestId('workout-name')).toHaveText(['Push later', 'Push earlier', 'Zeta workout']);
 
 	const started = (date: Date) =>
 		date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 	const earlierLabel = started(earlier.startDate!);
 	await page.getByLabel('search').click();
 	await page.getByRole('combobox').click();
-	await expect(page.getByRole('option', { name: `Hypertrophy · ${started(later.startDate!)}` })).toBeVisible();
+	await expect(page.getByRole('option')).toHaveText([
+		'Non-meso workouts',
+		`Alpha · ${started(later.startDate!)}`,
+		`Alpha · ${earlierLabel}`,
+		zeta.name
+	]);
 	expect(started(later.startDate!)).not.toEqual(earlierLabel);
-	await page.getByRole('option', { name: `Hypertrophy · ${earlierLabel}` }).click();
+	await page.getByRole('option', { name: `Alpha · ${earlierLabel}` }).click();
 	// Closes the list, not the filter (the list may open over the dates: its own button again)
 	await page.getByRole('combobox').click();
 	await expect(page.getByRole('listbox')).toHaveCount(0);
 	await expect(page.getByText('Date range')).toBeVisible();
-	await expect(page.getByRole('combobox')).toHaveText(`Hypertrophy · ${earlierLabel}`);
+	await expect(page.getByRole('combobox')).toHaveText(`Alpha · ${earlierLabel}`);
 	await page.getByRole('button', { name: 'Apply' }).click();
 	await expect(page).toHaveURL(new RegExp(`selectedMesocycleIds=.*${earlier.id}`));
 	await expect(page.getByTestId('workout-name')).toHaveText(['Push earlier']);
@@ -2777,37 +2756,44 @@ test('a blank workout’s "Weights here" lists the gym’s weights, not a machin
 	await expect(page.getByRole('option')).toHaveCount(2);
 });
 
-test('leaving a just-started workout before its exercises load is not reported as a damaged workout', async ({
-	page
-}) => {
-	await createSplitAndMesoForTest(page);
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
-	// The exercises' answer never arrives: the phone holds a started workout with no exercise list yet
-	let held = 0;
-	await page.route(/__data\.json|trpc/, () => {
-		held++;
+test.describe('leaving during the initial exercise load', () => {
+	// Scoped to this routing test: other workouts still exercise the PWA's service worker.
+	test.use({ serviceWorkers: 'block' });
+
+	test('leaving a just-started workout before its exercises load is not reported as a damaged workout', async ({
+		page
+	}) => {
+		await createSplitAndMesoForTest(page);
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('100');
+		await pickRoutine(page, 'Pull A');
+		// A worker-controlled response bypasses page.route, so this test must own the network.
+		await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller === null)).toBe(true);
+		const exercisePageData = (url: URL) => url.pathname === '/workouts/manage/exercises/__data.json';
+		// Freeze this navigation before the exercises page mounts, not its later suggestions request.
+		// Cancelling that later request would instead create a retryable failed-load workout.
+		await page.route(exercisePageData, () => {});
+		const requested = page.waitForRequest((request) => exercisePageData(new URL(request.url())));
+		await page.getByRole('button', { name: 'Next' }).click();
+		await requested;
+		const saved = await savedWorkoutState(page);
+		expect(saved.workoutData.routineName).toBe('Pull A');
+		expect(saved.workoutExercises).toBeNull();
+		await page.unroute(exercisePageData);
+
+		// Elsewhere in the app: nothing was damaged, so nothing is said or set aside, and there is no workout to resume
+		await page.goto('/workouts');
+		await expect(page.getByLabel('create-workout')).toBeVisible();
+		expect(await page.evaluate(() => localStorage.getItem('workoutRunes:backup'))).toBeNull();
+		await expect(page.getByText("couldn't be opened")).toHaveCount(0);
+		await expect(page.getByTestId('workout-panel')).toHaveCount(0);
+
+		// Starting it again works as ever
+		await page.getByLabel('create-workout').click();
+		await page.getByPlaceholder('Type here').fill('100');
+		await pickRoutine(page, 'Pull A');
+		await page.getByRole('button', { name: 'Next' }).click();
+		await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
+		expect((await savedWorkoutState(page)).workoutExercises.length).toBeGreaterThan(0);
 	});
-	await page.getByRole('button', { name: 'Next' }).click();
-	await expect.poll(() => held).toBeGreaterThan(0);
-	const saved = await savedWorkoutState(page);
-	expect(saved.workoutData.routineName).toBe('Pull A');
-	expect(saved.workoutExercises).toBeNull();
-	await page.unroute(/__data\.json|trpc/);
-
-	// Elsewhere in the app: nothing was damaged, so nothing is said or set aside, and there is no workout to resume
-	await page.goto('/workouts');
-	await expect(page.getByLabel('create-workout')).toBeVisible();
-	expect(await page.evaluate(() => localStorage.getItem('workoutRunes:backup'))).toBeNull();
-	await expect(page.getByText("couldn't be opened")).toHaveCount(0);
-	await expect(page.getByTestId('workout-panel')).toHaveCount(0);
-
-	// Starting it again works as ever
-	await page.getByLabel('create-workout').click();
-	await page.getByPlaceholder('Type here').fill('100');
-	await pickRoutine(page, 'Pull A');
-	await page.getByRole('button', { name: 'Next' }).click();
-	await expect(page.getByTestId('Barbell rows-menu-button')).toBeVisible();
-	expect((await savedWorkoutState(page)).workoutExercises.length).toBeGreaterThan(0);
 });

@@ -2,6 +2,34 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-21: return to the exercise list without the keyboard
+
+### Changed
+
+- Returning from New exercise in a workout focuses the exercise list instead of the search box,
+  without changing the search, filters or ticked exercises. Search controls cannot receive even brief
+  focus while returning from the form. The new exercise stays ticked.
+- The exercise selector ignores outside interactions from the nested New exercise form and its menus,
+  so choosing a muscle group on a phone does not close the selector behind the form.
+
+### Tests
+
+- The routine-edit test derives its done-status label from the saved workout date in the browser's timezone,
+  with the display clock fixed during the check, so a run crossing midnight does not assume "today".
+
+- The interrupted-workout-start test disables service workers only for its own browser context and
+  holds only the exercises page's navigation-data request, rather than all navigation/API requests. It checks
+  that no service worker controls the page, preserving the incomplete-load and restart assertions
+  without a race with the PWA network handler. CI's fail-on-flaky policy is unchanged.
+
+- Combined the failed-save/retry and successful-return focus checks at each viewport width, and
+  combined filter ordering with restarted-block selection. The suite now collects 637 tests instead of 640.
+- Shortened the active-block blank-workout test to its opt-out checks, kept panel navigation and
+  resume-start checks in one journey, and seeded the routine-edit test's prior workout through the save API.
+  Generic workout-save details, all panel screens, clock/nudge/last-tick checks and filter assertions remain covered.
+- Added phone-width and desktop coverage for creating, cancelling, picking an existing exercise,
+  keeping earlier ticks and search, clearing search, and retrying a failed save.
+
 ## 2026-11-14: steadier workout tests
 
 ### Tests
