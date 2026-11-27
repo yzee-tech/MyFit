@@ -5,6 +5,7 @@
  * stats and the charts all count through here.
  */
 import type { MuscleGroup } from './prismaEnums';
+import { convertCamelCaseToNormal } from '../utils';
 
 /** The six areas of the radar, in the order drawn (clockwise from the top left) */
 export const BODY_AREAS = ['Back', 'Chest', 'Core', 'Shoulders', 'Arms', 'Legs'] as const;
@@ -68,7 +69,7 @@ export function secondaryMusclesProblem(
 	if (!canHaveSecondaryMuscles(primary)) {
 		return primary === 'Cardio'
 			? 'A cardio exercise has no other muscles'
-			: 'A whole body exercise already counts for every area';
+			: 'A full body exercise already counts for every area';
 	}
 	if (list.length > MAX_SECONDARY_MUSCLES)
 		return `An exercise has ${MAX_SECONDARY_MUSCLES} secondary muscle groups at most`;
@@ -131,22 +132,23 @@ export function muscleShares(exercise: ExerciseMuscles): {
 	return { muscles, areas };
 }
 
-/** A muscle group's name as shown, e.g. "Front delts", "Whole body" (as convertCamelCaseToNormal gives) */
+/** A muscle group's name as shown, e.g. "Front delts", "Full body" (WholeBody shows as "Full body") */
 export function muscleGroupLabel(muscleGroup: string): string {
-	return muscleGroup
-		.replace(/([a-z])([A-Z])/g, '$1 $2')
-		.toLowerCase()
-		.replace(/^\w/, (match) => match.toUpperCase());
+	return convertCamelCaseToNormal(muscleGroup);
 }
 
 const comparable = (name: string) => name.replace(/\s+/g, '').toLowerCase();
 
 /**
- * Whether a custom muscle group's name is one of the built-in ones' ("Whole body", "chest",
- * "FrontDelts"...), whatever its capitals and spaces: the two would read the same in every list
+ * Whether a custom muscle group's name is one of the built-in ones' ("Full body", "WholeBody",
+ * "chest", "Front delts"...), whatever its capitals and spaces: the two would read the same in every
+ * list. The shown name is blocked too, so "Full body" is refused though the value stays WholeBody
  */
 export function isBuiltInMuscleName(name: string, muscleGroups: readonly string[]): boolean {
-	return muscleGroups.some((muscleGroup) => comparable(muscleGroup) === comparable(name));
+	return muscleGroups.some(
+		(muscleGroup) =>
+			comparable(muscleGroup) === comparable(name) || comparable(muscleGroupLabel(muscleGroup)) === comparable(name)
+	);
 }
 
 /** A count of sets that can end in a half: "7", "7.5" */

@@ -2,6 +2,18 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-27: "Whole body" is now "Full body"
+
+### Changed
+
+- The Whole body muscle group reads "Full body" everywhere it shows: pickers, exercise pages, badges,
+  the Stats page and the charts. Nothing stored changed - past workouts, stats and exports keep their
+  data; only the shown name is new.
+- A custom muscle group may not be called "Full body" either, in any capitals or spacing, since it
+  would read the same as the built-in one. "Whole body" stays refused too.
+- A custom muscle typed "Whole body" before names were checked now shows as its own Stats line
+  instead of sharing the built-in one's.
+
 ## 2026-11-22: updating the app can no longer lose a workout in progress
 
 ### Fixed

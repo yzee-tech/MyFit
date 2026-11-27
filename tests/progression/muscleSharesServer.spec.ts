@@ -91,7 +91,7 @@ test('secondaries that break the rules are refused, on a new exercise and on an 
 		['Chest', ['WholeBody'], /single muscles/],
 		['Chest', ['Cardio'], /single muscles/],
 		['Chest', ['Custom'], /single muscles/],
-		['WholeBody', ['Chest'], /whole body/]
+		['WholeBody', ['Chest'], /full body/]
 	];
 	for (const [primary, secondaries, message] of refused) {
 		await expect(caller.exercises.create(details('Refused', primary, secondaries))).rejects.toThrow(message);
@@ -245,7 +245,7 @@ test('a custom muscle group can’t be named like a built-in one', async () => {
 		...details(name, 'Custom'),
 		customMuscleGroup
 	});
-	for (const name of ['Whole body', 'wholebody', 'CHEST', 'front delts', 'Cardio']) {
+	for (const name of ['Whole body', 'wholebody', 'Full body', 'fullbody', 'CHEST', 'front delts', 'Cardio']) {
 		await expect(caller.exercises.create(custom('Refused', name)), name).rejects.toThrow(/pick it instead of Custom/);
 	}
 	// A save that would make the exercise is refused the same way

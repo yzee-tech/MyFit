@@ -20,6 +20,7 @@ const ALPHABETICAL_MUSCLE_GROUPS = [
 	'Chest',
 	'Forearms',
 	'Front delts',
+	'Full body',
 	'Glutes',
 	'Hamstrings',
 	'Lats',
@@ -29,7 +30,6 @@ const ALPHABETICAL_MUSCLE_GROUPS = [
 	'Side delts',
 	'Traps',
 	'Triceps',
-	'Whole body',
 	'Custom'
 ];
 

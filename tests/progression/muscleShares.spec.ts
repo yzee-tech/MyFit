@@ -87,7 +87,7 @@ test('which secondary muscles an exercise may have', () => {
 		expect(problem('Chest', [notAMuscle])).toMatch(/single muscles/);
 	}
 	expect(problem('Cardio', ['Quads'])).toMatch(/cardio/);
-	expect(problem('WholeBody', ['Quads'])).toMatch(/whole body/);
+	expect(problem('WholeBody', ['Quads'])).toMatch(/full body/);
 	// Nothing listed is fine for those two
 	expect(problem('Cardio', [])).toBeNull();
 	expect(problem('WholeBody', [])).toBeNull();
@@ -118,7 +118,18 @@ test('a new muscle group keeps the secondaries that still fit it', () => {
 
 test('a custom muscle group may not take a built-in name, whatever its capitals and spaces', () => {
 	const builtIn = (name: string) => isBuiltInMuscleName(name, MuscleGroupSchema.options);
-	for (const name of ['Whole body', 'whole  body', 'WHOLEBODY', ' Chest ', 'front delts', 'FrontDelts', 'cardio']) {
+	for (const name of [
+		'Whole body',
+		'whole  body',
+		'WHOLEBODY',
+		'Full body',
+		'full  body',
+		'FULLBODY',
+		' Chest ',
+		'front delts',
+		'FrontDelts',
+		'cardio'
+	]) {
 		expect(builtIn(name), name).toBe(true);
 	}
 	for (const name of ['Soleus', 'Upper chest', 'Whole body 2', 'Delts']) expect(builtIn(name), name).toBe(false);
