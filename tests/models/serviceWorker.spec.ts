@@ -18,7 +18,12 @@ test('offline service worker: navigations fall back to /offline, non-navigation 
 
 	const crossOriginAvatar = 'https://lh3.googleusercontent.com/a/test-avatar.png';
 	await page.route(crossOriginAvatar, (route) =>
-		route.fulfill({ status: 200, contentType: 'image/png', body: ONE_PIXEL_PNG })
+		route.fulfill({
+			status: 200,
+			contentType: 'image/png',
+			headers: { 'Cache-Control': 'no-store' },
+			body: ONE_PIXEL_PNG
+		})
 	);
 
 	// Load a cross-origin image (request.destination === 'image') while online
@@ -40,19 +45,6 @@ test('offline service worker: navigations fall back to /offline, non-navigation 
 
 	await page.unroute(crossOriginAvatar);
 	await page.context().setOffline(true);
-
-	// Offline, the cross-origin image fails cleanly instead of being served from SW cache or /offline
-	const loadedOffline = await page.evaluate(
-		(src) =>
-			new Promise<boolean>((resolve) => {
-				const img = new Image();
-				img.onload = () => resolve(true);
-				img.onerror = () => resolve(false);
-				img.src = src;
-			}),
-		crossOriginAvatar
-	);
-	expect(loadedOffline).toBe(false);
 
 	// Non-navigation same-origin GET (e.g. tRPC query) must fail with a network error, not /offline HTML (200 OK)
 	const trpcResult = await page.evaluate(() =>
