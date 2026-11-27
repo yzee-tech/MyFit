@@ -9,7 +9,8 @@ export const KEPT_ON_UPDATE = [
 	'last-used-auth-provider',
 	'workoutRunes',
 	'workoutRunes:backup',
-	'routineEditor'
+	'routineEditor',
+	'routineEditor:backup'
 ];
 
 /** Prefix of the waiting list and its backups (see $lib/utils/outbox.ts) */

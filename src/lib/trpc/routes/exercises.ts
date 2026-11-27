@@ -498,6 +498,9 @@ export const exercises = t.router({
 					});
 					count++;
 				}
+				if (count > 0 && exercise.archived) {
+					await tx.exercise.update({ where: { id: exercise.id }, data: { archived: false } });
+				}
 				return count;
 			});
 			return { added };
@@ -526,14 +529,15 @@ export const exercises = t.router({
 	 */
 	delete: t.procedure.input(z.string().cuid2()).mutation(async ({ ctx, input }) => {
 		const exercise = await findOwnExercise(ctx.userId, input);
-		const workoutCount = await prisma.workoutExercise.count({ where: { exerciseId: exercise.id } });
-		await withRoutinesTransaction(async (tx) => {
+		const workoutCount = await withRoutinesTransaction(async (tx) => {
 			await tx.exerciseTemplate.deleteMany({ where: { exerciseId: exercise.id } });
-			if (workoutCount === 0) {
+			const count = await tx.workoutExercise.count({ where: { exerciseId: exercise.id } });
+			if (count === 0) {
 				await tx.exercise.delete({ where: { id: exercise.id } });
 			} else {
 				await tx.exercise.update({ where: { id: exercise.id }, data: { archived: true } });
 			}
+			return count;
 		});
 		return { archived: workoutCount > 0 };
 	}),

@@ -152,6 +152,15 @@ export const exerciseSplits = t.router({
 						weightSetId: ex.weightSetId
 					}))
 				});
+				const exerciseIds = [
+					...new Set(workout.workoutExercises.flatMap((ex) => (ex.exerciseId ? [ex.exerciseId] : [])))
+				];
+				if (exerciseIds.length > 0) {
+					await tx.exercise.updateMany({
+						where: { id: { in: exerciseIds }, userId: ctx.userId, archived: true },
+						data: { archived: false }
+					});
+				}
 				return name;
 			});
 			return { routineName, message: `Added to My routines as “${routineName}”` };

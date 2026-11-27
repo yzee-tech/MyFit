@@ -231,7 +231,7 @@ function mergeStep(stored: OutboxEntry[], updated: OutboxEntry[], clientId: stri
 	if (!next) return stored;
 	return stored.some((entry) => entry.clientId === clientId)
 		? stored.map((entry) => (entry.clientId === clientId ? next : entry))
-		: [...stored, next];
+		: stored;
 }
 
 /** A workout's name as shown for a waiting entry */

@@ -260,6 +260,22 @@ test('a change another tab made while one was being sent is kept', async () => {
 	expect(readOutbox(storage).entries.map((e) => e.clientId)).toEqual(['b']);
 });
 
+test('an entry discarded while its send is in flight stays gone when the send fails', async () => {
+	const storage = new FakeStorage();
+	writeOutbox(storage, [entry('a', '2026-11-12T09:00:00.000Z')]);
+	await runOutbox({
+		storage,
+		userId: 'me',
+		trigger: 'manual',
+		send: async () => {
+			// Meanwhile, another tab (or the user tapping Discard) removes it from storage
+			writeOutbox(storage, []);
+			return { ok: false, error: new TypeError('Failed to fetch') };
+		}
+	});
+	expect(readOutbox(storage).entries).toEqual([]);
+});
+
 test('a phone that stops taking writes mid-run is reported, and the list is left as it was stored', async () => {
 	const storage = new FakeStorage();
 	writeOutbox(storage, [entry('a', '2026-11-12T09:00:00.000Z')]);
@@ -361,9 +377,15 @@ test('updating the app keeps the waiting workouts and their backups, and clears 
 	store.items.set('workoutOutbox:v1', '[{"clientId":"a"}]');
 	store.items.set('workoutOutbox:backup:123', 'unreadable');
 	store.items.set('workoutRunes', '{}');
+	store.items.set('routineEditor:backup', 'broken-routine');
 	store.items.set('theme', 'dark');
 	clearStorageForUpdate(storageOf(store));
-	expect([...store.items.keys()].sort()).toEqual(['workoutOutbox:backup:123', 'workoutOutbox:v1', 'workoutRunes']);
+	expect([...store.items.keys()].sort()).toEqual([
+		'routineEditor:backup',
+		'workoutOutbox:backup:123',
+		'workoutOutbox:v1',
+		'workoutRunes'
+	]);
 	expect(store.items.get('workoutOutbox:v1')).toBe('[{"clientId":"a"}]');
 });
 

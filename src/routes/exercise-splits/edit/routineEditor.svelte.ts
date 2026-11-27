@@ -98,6 +98,7 @@ function createRoutineEditor() {
 	function editExercise(exercise: Exercise) {
 		if (!editingExercise) return false;
 		const idx = exercises.indexOf(editingExercise);
+		if (idx === -1) return false;
 		if (exerciseNameExists(exercise.name, idx)) return false;
 		exercises[idx] = exercise;
 		save();
