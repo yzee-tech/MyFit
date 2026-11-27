@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import InfoPopover from '$lib/components/InfoPopover.svelte';
 	import AddEditExerciseDrawer from '$lib/components/mesocycleAndExerciseSplit/AddEditExerciseDrawer.svelte';
+	import ModeToggleButton from '$lib/components/ModeToggleButton.svelte';
 	import AddIcon from 'virtual:icons/lucide/plus';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import Progress from '$lib/components/ui/progress/progress.svelte';
@@ -15,10 +16,9 @@
 	import { TRPCClientError } from '@trpc/client';
 	import { browserTimeZone, withHintBase } from '$lib/utils/workoutUtils';
 	import { toast } from 'svelte-sonner';
-	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
+	import ReorderIcon from 'virtual:icons/lucide/arrow-up-down';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
-	import EditIcon from 'virtual:icons/lucide/pencil';
-	import CompareIcon from 'virtual:icons/lucide/scale';
+	import CompareIcon from 'virtual:icons/lucide/trending-up';
 	import { workoutRunes } from '../workoutRunes.svelte.js';
 	import DndComponent from './(components)/DndComponent.svelte';
 	import ExerciseHistorySheet from './(components)/ExerciseHistorySheet.svelte';
@@ -235,32 +235,22 @@
 			{/if}
 		</div>
 		<div class="grid grid-cols-3 gap-1">
-			<Button
+			<ModeToggleButton
 				aria-label="reorder-toggle"
+				aria-pressed={reordering}
+				active={reordering}
 				disabled={comparing}
+				icon={ReorderIcon}
 				onclick={() => (reordering = !reordering)}
-				size="icon"
-				variant="outline"
-			>
-				{#if !reordering}
-					<ReorderIcon />
-				{:else}
-					<EditIcon />
-				{/if}
-			</Button>
-			<Button
+			/>
+			<ModeToggleButton
 				aria-label="compare-exercises"
+				aria-pressed={comparing}
+				active={comparing}
 				disabled={reordering || workoutRunes.editingWorkoutId !== null}
+				icon={CompareIcon}
 				onclick={() => (comparing = !comparing)}
-				size="icon"
-				variant="outline"
-			>
-				{#if !comparing}
-					<CompareIcon />
-				{:else}
-					<EditIcon />
-				{/if}
-			</Button>
+			/>
 			<AddEditExerciseDrawer
 				addExercise={workoutRunes.addExercise}
 				context="workout"

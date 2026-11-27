@@ -257,7 +257,11 @@ test('Compare: a bodyweight exercise is compared at the bodyweight of the day it
 }) => {
 	await seedPullDay(userData.userId);
 	await startPullDay(page);
+	await expect(page.getByLabel('compare-exercises')).toHaveAttribute('aria-pressed', 'false');
 	await page.getByLabel('compare-exercises').click();
+	// Comparing is a mode too: the button says it is on, and reordering can't be used meanwhile
+	await expect(page.getByLabel('compare-exercises')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByLabel('reorder-toggle')).toBeDisabled();
 	await page.getByRole('button', { name: '(BW)' }).click();
 	// Pull-ups were last done at 90 kg (was 80, the bodyweight of the day rows were last done)
 	await expect(page.getByTestId('previous-bodyweight')).toContainText('90');
