@@ -91,7 +91,7 @@ test('secondaries that break the rules are refused, on a new exercise and on an 
 		['Chest', ['WholeBody'], /single muscles/],
 		['Chest', ['Cardio'], /single muscles/],
 		['Chest', ['Custom'], /single muscles/],
-		['WholeBody', ['Chest'], /whole body/]
+		['WholeBody', ['Chest'], /full body/]
 	];
 	for (const [primary, secondaries, message] of refused) {
 		await expect(caller.exercises.create(details('Refused', primary, secondaries))).rejects.toThrow(message);
