@@ -311,3 +311,33 @@ test('workouts.editById keeps existing.startedAt when startedAt is omitted', asy
 	expect(updated.startedAt).toEqual(startedAt);
 	expect(updated.userBodyweight).toBe(82);
 });
+
+test('exercises.delete archives an exercise used in a workout and deletes one without workouts', async () => {
+	const { userId, caller } = await newPerson();
+	const unused = await caller.exercises.create({
+		name: 'Unused curl',
+		targetMuscleGroup: 'Biceps',
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		note: null,
+		repsOnly: false,
+		maxReps: null,
+		levels: null,
+		distanceUnit: null
+	});
+	const delUnused = await caller.exercises.delete(unused.id);
+	expect(delUnused).toEqual({ archived: false });
+	expect(await prisma.exercise.findUnique({ where: { id: unused.id } })).toBeNull();
+
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [{ ...pullUps, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 0, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const used = await prisma.exercise.findFirstOrThrow({ where: { userId, name: pullUps.name } });
+	const delUsed = await caller.exercises.delete(used.id);
+	expect(delUsed).toEqual({ archived: true });
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: used.id } })).archived).toBe(true);
+});

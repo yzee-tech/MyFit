@@ -1,5 +1,4 @@
 /// <reference lib="WebWorker" />
-import type { WorkboxPlugin } from 'workbox-core';
 import { PrecacheFallbackPlugin, cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkOnly } from 'workbox-strategies';
@@ -8,7 +7,7 @@ declare let self: ServiceWorkerGlobalScope;
 const cacheFirstDestinations: RequestDestination[] = ['style', 'manifest', 'image', 'font'];
 const prerenderedPages = ['/privacy-policy', '/terms-of-service', '/offline', '/docs'];
 const fallbackPlugin = new PrecacheFallbackPlugin({ fallbackURL: '/offline' });
-const navigationFallbackPlugin: WorkboxPlugin = {
+const navigationFallbackPlugin: Pick<PrecacheFallbackPlugin, 'handlerDidError'> = {
 	handlerDidError: async (param) =>
 		param.request.mode === 'navigate' ? fallbackPlugin.handlerDidError?.(param) : undefined
 };

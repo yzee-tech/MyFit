@@ -410,3 +410,74 @@ test('a failed cleanup aborts the update, leaving the kept keys and what was not
 	expect(store.items.get('workoutRunes')).toBe('{}');
 	expect(store.items.get('theme')).toBe('dark');
 });
+
+test('routineEditor editExercise returns false and changes nothing when the editing exercise is no longer in the list', async () => {
+	const fs = await import('node:fs');
+	const { createRequire } = await import('node:module');
+	const ts = (await import('typescript')).default;
+	const { compileModule } = await import('svelte/compiler');
+	const svelteClient: unknown = createRequire(import.meta.url)('svelte/internal/client');
+
+	const store = new FakeStorage();
+	const prevStorage = globalThis.localStorage;
+	globalThis.localStorage = storageOf(store);
+	try {
+		const src = fs.readFileSync('src/routes/exercise-splits/edit/routineEditor.svelte.ts', 'utf8');
+		const js = ts.transpileModule(src, {
+			compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.CommonJS }
+		}).outputText;
+		const compiled = compileModule(js, {
+			filename: 'routineEditor.svelte.js',
+			generate: 'client'
+		}).js.code.replace(/^import \* as \$ from [^;]+;/m, '');
+
+		const exportsObj: {
+			routineEditor?: typeof import('../../src/routes/exercise-splits/edit/routineEditor.svelte').routineEditor;
+		} = {};
+		const req = (id: string) => {
+			if (id === '../myRoutines') {
+				return {
+					routineFingerprint: (r: { name: string; weightUnit: string; exercises: unknown[] }) =>
+						JSON.stringify({ name: r.name.trim(), weightUnit: r.weightUnit, exercises: r.exercises })
+				};
+			}
+			throw new Error(`Unexpected require: ${id}`);
+		};
+		new Function('$', 'exports', 'require', compiled)(svelteClient, exportsObj, req);
+		const editor = exportsObj.routineEditor!;
+
+		const rows = {
+			name: 'Barbell rows',
+			targetMuscleGroup: 'Traps' as const,
+			customMuscleGroup: null,
+			secondaryMuscleGroups: [],
+			bodyweightFraction: null,
+			sets: 3,
+			setType: 'Straight' as const,
+			repRangeStart: 6,
+			repRangeEnd: 10,
+			changeType: null,
+			changeAmount: null,
+			topRepRangeStart: null,
+			topRepRangeEnd: null,
+			weightSetId: null,
+			overloadPercentage: null,
+			lastSetToFailure: null,
+			forceRIRMatching: null,
+			minimumWeightChange: null,
+			note: null
+		};
+		const curls = { ...rows, name: 'Bicep curls', targetMuscleGroup: 'Biceps' as const };
+
+		editor.open({ name: 'Pull', weightUnit: 'KG', exercises: [rows, curls] });
+		editor.setEditingExercise(editor.exercises[0]);
+		editor.deleteExercise(0);
+
+		const savedBefore = store.items.get('routineEditor');
+		expect(editor.editExercise({ ...rows, sets: 5 })).toBe(false);
+		expect(JSON.parse(JSON.stringify(editor.exercises))).toEqual([curls]);
+		expect(store.items.get('routineEditor')).toBe(savedBefore);
+	} finally {
+		globalThis.localStorage = prevStorage;
+	}
+});

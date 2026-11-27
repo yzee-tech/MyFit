@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-test('offline service worker: navigations fall back to /offline, but non-navigation GETs fail cleanly', async ({
+const ONE_PIXEL_PNG = Buffer.from(
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+	'base64'
+);
+
+test('offline service worker: navigations fall back to /offline, non-navigation GETs fail cleanly, and cross-origin images are not cached', async ({
 	page
 }) => {
 	await page.goto('/login');
@@ -11,7 +16,43 @@ test('offline service worker: navigations fall back to /offline, but non-navigat
 	await page.reload();
 	await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
 
+	const crossOriginAvatar = 'https://lh3.googleusercontent.com/a/test-avatar.png';
+	await page.route(crossOriginAvatar, (route) =>
+		route.fulfill({ status: 200, contentType: 'image/png', body: ONE_PIXEL_PNG })
+	);
+
+	// Load a cross-origin image (request.destination === 'image') while online
+	const loadedOnline = await page.evaluate(
+		(src) =>
+			new Promise<boolean>((resolve) => {
+				const img = new Image();
+				img.onload = () => resolve(true);
+				img.onerror = () => resolve(false);
+				img.src = src;
+			}),
+		crossOriginAvatar
+	);
+	expect(loadedOnline).toBe(true);
+
+	// The service worker must not have cached the cross-origin image in Cache Storage
+	const cachedCrossOrigin = await page.evaluate(async (src) => Boolean(await caches.match(src)), crossOriginAvatar);
+	expect(cachedCrossOrigin).toBe(false);
+
+	await page.unroute(crossOriginAvatar);
 	await page.context().setOffline(true);
+
+	// Offline, the cross-origin image fails cleanly instead of being served from SW cache or /offline
+	const loadedOffline = await page.evaluate(
+		(src) =>
+			new Promise<boolean>((resolve) => {
+				const img = new Image();
+				img.onload = () => resolve(true);
+				img.onerror = () => resolve(false);
+				img.src = src;
+			}),
+		crossOriginAvatar
+	);
+	expect(loadedOffline).toBe(false);
 
 	// Non-navigation same-origin GET (e.g. tRPC query) must fail with a network error, not /offline HTML (200 OK)
 	const trpcResult = await page.evaluate(() =>
@@ -21,15 +62,6 @@ test('offline service worker: navigations fall back to /offline, but non-navigat
 		)
 	);
 	expect(trpcResult).toBe('network-error');
-
-	// Cross-origin GET must not be intercepted with /offline HTML
-	const crossOriginResult = await page.evaluate(() =>
-		fetch('https://example.com/test.json').then(
-			(res) => `ok:${res.status}`,
-			() => 'network-error'
-		)
-	);
-	expect(crossOriginResult).toBe('network-error');
 
 	// Navigation still falls back to the precached /offline page
 	await page.goto('/workouts');
