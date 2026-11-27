@@ -624,24 +624,22 @@ export function getBlockWeekHere(startDate: Date | string, now: Date = new Date(
 	return getBlockWeek(startDate, now, browserTimeZone(), pauses);
 }
 
-function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {
+export function generateAveragePerformanceDropOffs(performances: PreviousPerformance[]) {
 	const rateOfChangeSums: number[] = [];
+	const validPairCounts: number[] = [];
+	let maxPairs = 0;
 	let invalidDropOffs = false;
 
 	for (const performance of performances) {
-		for (let i = 0; i < performance.exercise.sets.length - 1; i++) {
+		const sets = performance.exercise.sets;
+		maxPairs = Math.max(maxPairs, Math.max(0, sets.length - 1));
+		for (let i = 0; i < sets.length - 1; i++) {
+			if (sets[i].skipped || sets[i + 1].skipped) continue;
 			const rateOfChange =
-				getSetCapacity(
-					performance.exercise.sets[i],
-					performance.oldUserBodyweight,
-					performance.exercise.bodyweightFraction
-				) -
-				getSetCapacity(
-					performance.exercise.sets[i + 1],
-					performance.oldUserBodyweight,
-					performance.exercise.bodyweightFraction
-				);
-			rateOfChangeSums[i] = (rateOfChangeSums[i] || 0) + rateOfChange;
+				getSetCapacity(sets[i], performance.oldUserBodyweight, performance.exercise.bodyweightFraction) -
+				getSetCapacity(sets[i + 1], performance.oldUserBodyweight, performance.exercise.bodyweightFraction);
+			rateOfChangeSums[i] = (rateOfChangeSums[i] ?? 0) + rateOfChange;
+			validPairCounts[i] = (validPairCounts[i] ?? 0) + 1;
 			if (rateOfChange < 0) {
 				invalidDropOffs = true;
 			}
@@ -650,11 +648,12 @@ function generateAveragePerformanceDropOffs(performances: PreviousPerformance[])
 
 	// Incorrect RIR estimates causing an increase in set performance over time
 	if (invalidDropOffs) {
-		return new Array(rateOfChangeSums.length).fill(0);
+		return new Array(maxPairs).fill(0);
 	}
 
-	const averageRatesOfChange = rateOfChangeSums.map((sum) => sum / performances.length);
-	return averageRatesOfChange;
+	return Array.from({ length: maxPairs }, (_, i) =>
+		validPairCounts[i] ? rateOfChangeSums[i] / validPairCounts[i] : 0
+	);
 }
 
 function getMaxIndexes(arr: number[]) {
@@ -1484,11 +1483,16 @@ export function progressiveOverloadMagic(
 			idealTotalOverloadPercentagePerSet
 		);
 		const setPriorities = (dropOffDifferences = getMaxIndexes(dropOffDifferences));
-		let remainingTotalOverload = adjustedTotalOverloadPercentagePerSet * lastPerformance.exercise.sets.length;
+		const nonSkippedSetCount = lastPerformance.exercise.sets.filter((set) => !set.skipped).length;
+		let remainingTotalOverload = adjustedTotalOverloadPercentagePerSet * nonSkippedSetCount;
 
 		for (const setIndex of setPriorities) {
 			const oldSet = lastPerformance.exercise.sets[setIndex];
 			if (!oldSet) continue;
+			if (oldSet.skipped) {
+				ex.sets[setIndex] = addExtraSetProperties(oldSet);
+				continue;
+			}
 
 			const newSet = { ...oldSet, reps: oldSet.reps + 1 };
 			const overloadAchieved = solveBergerFormula({

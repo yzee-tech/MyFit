@@ -241,3 +241,103 @@ test('a block’s sets per muscle count the sets done: an old workout’s skippe
 		{ muscleGroup: 'Traps', totalSets: 2 }
 	]);
 });
+
+test('createFromWorkout unarchives an archived exercise linked from the workout', async () => {
+	const { userId, caller } = await newPerson();
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [{ ...pullUps, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 0, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const { id: workoutId } = await prisma.workout.findFirstOrThrow({ where: { userId } });
+	const exercise = await prisma.exercise.findFirstOrThrow({ where: { userId, name: pullUps.name } });
+	await caller.exercises.delete(exercise.id);
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: exercise.id } })).archived).toBe(true);
+
+	await caller.exerciseSplits.createFromWorkout({ workoutId, name: 'Recovered Pull' });
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: exercise.id } })).archived).toBe(false);
+});
+
+test('addToRoutines unarchives an archived exercise when adding it to a routine', async () => {
+	const { userId, caller } = await newPerson();
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [{ ...pullUps, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 0, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const exercise = await prisma.exercise.findFirstOrThrow({ where: { userId, name: pullUps.name } });
+	await caller.exercises.delete(exercise.id);
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: exercise.id } })).archived).toBe(true);
+
+	await caller.exerciseSplits.save({
+		routines: [{ name: 'Upper', weightUnit: 'KG' }],
+		routineExercises: [[{ ...rows, exerciseIndex: 0, sets: 2 }]]
+	});
+	const routine = await prisma.exerciseSplitDay.findFirstOrThrow({
+		where: { exerciseSplit: { userId }, name: 'Upper' }
+	});
+
+	await caller.exercises.addToRoutines({ exerciseId: exercise.id, routineIds: [routine.id] });
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: exercise.id } })).archived).toBe(false);
+});
+
+test('workouts.editById keeps existing.startedAt when startedAt is omitted', async () => {
+	const { userId, caller } = await newPerson();
+	const startedAt = new Date('2026-11-10T10:00:00.000Z');
+	const endedAt = new Date('2026-11-10T11:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt, endedAt, routineName: null },
+		workoutExercises: [{ ...rows, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 40, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const { id } = await prisma.workout.findFirstOrThrow({ where: { userId } });
+
+	await caller.workouts.editById({
+		id,
+		endedAt,
+		data: {
+			workoutData: { userBodyweight: 82, routineName: null },
+			workoutExercises: [{ ...rows, exerciseIndex: 0 }],
+			workoutExercisesSets: [[{ setIndex: 0, reps: 11, load: 40, RIR: 2, skipped: false }]],
+			workoutExercisesMiniSets: [[[]]]
+		}
+	});
+	const updated = await prisma.workout.findUniqueOrThrow({ where: { id } });
+	expect(updated.startedAt).toEqual(startedAt);
+	expect(updated.userBodyweight).toBe(82);
+});
+
+test('exercises.delete archives an exercise used in a workout and deletes one without workouts', async () => {
+	const { userId, caller } = await newPerson();
+	const unused = await caller.exercises.create({
+		name: 'Unused curl',
+		targetMuscleGroup: 'Biceps',
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		note: null,
+		repsOnly: false,
+		maxReps: null,
+		levels: null,
+		distanceUnit: null
+	});
+	const delUnused = await caller.exercises.delete(unused.id);
+	expect(delUnused).toEqual({ archived: false });
+	expect(await prisma.exercise.findUnique({ where: { id: unused.id } })).toBeNull();
+
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [{ ...pullUps, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 0, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const used = await prisma.exercise.findFirstOrThrow({ where: { userId, name: pullUps.name } });
+	const delUsed = await caller.exercises.delete(used.id);
+	expect(delUsed).toEqual({ archived: true });
+	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: used.id } })).archived).toBe(true);
+});

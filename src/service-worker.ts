@@ -7,8 +7,15 @@ declare let self: ServiceWorkerGlobalScope;
 const cacheFirstDestinations: RequestDestination[] = ['style', 'manifest', 'image', 'font'];
 const prerenderedPages = ['/privacy-policy', '/terms-of-service', '/offline', '/docs'];
 const fallbackPlugin = new PrecacheFallbackPlugin({ fallbackURL: '/offline' });
+const navigationFallbackPlugin: Pick<PrecacheFallbackPlugin, 'handlerDidError'> = {
+	handlerDidError: async (param) =>
+		param.request.mode === 'navigate' ? fallbackPlugin.handlerDidError?.(param) : undefined
+};
 
 function routingStrategyFunction(mode: 'networkOnly' | 'cacheFirst', request: Request, url: URL) {
+	// Only handle same-origin requests
+	if (url.origin !== self.location.origin) return false;
+
 	// Ignore /auth requests
 	if (url.pathname.startsWith('/auth')) return false;
 
@@ -36,10 +43,10 @@ self.addEventListener('message', (event) => {
 
 registerRoute(
 	({ request, url }) => routingStrategyFunction('networkOnly', request, url),
-	new NetworkOnly({ plugins: [fallbackPlugin], networkTimeoutSeconds: 5 })
+	new NetworkOnly({ plugins: [navigationFallbackPlugin], networkTimeoutSeconds: 5 })
 );
 
 registerRoute(
 	({ request, url }) => routingStrategyFunction('cacheFirst', request, url),
-	new CacheFirst({ plugins: [fallbackPlugin] })
+	new CacheFirst({ plugins: [navigationFallbackPlugin] })
 );

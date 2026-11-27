@@ -1025,10 +1025,11 @@ export const workouts = t.router({
 			});
 			if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workout not found' });
 			await assertSetsMatchMeasures(ctx.userId, input.data);
+			const startedAt = input.data.workoutData.startedAt ?? existing.startedAt;
 			const workout: Prisma.WorkoutUncheckedCreateInput = {
 				id: input.id,
 				userId: ctx.userId,
-				startedAt: input.data.workoutData.startedAt!,
+				startedAt,
 				endedAt: input.endedAt,
 				userBodyweight: input.data.workoutData.userBodyweight,
 				note: input.data.workoutData.note,
@@ -1039,7 +1040,7 @@ export const workouts = t.router({
 
 			// The week is worked out again only when the start moved (a length-only edit keeps the saved
 			// value); a workout outside a block keeps what it had
-			const startMoved = new Date(input.data.workoutData.startedAt!).getTime() !== existing.startedAt.getTime();
+			const startMoved = new Date(startedAt).getTime() !== existing.startedAt.getTime();
 			workout.isDeload = existing.isDeload;
 
 			// (Nothing is restored here, so there are no queries of its own to run with the save)

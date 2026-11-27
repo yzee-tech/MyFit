@@ -2,6 +2,16 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-27: offline fallback, progression, outbox and routine fixes
+
+### Fixed
+
+- The offline page now shows only for page navigations, and requests to other sites are no longer intercepted or cached by the service worker.
+- Skipped sets in past workouts no longer stall rep progression or skew average drop-off calculations.
+- A discarded offline workout can no longer reappear in the outbox when another tab saves.
+- Archived exercises are restored automatically when added to a routine or when a routine is created from a workout.
+- Unreadable routine draft backups are kept on the device across app updates.
+
 ## 2026-11-27: "Whole body" is now "Full body"
 
 ### Changed

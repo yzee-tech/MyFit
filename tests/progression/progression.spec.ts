@@ -13,6 +13,7 @@ import {
 	getNextWeightHint,
 	getExerciseVolume,
 	allSetsAtMaxReps,
+	generateAveragePerformanceDropOffs,
 	getPerformanceChanges,
 	solveBergerFormula,
 	type ExerciseHistory,
@@ -1103,4 +1104,67 @@ test('myo-rep match: set 1 not past the top of the range keeps the weight, even 
 	// Only set 1 counts: a match set's main part past the top doesn't move it on its own
 	const bigMatch = myorepMatchSuggestion([matchSet(18), matchSet(21), matchSet(19)]);
 	expect(bigMatch.sets.map((set) => set.load)).toEqual([40, 40, 40]);
+});
+
+test('generateAveragePerformanceDropOffs ignores skipped sets and keeps index positions', () => {
+	const full = performance('Barbell rows', [
+		{ reps: 12, load: 40, RIR: 2 },
+		{ reps: 10, load: 40, RIR: 2 },
+		{ reps: 8, load: 40, RIR: 2 }
+	]);
+	const withSkippedMiddle = performance('Barbell rows', [
+		{ reps: 12, load: 40, RIR: 2 },
+		{ reps: 0, load: 0, RIR: 2 },
+		{ reps: 8, load: 40, RIR: 2 }
+	]);
+	withSkippedMiddle.exercise.sets[1].skipped = true;
+
+	const dropOffs = generateAveragePerformanceDropOffs([full, withSkippedMiddle]);
+	expect(dropOffs).toHaveLength(2);
+	expect(dropOffs.every((value) => Number.isFinite(value))).toBe(true);
+	// Both pairs in `full` have positive drop-offs; `withSkippedMiddle` has no valid pairs so it shouldn't zero them out
+	expect(dropOffs[0]).toBeGreaterThan(0);
+	expect(dropOffs[1]).toBeGreaterThan(0);
+});
+
+test('progressiveOverloadMagic handles a skipped set in the middle without NaN or stalled progression', () => {
+	const past = performance('Barbell rows', [
+		{ reps: 10, load: 40, RIR: 3 },
+		{ reps: undefined as unknown as number, load: undefined as unknown as number, RIR: 3 },
+		{ reps: 8, load: 40, RIR: 0 }
+	]);
+	past.exercise.sets[1].skipped = true;
+
+	const output = progressiveOverloadMagic(testPlan(0), 2, 100, { 'Barbell rows': [past] }, 'normal');
+	const rows = output.find((ex) => ex.name === 'Barbell rows')!;
+
+	expect(rows.sets).toHaveLength(3);
+	expect(Number.isFinite(rows.sets[0].reps)).toBe(true);
+	expect(Number.isFinite(rows.sets[2].reps)).toBe(true);
+	expect(rows.sets[0].reps! + rows.sets[2].reps!).toBeGreaterThan(10 + 8);
+	// Skipped slot is filled from lastSuggestedSet with finite numbers and skipped: false
+	expect(rows.sets[1].skipped).toBe(false);
+	expect(Number.isFinite(rows.sets[1].reps)).toBe(true);
+	expect(Number.isFinite(rows.sets[1].load)).toBe(true);
+});
+
+test('progressiveOverloadMagic handles a skipped set at the end without NaN or stalled progression', () => {
+	const past = performance('Barbell rows', [
+		{ reps: 10, load: 40, RIR: 3 },
+		{ reps: 9, load: 40, RIR: 3 },
+		{ reps: undefined as unknown as number, load: undefined as unknown as number, RIR: 0 }
+	]);
+	past.exercise.sets[2].skipped = true;
+
+	const output = progressiveOverloadMagic(testPlan(0), 2, 100, { 'Barbell rows': [past] }, 'normal');
+	const rows = output.find((ex) => ex.name === 'Barbell rows')!;
+
+	expect(rows.sets).toHaveLength(3);
+	expect(Number.isFinite(rows.sets[0].reps)).toBe(true);
+	expect(Number.isFinite(rows.sets[1].reps)).toBe(true);
+	expect(rows.sets[0].reps! + rows.sets[1].reps!).toBeGreaterThan(10 + 9);
+	// Skipped slot is filled from lastSuggestedSet with finite numbers and skipped: false
+	expect(rows.sets[2].skipped).toBe(false);
+	expect(Number.isFinite(rows.sets[2].reps)).toBe(true);
+	expect(Number.isFinite(rows.sets[2].load)).toBe(true);
 });
