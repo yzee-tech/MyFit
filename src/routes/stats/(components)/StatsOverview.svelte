@@ -157,7 +157,7 @@
 
 	/**
 	 * Muscles worked, most sets first, with last period's sets. By the name shown: a custom group from
-	 * before the name rule can read the same as a built-in one ("Whole body"), and the two are one line
+	 * before the name rule can read the same as a built-in one ("Full body"), and the two are one line
 	 */
 	let muscles = $derived.by(() => {
 		if (!overview) return [];
@@ -431,7 +431,7 @@
 					{/each}
 				</ul>
 				<p class="mt-2 text-xs text-muted-foreground" data-testid="stats-muscles-note">
-					A secondary muscle group counts half a set. Whole body counts half a set for each area.
+					A secondary muscle group counts half a set. Full body counts half a set for each area.
 				</p>
 			{/if}
 		</Card.Root>

@@ -245,7 +245,7 @@ test('a custom muscle group can’t be named like a built-in one', async () => {
 		...details(name, 'Custom'),
 		customMuscleGroup
 	});
-	for (const name of ['Whole body', 'wholebody', 'CHEST', 'front delts', 'Cardio']) {
+	for (const name of ['Whole body', 'wholebody', 'Full body', 'fullbody', 'CHEST', 'front delts', 'Cardio']) {
 		await expect(caller.exercises.create(custom('Refused', name)), name).rejects.toThrow(/pick it instead of Custom/);
 	}
 	// A save that would make the exercise is refused the same way

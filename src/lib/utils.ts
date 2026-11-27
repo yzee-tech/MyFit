@@ -122,6 +122,8 @@ export function averagePercentageChange(arr: number[]): number {
 
 export function convertCamelCaseToNormal(text?: string | null): string {
 	if (!text) return '';
+	// The WholeBody muscle group reads "Full body": only the shown name changed, not the stored value
+	if (text === 'WholeBody') return 'Full body';
 	return text
 		.replace(/([a-z])([A-Z])/g, '$1 $2')
 		.toLowerCase()

@@ -30,7 +30,7 @@ test('New exercise: up to two muscles it also works, kept in step with its muscl
 	await expect(secondaryPicker(page)).toContainText('Secondary muscle group(s)');
 	await expect(page.getByText('Primary muscle group', { exact: true })).toBeVisible();
 	// Single muscles only, and not the muscle group itself
-	for (const name of ['Chest', 'Cardio', 'Custom', 'Whole body']) await expect(muscle(page, name)).toHaveCount(0);
+	for (const name of ['Chest', 'Cardio', 'Custom', 'Full body']) await expect(muscle(page, name)).toHaveCount(0);
 
 	await muscle(page, 'Triceps').click();
 	await muscle(page, 'Front delts').click();
@@ -48,7 +48,7 @@ test('New exercise: up to two muscles it also works, kept in step with its muscl
 	await expect(muscle(page, 'Front delts')).toHaveAttribute('aria-pressed', 'true');
 	await expect(muscle(page, 'Chest')).toHaveAttribute('aria-pressed', 'false');
 	// Whole body and cardio have none
-	await pickMuscleGroup(page, 'Whole body');
+	await pickMuscleGroup(page, 'Full body');
 	await expect(secondaryPicker(page)).toHaveCount(0);
 	await pickMuscleGroup(page, 'Chest');
 	await expect(secondaryPicker(page).getByRole('button', { pressed: true })).toHaveCount(0);
@@ -80,8 +80,8 @@ test('a custom muscle group named like a built-in one is refused, with the reaso
 	await page.getByRole('button', { name: 'Create exercise', exact: true }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'pick it instead of Custom' })).toBeVisible();
 	expect(await prisma.exercise.count({ where: { userId: userData.userId, name: 'Bear crawl' } })).toBe(0);
-	// The form is still there with what was typed: picking Whole body saves it
-	await pickMuscleGroup(page, 'Whole body');
+	// The form is still there with what was typed: picking Full body saves it
+	await pickMuscleGroup(page, 'Full body');
 	await page.getByRole('button', { name: 'Create exercise', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Bear crawl' })).toBeVisible();
 	const created = await prisma.exercise.findUniqueOrThrow({
@@ -142,7 +142,7 @@ async function seedWorkout(
 	});
 }
 
-test('Stats and a saved workout count half sets, with Whole body as its own line', async ({ page, userData }) => {
+test('Stats and a saved workout count half sets, with Full body as its own line', async ({ page, userData }) => {
 	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
 	const workout = await seedWorkout(userData.userId, [
 		{ name: 'Bench press', muscle: 'Chest', secondaries: ['Triceps', 'FrontDelts'], sets: 3 },
@@ -154,7 +154,7 @@ test('Stats and a saved workout count half sets, with Whole body as its own line
 	// Whole sets done: the halves are only in the per-muscle and per-area counts
 	await expect(page.getByTestId('stats-sets-current')).toHaveText('7');
 	const muscles = page.getByTestId('stats-muscles').getByRole('listitem');
-	await expect(muscles).toHaveText(['Whole body 4 · 0', 'Chest 3 · 0', 'Triceps 1.5 · 0', 'Front delts 1.5 · 0']);
+	await expect(muscles).toHaveText(['Full body 4 · 0', 'Chest 3 · 0', 'Triceps 1.5 · 0', 'Front delts 1.5 · 0']);
 	await expect(page.getByTestId('stats-muscles-note')).toContainText('counts half a set');
 	// Burpees: 4 × half a set in every area; bench: 3 for chest, 1.5 each for arms and shoulders
 	await expect(page.getByTestId('stats-radar')).toHaveAttribute(
@@ -168,7 +168,7 @@ test('Stats and a saved workout count half sets, with Whole body as its own line
 	await page.getByRole('button', { name: 'Stats' }).click();
 	await expect(page.getByTestId('sets-per-muscle-chart')).toHaveAttribute(
 		'data-sets',
-		'Whole body 4, Chest 3, Triceps 1.5, Front delts 1.5'
+		'Full body 4, Chest 3, Triceps 1.5, Front delts 1.5'
 	);
 });
 
@@ -177,9 +177,9 @@ test('Stats: a custom group from before the name rule that reads like a built-in
 	userData
 }) => {
 	await prisma.workout.deleteMany({ where: { userId: userData.userId } });
-	// Made before custom groups were kept from built-in names: "Whole body" and "Front delts" typed by hand
+	// Made before custom groups were kept from built-in names: "Full body" and "Front delts" typed by hand
 	await seedWorkout(userData.userId, [
-		{ name: 'Old burpees', muscle: 'Custom', custom: 'Whole body', sets: 2 },
+		{ name: 'Old burpees', muscle: 'Custom', custom: 'Full body', sets: 2 },
 		{ name: 'New burpees', muscle: 'WholeBody', sets: 3 },
 		{ name: 'Old raises', muscle: 'Custom', custom: 'Front delts', sets: 1 },
 		{ name: 'Front raises', muscle: 'FrontDelts', sets: 1 }
@@ -189,7 +189,7 @@ test('Stats: a custom group from before the name rule that reads like a built-in
 	// The page is there (two lines with one name once left it blank), with one line per name shown
 	await expect(page.getByTestId('stats-sets-current')).toHaveText('7');
 	const muscles = page.getByTestId('stats-muscles').getByRole('listitem');
-	await expect(muscles).toHaveText(['Whole body 5 · 0', 'Front delts 2 · 0']);
+	await expect(muscles).toHaveText(['Full body 5 · 0', 'Front delts 2 · 0']);
 	await expect(page.getByTestId('stats-radar')).toBeVisible();
 });
 
