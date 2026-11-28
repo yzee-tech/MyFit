@@ -182,11 +182,13 @@ export const exerciseSplits = t.router({
 					data: workoutExercises.map((ex, exerciseIndex) => ({
 						exerciseSplitDayId: routineId,
 						exerciseIndex,
-						...exerciseOf(ex),
 						targetMuscleGroup: ex.targetMuscleGroup,
 						customMuscleGroup: ex.customMuscleGroup,
 						secondaryMuscleGroups: ex.secondaryMuscleGroups,
 						bodyweightFraction: ex.bodyweightFraction,
+						// After the workout's own copy: a renamed row that lands on an exercise already in the library takes
+						// that exercise's details, as in a save
+						...exerciseOf(ex),
 						sets: ex._count.sets || null,
 						setType: ex.setType,
 						repRangeStart: ex.repRangeStart,

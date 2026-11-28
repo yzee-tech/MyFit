@@ -401,3 +401,32 @@ test('createFromWorkout counts sets done, names a repeated exercise apart, keeps
 	});
 	expect(renamed.map((row) => row.name)).toEqual(['Chin-ups', rows.name, 'Pull-ups (2)']);
 });
+
+test('createFromWorkout: a repeated exercise whose "(2)" name is already in the library takes that exercise’s details', async () => {
+	const { userId, caller } = await newPerson();
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [{ ...pullUps, exerciseIndex: 0 }],
+		workoutExercisesSets: [[{ setIndex: 0, reps: 10, load: 0, RIR: 2, skipped: false }]],
+		workoutExercisesMiniSets: [[[]]]
+	});
+	const { id: workoutId } = await prisma.workout.findFirstOrThrow({ where: { userId } });
+	const first = await prisma.workoutExercise.findFirstOrThrow({ where: { workoutId } });
+	// The same exercise again in the workout, and a different exercise already called "Pull-ups (2)"
+	const { id: _, ...copy } = first;
+	await prisma.workoutExercise.create({ data: { ...copy, exerciseIndex: 1 } });
+	const existing = await prisma.exercise.create({
+		data: { userId, name: 'Pull-ups (2)', targetMuscleGroup: 'Traps', bodyweightFraction: 0.5 }
+	});
+
+	await caller.exerciseSplits.createFromWorkout({ workoutId, name: 'Pull day' });
+	const rows = await prisma.exerciseTemplate.findMany({
+		where: { exerciseSplitDay: { exerciseSplit: { userId } } },
+		orderBy: { exerciseIndex: 'asc' }
+	});
+	expect(rows.map((row) => row.name)).toEqual(['Pull-ups', 'Pull-ups (2)']);
+	// The second row is the library's "Pull-ups (2)": its muscle and bodyweight share, not the workout's (Lats, 1)
+	expect(rows[1]).toMatchObject({ exerciseId: existing.id, targetMuscleGroup: 'Traps', bodyweightFraction: 0.5 });
+	expect(rows[0]).toMatchObject({ targetMuscleGroup: 'Lats', bodyweightFraction: 1 });
+});
