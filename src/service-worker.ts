@@ -43,7 +43,7 @@ self.addEventListener('message', (event) => {
 
 registerRoute(
 	({ request, url }) => routingStrategyFunction('networkOnly', request, url),
-	new NetworkOnly({ plugins: [navigationFallbackPlugin], networkTimeoutSeconds: 5 })
+	new NetworkOnly({ plugins: [navigationFallbackPlugin], networkTimeoutSeconds: 10 })
 );
 
 registerRoute(

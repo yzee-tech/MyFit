@@ -1,6 +1,5 @@
 import { SvelteKitAuth } from '@auth/sveltekit';
 import { PrismaAdapter } from '@auth/prisma-adapter';
-import { PrismaClient } from '@prisma/client';
 import github from '@auth/sveltekit/providers/github';
 import google from '@auth/sveltekit/providers/google';
 import { createHttpContext } from '$lib/trpc/context';
@@ -9,8 +8,8 @@ import { createTRPCHandle } from 'trpc-sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import type { Handle } from '@sveltejs/kit';
 import { isPublicPath } from '$lib/utils/safeRedirect';
-
-const prisma = new PrismaClient();
+import { prisma } from '$lib/prisma';
+import { homeRedirect } from '$lib/server/homeRedirect';
 
 const { handle: authHandle } = SvelteKitAuth({
 	adapter: PrismaAdapter(prisma),
@@ -57,4 +56,7 @@ const signInGuard: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle = sequence(authHandle, signInGuard, trpcHandle);
+/** A signed-in visit to "/" goes to /dashboard before the page and its layout load (see homeRedirect) */
+const homeRedirectHandle: Handle = async ({ event, resolve }) => (await homeRedirect(event)) ?? resolve(event);
+
+export const handle = sequence(authHandle, homeRedirectHandle, signInGuard, trpcHandle);
