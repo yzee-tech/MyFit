@@ -248,6 +248,8 @@ test('an assisted machine has no Warm up in its menu; a weighted exercise does',
 	await page.getByTestId('Barbell rows-menu-button').click();
 	await expect(page.getByRole('menuitem', { name: 'Warm up' })).toBeVisible();
 	await page.keyboard.press('Escape');
+	// One menu open at a time: the first has closed before the second opens
+	await expect(page.getByRole('menu')).toHaveCount(0);
 	await page.getByTestId('Assisted pull-up-menu-button').click();
 	await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeVisible();
 	await expect(page.getByRole('menuitem', { name: 'Warm up' })).toHaveCount(0);
