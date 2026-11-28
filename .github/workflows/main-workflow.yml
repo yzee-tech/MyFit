@@ -25,9 +25,10 @@ jobs:
       - name: Run Svelte Check
         run: pnpm check
 
-  # The browser tests run as parallel shards, each with its own runner and its own database: Playwright
-  # splits the suite by test (fullyParallel), so there is no list of files to keep up to date. The shard
-  # count is the number of entries in the matrix below.
+  # The browser tests run as parallel shards, each with its own runner and its own database. Which test
+  # files a shard runs is in tests/diagnostics/shards.txt (Playwright's own --shard split by test count put all
+  # the fast logic tests in one shard and the slow browser tests in the other: 1 minute against 8). The shard
+  # count is the number of entries in the matrix below, and shards.txt must have as many lines.
   playwright_shard:
     env:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
@@ -93,10 +94,10 @@ jobs:
 
       # Fails in about a minute, before the long run, if the shards would drop or double a test
       - name: Check the shards together run every test once
-        run: bash tests/diagnostics/shard-coverage.sh ${{ matrix.shard }} ${{ strategy.job-total }}
+        run: bash tests/diagnostics/shards.sh check ${{ matrix.shard }} ${{ strategy.job-total }}
 
       - name: Run Playwright tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: bash tests/diagnostics/shards.sh run ${{ matrix.shard }}
 
       # This directory contains strict-schema JSON only, never raw test-results/auth/trace/video.
       - name: Validate safe failure evidence

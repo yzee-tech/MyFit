@@ -16,11 +16,11 @@ What changed in MyFit, newest first.
 
 ### Tests
 
-- The Playwright suite now runs as two parallel CI shards (about half the tests each, on separate runners with
-  separate databases), so a full run is faster. The check pull requests must pass is still called
+- The Playwright suite now runs as two parallel CI shards (about half the test time each, on separate runners with
+  separate databases), so a full run is faster. Which test files each shard runs is in `tests/diagnostics/shards.txt`. The check pull requests must pass is still called
   `playwright_tests`: it passes only when both shards pass.
 - Before the long run, each shard checks that the shards together run every test exactly once, so a split that
-  drops or doubles a test fails within about a minute.
+  drops or doubles a test (for example a new test folder in no shard) fails within about a minute.
 - Each shard uploads its own evidence (`playwright-safe-evidence-1`, `-2`) and lists its retried tests in its own
   job summary. No test, timeout, retry rule or fail-on-flaky setting changed.
 
