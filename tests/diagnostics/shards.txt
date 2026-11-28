@@ -3,6 +3,8 @@
 # shards.sh check fails otherwise. Playwright's own --shard splits by test count, which put all the fast
 # logic tests in one shard and the slow browser tests in the other (1 minute against 8), so the slow
 # browser files (tests/models) are split by file name instead, at the letter that balances their time.
-# The shard durations are in each run's job summary: move the letter if they drift apart.
-tests/progression tests/guardrails tests/helpers tests/home tests/login tests/models/[^r-z]
-tests/models/[r-z]
+# The shard durations are in each run's job summary: move the letter if they drift apart. Keep the shards balanced
+# (within about 10% of each other): after a change that adds tests or slow tests, compare both shards' durations in
+# the run's job summary and move the letter (or a file) before the shards drift, or sharding saves nothing.
+tests/progression tests/guardrails tests/helpers tests/home tests/login tests/models/[^q-z]
+tests/models/[q-z]

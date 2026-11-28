@@ -8,7 +8,9 @@ The suite runs as parallel CI shards, each on its own runner: every shard writes
 `shards.txt` says which test files each shard runs, and `shards.sh check` verifies, before the run, that the shards
 together run every test exactly once (it fails on a test in no shard or in two). Playwright's own `--shard` splits by
 test count, which gave one shard all the fast logic tests and the other all the slow browser tests, so the browser
-files are split by file name instead: move the letter in `shards.txt` if the two shards' durations drift apart.
+files are split by file name instead. The shards must stay balanced (within about 10% of each other, or sharding saves
+nothing): after adding tests or slow tests, compare both shards' durations in the run's job summary and move the letter in
+`shards.txt` (or a file) before they drift apart.
 
 - Each attempt has a JSON record: test source/line, retry index, outcome, duration, up to 500 step timings,
   fixed action categories/operations, and up to 200 fixed UI-state changes. Records are written for every
