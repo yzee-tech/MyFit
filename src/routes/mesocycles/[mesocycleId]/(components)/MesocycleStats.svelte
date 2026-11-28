@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
-	import { convertCamelCaseToNormal } from '$lib/utils';
+	import { muscleLabel } from '$lib/utils/muscleShares';
 	import {
 		generatePerformanceChangesPerMuscleGroup,
 		generatePerformanceChangesPerSplitDay,
@@ -78,7 +78,7 @@
 				</Card.Header>
 				<Card.Content class="p-4 pt-0">
 					<div class="text-2xl font-bold">
-						{convertCamelCaseToNormal(performanceChangesPerMuscleGroups.at(-1)!.muscleGroup)}
+						{muscleLabel(performanceChangesPerMuscleGroups.at(-1)!.muscleGroup)}
 					</div>
 					<p class="text-xs text-muted-foreground">
 						{performanceChangesPerMuscleGroups.at(-1)!.averagePercentageChange.toFixed(2)}% cyclic increase
@@ -95,7 +95,7 @@
 				</Card.Header>
 				<Card.Content class="p-4 pt-0">
 					<div class="text-2xl font-bold">
-						{convertCamelCaseToNormal(performanceChangesPerMuscleGroups[0].muscleGroup)}
+						{muscleLabel(performanceChangesPerMuscleGroups[0].muscleGroup)}
 					</div>
 					<p class="text-xs text-muted-foreground">
 						{performanceChangesPerMuscleGroups[0].averagePercentageChange.toFixed(2)}% cyclic increase
@@ -142,7 +142,7 @@
 				</Card.Header>
 				<Card.Content class="p-4 pt-0">
 					<div class="text-2xl font-bold">
-						{setsPerformedPerMuscleGroup.at(-1)!.muscleGroup}
+						{muscleLabel(setsPerformedPerMuscleGroup.at(-1)!.muscleGroup)}
 					</div>
 					<p class="text-xs text-muted-foreground">
 						Total: {setsPerformedPerMuscleGroup.at(-1)!.totalSets} sets
@@ -159,7 +159,7 @@
 				</Card.Header>
 				<Card.Content class="p-4 pt-0">
 					<div class="text-2xl font-bold">
-						{setsPerformedPerMuscleGroup[0].muscleGroup}
+						{muscleLabel(setsPerformedPerMuscleGroup[0].muscleGroup)}
 					</div>
 					<p class="text-xs text-muted-foreground">
 						Total: {setsPerformedPerMuscleGroup[0].totalSets} sets

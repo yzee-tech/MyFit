@@ -7,8 +7,7 @@
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import { trpc } from '$lib/trpc/client';
 	import type { RouterOutputs } from '$lib/trpc/router';
-	import { convertCamelCaseToNormal } from '$lib/utils';
-	import { formatSetCount } from '$lib/utils/muscleShares';
+	import { formatSetCount, muscleLabel } from '$lib/utils/muscleShares';
 	import {
 		BODY_AREAS,
 		progressBars,
@@ -162,7 +161,7 @@
 	let muscles = $derived.by(() => {
 		if (!overview) return [];
 		const { current, previous } = overview;
-		const shown = (name: string) => (/^[A-Z][a-zA-Z]+$/.test(name) ? convertCamelCaseToNormal(name) : name);
+		const shown = muscleLabel;
 		const lines = new Map<string, { name: string; current: number; previous: number }>();
 		const add = (sets: Record<string, number>, period: 'current' | 'previous') => {
 			for (const [key, count] of Object.entries(sets)) {

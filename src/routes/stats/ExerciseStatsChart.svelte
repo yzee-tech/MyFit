@@ -50,9 +50,14 @@
 	);
 
 	type WorkoutExercise = RouterOutputs['workouts']['getExerciseHistory'][number];
-	type PropsType = { exercises: WorkoutExercise[] | undefined; selectedExercise: string };
+	type PropsType = {
+		exercises: WorkoutExercise[] | undefined;
+		selectedExercise: string;
+		/** Sessions still being fetched: the spinner shows only then, not once there are none to chart */
+		loading?: boolean;
+	};
 
-	let { exercises: reverseExercises, selectedExercise }: PropsType = $props();
+	let { exercises: reverseExercises, selectedExercise, loading = false }: PropsType = $props();
 	let allExercises = $derived(reverseExercises?.toReversed() ?? []);
 
 	// A machine's levels aren't weights, and a run is neither: each kind of session is charted on its own.
@@ -433,10 +438,12 @@
 		{/if}
 	</Card.Header>
 	<Card.Content>
-		{#if allExercises.length === 0}
+		{#if allExercises.length === 0 && loading}
 			<div class="flex items-center gap-2 px-2 text-sm text-muted-foreground">
 				<LoaderCircle class="animate-spin" /> Fetching performances
 			</div>
+		{:else if allExercises.length === 0}
+			<div class="px-2 text-sm text-muted-foreground" data-testid="chart-no-sessions">No sessions to chart</div>
 		{:else}
 			<canvas
 				bind:this={chartCanvas}

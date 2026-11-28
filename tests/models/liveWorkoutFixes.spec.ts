@@ -224,3 +224,51 @@ test('replacing an exercise in a past workout with a machine in pounds: its load
 	// Stored in kg, as always
 	expect(saved.sets[0].load).toBeCloseTo(45.36, 1);
 });
+
+test('an assisted machine has no Warm up in its menu; a weighted exercise does', async ({ page, userData }) => {
+	await createExercises(userData.userId, [{ name: 'Barbell rows', targetMuscleGroup: 'Lats' }]);
+	await prisma.exercise.create({
+		data: {
+			userId: userData.userId,
+			name: 'Assisted pull-up',
+			targetMuscleGroup: 'Lats',
+			machineWeights: [10, 20, 30],
+			machineUnit: 'KG',
+			assisted: true
+		}
+	});
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	if (await page.getByRole('radio', { name: /^Blank workout/ }).count()) await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await quickAdd(page, ['Barbell rows', 'Assisted pull-up']);
+
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await expect(page.getByRole('menuitem', { name: 'Warm up' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await page.getByTestId('Assisted pull-up-menu-button').click();
+	await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeVisible();
+	await expect(page.getByRole('menuitem', { name: 'Warm up' })).toHaveCount(0);
+});
+
+test('History of an exercise never done: its chart says there are no sessions, not "Fetching performances" for ever', async ({
+	page,
+	userData
+}) => {
+	await createExercises(userData.userId, [{ name: 'Barbell rows', targetMuscleGroup: 'Lats' }]);
+	await page.goto('/workouts');
+	await page.getByLabel('create-workout').click();
+	await page.getByPlaceholder('Type here').fill('80');
+	if (await page.getByRole('radio', { name: /^Blank workout/ }).count()) await pickRoutine(page, 'Blank workout');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises/);
+	await quickAdd(page, ['Barbell rows']);
+	await page.getByTestId('Barbell rows-menu-button').click();
+	await page.getByRole('menuitem', { name: 'History' }).click();
+	const sheet = page.getByRole('dialog').filter({ hasText: 'History' });
+	await sheet.getByText('Show progression chart?').click();
+	await expect(sheet.getByTestId('chart-no-sessions')).toHaveText('No sessions to chart');
+	await expect(sheet.getByText('Fetching performances')).toHaveCount(0);
+});

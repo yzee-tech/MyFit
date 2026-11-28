@@ -2,7 +2,7 @@
 	import { defaultWeightStep, fromKg, roundWeight, snapToStep, toKg, unitLabel } from '$lib/utils/weightUnits';
 	import { bestRecentEstimate, canWarmUp, estimatedOneRepMax, warmUpPlan } from '$lib/utils/oneRepMax';
 	import { trpc } from '$lib/trpc/client';
-	import { availableWeightsFor, weightsAround } from '$lib/utils/weightSets';
+	import { availableWeightsFor, isAssistedExercise, weightsAround } from '$lib/utils/weightSets';
 	import { page } from '$app/stores';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -20,7 +20,12 @@
 	let unit = $derived(exercise?.weightUnit ?? 'KG');
 	let shown = $derived(
 		exercise !== undefined &&
-			canWarmUp(exercise, exercise.name in workoutRunes.repsOnly, workoutRunes.measureOf(exercise.name).measure)
+			canWarmUp(
+				exercise,
+				exercise.name in workoutRunes.repsOnly,
+				workoutRunes.measureOf(exercise.name).measure,
+				isAssistedExercise(exercise, $page.data.weightSets ?? [])
+			)
 	);
 	let oneRepMax = $state<number>();
 	/** Where the one rep max came from, e.g. "Best of your last 3 times: Oct 20, 80 kg × 8, RIR 2" */
@@ -54,7 +59,15 @@
 				oneRepMax = undefined;
 				oneRepMaxSource = undefined;
 				calculateOneRepMax();
-				if (!canWarmUp(opened, opened.name in workoutRunes.repsOnly, workoutRunes.measureOf(opened.name).measure))
+				const assisted = isAssistedExercise(opened, $page.data.weightSets ?? []);
+				if (
+					!canWarmUp(
+						opened,
+						opened.name in workoutRunes.repsOnly,
+						workoutRunes.measureOf(opened.name).measure,
+						assisted
+					)
+				)
 					return;
 				prefillFromHistory(opened.name, opened.weightUnit ?? 'KG', request);
 			});

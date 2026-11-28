@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ExerciseForm, { type ExerciseFormDetails } from '$lib/components/exercises/ExerciseForm.svelte';
+	import LoadFailed from '$lib/components/LoadFailed.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import H2 from '$lib/components/ui/typography/H2.svelte';
@@ -19,9 +20,16 @@
 	let search = $state('');
 	let newExerciseOpen = $state(false);
 
-	onMount(async () => {
-		exercises = await trpc().exercises.list.query();
-	});
+	let loadFailed = $state(false);
+	async function load() {
+		loadFailed = false;
+		try {
+			exercises = await trpc().exercises.list.query();
+		} catch {
+			loadFailed = true;
+		}
+	}
+	onMount(load);
 
 	const muscleGroupOf = (exercise: ExerciseRow) =>
 		exercise.customMuscleGroup ?? convertCamelCaseToNormal(exercise.targetMuscleGroup);
@@ -100,7 +108,9 @@
 	</ResponsiveDialog>
 </div>
 
-{#if exercises === 'loading'}
+{#if exercises === 'loading' && loadFailed}
+	<LoadFailed what="your exercises" retry={load} />
+{:else if exercises === 'loading'}
 	<div class="flex flex-col gap-1">
 		{#each Array(6) as _}
 			<Skeleton class="h-14 w-full" />

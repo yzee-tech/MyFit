@@ -8,6 +8,7 @@ import {
 	warmUpPlan
 } from '../../src/lib/utils/oneRepMax';
 import { solveBergerFormula } from '../../src/lib/utils/workoutUtils';
+import { isAssistedExercise } from '../../src/lib/utils/weightSets';
 
 type Set = { reps: number; load: number; RIR: number; skipped?: boolean };
 const set = (load: number, reps: number, RIR = 0, skipped = false): Set => ({ load, reps, RIR, skipped });
@@ -110,4 +111,26 @@ test('the progression uses the same rep curve: one more rep at the same load is 
 		}
 	});
 	expect(reps).toBeCloseTo(10, 9);
+});
+
+test('Warm up not for assisted exercises: their weights are help, so a lighter set would be more help', () => {
+	expect(canWarmUp({ weightUnit: 'KG', bodyweightFraction: null }, false, 'Reps', true)).toBe(false);
+	expect(canWarmUp({ weightUnit: 'KG', bodyweightFraction: null }, false, 'Reps', false)).toBe(true);
+	const weightSets = [
+		{
+			id: 'machine',
+			name: 'Assisted pull-up',
+			unit: 'KG' as const,
+			weights: [10, 20],
+			isAssistance: true,
+			machineOf: 'Assisted pull-up'
+		},
+		{ id: 'help', name: 'Help plates', unit: 'KG' as const, weights: [5, 10], isAssistance: true },
+		{ id: 'plates', name: 'Plates', unit: 'KG' as const, weights: [20, 40] }
+	];
+	expect(isAssistedExercise({ name: 'Assisted pull-up' }, weightSets)).toBe(true);
+	expect(isAssistedExercise({ name: 'Dips', weightSetId: 'help' }, weightSets)).toBe(true);
+	expect(isAssistedExercise({ name: 'Rows', weightSetId: 'plates' }, weightSets)).toBe(false);
+	expect(isAssistedExercise({ name: 'Rows' }, weightSets)).toBe(false);
+	expect(isAssistedExercise({ name: 'Rows', weightSetId: 'missing' }, weightSets)).toBe(false);
 });

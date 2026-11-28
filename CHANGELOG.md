@@ -2,6 +2,34 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-28: fixes from the Gemini bug audit
+
+### Fixed
+
+- Routines: a file the app exported can be imported again (it failed with "Unrecognized key(s) in object:
+  'exerciseId'"). A file that isn't a list of routines now says so. An exercise that appears twice in a routine (an
+  import, Save as routine, or a saved list) is renamed "Name (2)", "(3)"... instead of crashing the routine editor.
+- Save as routine: sets skipped in the workout aren't counted, an exercise done in the other unit than most of the
+  workout keeps its unit, and a weight set deleted since the workout isn't linked.
+- Profile: the workout graph puts each workout on its own day (late evening workouts moved to the next day west of
+  UTC), reaches its first week, and its cells are single buttons. The Sets count leaves out skipped sets.
+- Workouts: a workout sent from "Saved on this phone" while the list is open shows in the list and the calendar at
+  once, without a reload.
+- Mini-sets added, typed in or removed during a workout are kept on the phone: a reload no longer loses them or brings
+  back a removed one. A drop set of a reps-only exercise has no load box in its mini-sets.
+- Swapping an exercise for a reps-only one (⋯ → Edit), or adding one with no connection, no longer leaves a load box;
+  replacing an exercise in a past workout with a machine in pounds moves the loads to pounds.
+- Compare, the reps hint and the stats' relative overload no longer show -46,009% or Infinity% (0 kg against a weight,
+  help counted without bodyweight): they show nothing. Loads in pounds go through the formula in kg. The stats chart
+  starts each set at the first session that had it, and skipped sets leave a gap.
+- The workout comparison chart doesn't count skipped sets.
+- Block stats: muscles are named as elsewhere ("Front delts", a custom group as typed, e.g. "TVA"), and a muscle with no
+  set done isn't "the fewest sets". The Stats page keeps "TVA" as typed too.
+- Warm up isn't offered for assisted machines (their weights are help).
+- A chart with no sessions says "No sessions to chart" instead of "Fetching performances" for ever.
+- Exercises, My routines and one exercise's page say so, with Retry, when they can't load (they stayed grey).
+- The install button is used once instead of failing on a second tap.
+
 ## 2026-11-28: clearer reorder and Compare buttons
 
 ### Changed

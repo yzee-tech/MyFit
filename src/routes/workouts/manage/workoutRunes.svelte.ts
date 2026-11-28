@@ -1,7 +1,7 @@
 import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
-import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
+import { isAssistedExercise, levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
 import { convertWeight, isLevelUnit } from '$lib/utils/weightUnits';
 import { convertDistance, fromMeters, roundDistance } from '$lib/utils/distanceUnits';
@@ -503,7 +503,8 @@ function createWorkoutRunes() {
 	function openExerciseWarmupDialog(exercise: WorkoutExerciseInProgress) {
 		if (workoutExercises === null) return;
 		// Not for levels, reps-only, bodyweight or cardio exercises: there's no weight to warm up to
-		if (!canWarmUp(exercise, exercise.name in repsOnly, measureOf(exercise.name).measure)) return;
+		const assisted = isAssistedExercise(exercise, get(page).data.weightSets ?? []);
+		if (!canWarmUp(exercise, exercise.name in repsOnly, measureOf(exercise.name).measure, assisted)) return;
 		exerciseWarmUpDialogOpen = true;
 		exerciseWarmUpDialogExercise = exercise;
 	}

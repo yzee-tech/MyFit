@@ -88,6 +88,20 @@ export function machineSetOf(exerciseName: string | undefined, weightSets: Weigh
 	return exerciseName === undefined ? undefined : weightSets.find((set) => set.machineOf === exerciseName);
 }
 
+/**
+ * Whether the exercise's weights are help (an assisted machine's own, or a weight set of help it's linked to): its loads
+ * are negative, e.g. -10 for 10 kg of help
+ */
+export function isAssistedExercise(
+	exercise: { name: string; weightSetId?: string | null },
+	weightSets: WeightSetLike[]
+): boolean {
+	const machine = machineSetOf(exercise.name, weightSets);
+	if (machine) return Boolean(machine.isAssistance);
+	if (levelSetOf(exercise.name, weightSets)) return false;
+	return Boolean(weightSets.find((set) => set.id === exercise.weightSetId)?.isAssistance);
+}
+
 /** A machine's own weights or levels, if the exercise is a machine */
 export function machineOrLevelsOf(exerciseName: string | undefined, weightSets: WeightSetLike[]) {
 	return levelSetOf(exerciseName, weightSets) ?? machineSetOf(exerciseName, weightSets);

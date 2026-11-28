@@ -260,7 +260,7 @@
 <div class="flex flex-col gap-2">
 	{#if selectedExercise}
 		{#if exerciseInstances?.length}
-			<ExerciseStatsChart {selectedExercise} exercises={filteredExerciseInstances} />
+			<ExerciseStatsChart {selectedExercise} exercises={filteredExerciseInstances} loading={loadingSessions} />
 			{#if moreThanShown}
 				<span class="px-2 text-sm text-muted-foreground" data-testid="sessions-limit">
 					Showing the latest {MAX_SESSIONS} sessions

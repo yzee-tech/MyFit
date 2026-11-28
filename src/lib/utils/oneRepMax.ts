@@ -66,17 +66,20 @@ export function bestRecentEstimate<S extends EstimateSet, E extends PastExercise
 }
 
 /**
- * Warm up only works from a weight: not for levels, reps-only, bodyweight or cardio exercises (a run
- * has no weight to warm up to, whatever its zero-filled load says)
+ * Warm up only works from a weight: not for levels, reps-only, bodyweight, assisted (the weights are help, so a
+ * lighter set would be more help, not less) or cardio exercises (a run has no weight to warm up to, whatever its
+ * zero-filled load says)
  */
 export function canWarmUp(
 	exercise: { weightUnit?: WeightUnit | null; bodyweightFraction?: number | null },
 	repsOnly: boolean,
-	measure: ExerciseMeasure = 'Reps'
+	measure: ExerciseMeasure = 'Reps',
+	assisted = false
 ) {
 	return (
 		measure === 'Reps' &&
 		!repsOnly &&
+		!assisted &&
 		!isLevelUnit(exercise.weightUnit) &&
 		typeof exercise.bodyweightFraction !== 'number'
 	);
