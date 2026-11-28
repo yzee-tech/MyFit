@@ -95,6 +95,11 @@ test('create a routine from scratch: name and exercises on one page', async ({ p
 	await page.getByPlaceholder('For this routine').fill('Seat on 4');
 	await page.getByRole('button', { name: 'Add exercise' }).click();
 
+	// Reordering is a mode: its button says "Done reordering" while on, and the normal one is back after
+	await page.getByRole('button', { name: 'Reorder exercises' }).click();
+	await page.getByRole('button', { name: 'Done reordering' }).click();
+	await expect(page.getByRole('button', { name: 'Reorder exercises' })).toBeVisible();
+
 	// Once saved it's being edited: Update from now on
 	await saveButton.click();
 	// The message can show twice when the machine is slow; what counts is one routine saved

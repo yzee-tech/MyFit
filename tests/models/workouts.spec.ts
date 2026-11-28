@@ -1996,9 +1996,15 @@ test('a big Add exercise button under the exercises; set 1 typed is copied into 
 	// Under the exercise now; not while reordering
 	const cardBox = (await page.getByTestId('Face pulls-sets').boundingBox())!;
 	expect((await big.boundingBox())!.y).toBeGreaterThan(cardBox.y + cardBox.height);
+	// Reordering is a mode: the button says it is on (a tick), Compare can't be used meanwhile, and the big Add goes
+	await expect(page.getByLabel('reorder-toggle')).toHaveAttribute('aria-pressed', 'false');
 	await page.getByLabel('reorder-toggle').click();
+	await expect(page.getByLabel('reorder-toggle')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByLabel('compare-exercises')).toBeDisabled();
 	await expect(big).toHaveCount(0);
 	await page.getByLabel('reorder-toggle').click();
+	await expect(page.getByLabel('reorder-toggle')).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByLabel('compare-exercises')).toBeEnabled();
 
 	const box = (set: number, field: 'load' | 'reps' | 'RIR') => page.locator(`[id="Face\\ pulls-set-${set}-${field}"]`);
 	// Never done before: nothing suggested. Set 1 typed → sets 2 and 3 get it, lighter

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { afterNavigate, beforeNavigate, goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
+	import ModeToggleButton from '$lib/components/ModeToggleButton.svelte';
 	import AddEditExerciseDrawer from '$lib/components/mesocycleAndExerciseSplit/AddEditExerciseDrawer.svelte';
 	import DndComponent from '$lib/components/mesocycleAndExerciseSplit/DndComponent.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
@@ -16,10 +17,9 @@
 	import { toast } from 'svelte-sonner';
 	import PasteIcon from 'virtual:icons/lucide/clipboard-paste';
 	import CopyIcon from 'virtual:icons/lucide/copy';
-	import ReorderIcon from 'virtual:icons/lucide/git-compare-arrows';
+	import ReorderIcon from 'virtual:icons/lucide/arrow-up-down';
 	import LoaderCircle from 'virtual:icons/lucide/loader-circle';
 	import MenuIcon from 'virtual:icons/lucide/menu';
-	import EditIcon from 'virtual:icons/lucide/pencil';
 	import { fetchMyRoutines, routineFingerprint, saveMyRoutines, type MyRoutine } from '../myRoutines';
 	import { routineEditor } from './routineEditor.svelte';
 
@@ -246,18 +246,12 @@
 			editingExercise={routineEditor.editingExercise}
 			setEditingExercise={routineEditor.setEditingExercise}
 		/>
-		<Button
+		<ModeToggleButton
 			aria-label={reordering ? 'Done reordering' : 'Reorder exercises'}
+			active={reordering}
+			icon={ReorderIcon}
 			onclick={() => (reordering = !reordering)}
-			size="icon"
-			variant="outline"
-		>
-			{#if !reordering}
-				<ReorderIcon />
-			{:else}
-				<EditIcon />
-			{/if}
-		</Button>
+		/>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger asChild let:builder>
 				<Button aria-label="routine-exercise-functions" builders={[builder]} size="icon" variant="outline">

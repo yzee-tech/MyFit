@@ -2,6 +2,16 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-28: clearer reorder and Compare buttons
+
+### Changed
+
+- The reorder button now shows up/down arrows (it was two crossing arrows), and the Compare button shows a rising
+  line (it was a pair of scales). The same reorder button is used when editing a routine.
+- While reordering or comparing, the button turns into a tick in a blue ring instead of a pencil: tap the tick to
+  leave the mode. Nothing else about reordering or comparing changed.
+- Screen readers now hear whether reordering and Compare are on or off on the workout screen.
+
 ## 2026-11-27: offline fallback, progression, outbox and routine fixes
 
 ### Fixed
