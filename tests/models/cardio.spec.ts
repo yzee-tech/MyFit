@@ -823,6 +823,10 @@ test('a History copy of cardio intervals survives a reload', async ({ page, user
 	await runHistory.getByLabel('Copy these sets').first().click();
 	await expect(box(page, 'Run', 1, 'distance')).toHaveValue('5');
 	await expect(box(page, 'Run', 1, 'time')).toHaveValue('26:00');
+	// Run's History and its menu are gone before Bike's menu opens (two menus at once make "History" ambiguous)
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByRole('menu')).toHaveCount(0);
 	await page.getByTestId('Bike-menu-button').click();
 	await page.getByRole('menuitem', { name: 'History' }).click();
 	const bikeHistory = page.getByRole('dialog').filter({ hasText: 'History' });
