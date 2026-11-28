@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import LoadFailed from '$lib/components/LoadFailed.svelte';
 	import RoutineCard from '$lib/components/mesocycleAndExerciseSplit/RoutineCard.svelte';
 	import ResponsiveDialog from '$lib/components/ResponsiveDialog.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -26,10 +27,20 @@
 	let shown: string[] = $state([]);
 	let busy = $state(false);
 
+	let loadFailed = $state(false);
 	async function refresh() {
 		myRoutines = await trpc().exerciseSplits.mine.query();
 	}
-	onMount(refresh);
+	/** The first load: a failure is said, with a way to try again, instead of a skeleton for ever */
+	async function firstLoad() {
+		loadFailed = false;
+		try {
+			await refresh();
+		} catch {
+			loadFailed = true;
+		}
+	}
+	onMount(firstLoad);
 
 	/**
 	 * A link from a workout (?routine=name) opens that routine, scrolls it into view and focuses its
@@ -113,7 +124,9 @@
 	}
 </script>
 
-{#if myRoutines === 'loading'}
+{#if myRoutines === 'loading' && loadFailed}
+	<LoadFailed what="your routines" retry={firstLoad} />
+{:else if myRoutines === 'loading'}
 	<ExerciseSplitSkeleton />
 {:else}
 	<div class="mb-4 flex items-end justify-between gap-2 border-b pb-2">

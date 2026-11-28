@@ -9,6 +9,7 @@ import {
 	saveRoutine
 } from './commonFunctions';
 import { PrismaClient } from '@prisma/client';
+import { readFileSync } from 'fs';
 
 const prisma = new PrismaClient();
 
@@ -642,4 +643,97 @@ test('a file exported before rest days went imports: its routines added, its res
 	await expect(page.getByText('Added 2 routines')).toBeVisible();
 	await expect(page).toHaveURL(/\/exercise-splits$/);
 	expect((await savedRoutines(userData.userId)).map((routine) => routine.name)).toEqual(['Legs', 'Legs again']);
+});
+
+test('a file the app exported imports again: the round trip adds the same routines back', async ({
+	page,
+	userData
+}) => {
+	await createTemplateExerciseSplit(page, 'Pull Push Legs 6 routines');
+	const before = await savedRoutines(userData.userId);
+	expect(before.length).toBeGreaterThan(0);
+
+	// Exported as the app writes it (each exercise still carries its link to the exercise)
+	const download = page.waitForEvent('download');
+	await page.getByLabel('my-routines-options').click();
+	await page.getByRole('menuitem', { name: 'Export' }).click();
+	const file = await download;
+	const path = await file.path();
+	const exported = JSON.parse(readFileSync(path, 'utf8'));
+	expect(exported.exerciseSplitDays[0].exercises[0]).toHaveProperty('exerciseId');
+
+	await page.goto('/exercise-splits/import');
+	await page.getByLabel('Routines JSON file').setInputFiles(path);
+	await page.getByRole('button', { name: 'Import', exact: true }).click();
+	await expect(page.getByText(`Added ${before.length} routines`)).toBeVisible();
+	await expect(page).toHaveURL(/\/exercise-splits$/);
+
+	// Every routine is there twice: the second copy named "(2)", with the same exercises
+	const after = await savedRoutines(userData.userId);
+	expect(after).toHaveLength(before.length * 2);
+	expect(after.slice(before.length)).toEqual(before.map((routine) => ({ ...routine, name: `${routine.name} (2)` })));
+});
+
+test('an import with an exercise twice in a routine renames the second one', async ({ page, userData }) => {
+	const exercise = (name: string, exerciseIndex: number) => ({
+		name,
+		targetMuscleGroup: 'Chest',
+		customMuscleGroup: null,
+		bodyweightFraction: null,
+		sets: 3,
+		setType: 'Straight',
+		repRangeStart: 5,
+		repRangeEnd: 10,
+		changeType: null,
+		changeAmount: null,
+		note: null,
+		exerciseIndex
+	});
+	// "Bench (2)" is taken already, so the repeats skip to the next free number
+	const file = {
+		name: 'My routines',
+		exerciseSplitDays: [
+			{
+				name: 'Push',
+				dayIndex: 0,
+				weightUnit: 'KG',
+				exercises: [exercise('Bench', 0), exercise('Bench', 1), exercise('Bench (2)', 2), exercise('Bench', 3)]
+			}
+		]
+	};
+	await page.goto('/exercise-splits/import');
+	await page.getByLabel('Routines JSON file').setInputFiles({
+		name: 'My routines.json',
+		mimeType: 'application/json',
+		buffer: Buffer.from(JSON.stringify(file))
+	});
+	await page.getByRole('button', { name: 'Import', exact: true }).click();
+	await expect(page.getByText('Added 1 routine')).toBeVisible();
+	const [push] = await savedRoutines(userData.userId);
+	expect(push.exercises.map((saved) => saved.name)).toEqual(['Bench', 'Bench (3)', 'Bench (2)', 'Bench (4)']);
+
+	// The routine opens: the editor lists all four
+	await editRoutine(page, 'Push');
+	for (const name of ['Bench', 'Bench (3)', 'Bench (2)', 'Bench (4)']) {
+		await expect(page.getByLabel(`${name} options`, { exact: true })).toBeVisible();
+	}
+});
+
+test('an import that is not a list of routines says so', async ({ page }) => {
+	const tryFile = async (content: unknown, message: string) => {
+		await page.goto('/exercise-splits/import');
+		await page.getByLabel('Routines JSON file').setInputFiles({
+			name: 'My routines.json',
+			mimeType: 'application/json',
+			buffer: Buffer.from(JSON.stringify(content))
+		});
+		await page.getByRole('button', { name: 'Import', exact: true }).click();
+		await expect(page.getByRole('status').filter({ hasText: message })).toBeVisible();
+	};
+	await tryFile({ name: 'My routines' }, 'This file has no routines to import');
+	await tryFile({ name: 'My routines', exerciseSplitDays: 'Push' }, 'This file has no routines to import');
+	await tryFile(
+		{ name: 'My routines', exerciseSplitDays: [{ name: 'Push', dayIndex: 0, weightUnit: 'KG' }] },
+		'A routine in this file has no list of exercises'
+	);
 });

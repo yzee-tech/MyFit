@@ -1,7 +1,7 @@
 import { browserTimeZone, clearLoads, convertSuggestedLoads, hintBaseOf, withHintBase } from '$lib/utils/workoutUtils';
 import { page } from '$app/stores';
 import { get } from 'svelte/store';
-import { levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
+import { isAssistedExercise, levelSetOf, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 import type { DistanceUnit, ExerciseMeasure, MuscleGroup, WeightUnit } from '$lib/utils/prismaEnums';
 import { convertWeight, isLevelUnit } from '$lib/utils/weightUnits';
 import { convertDistance, fromMeters, roundDistance } from '$lib/utils/distanceUnits';
@@ -183,7 +183,7 @@ function createWorkoutRunes() {
 	}
 
 	/** Remembers whether an exercise is reps only (and its cap) */
-	function setRepsOnly(exerciseName: string, settings: { repsOnly: boolean; maxReps: number | null }) {
+	function setRepsOnly(exerciseName: string, settings: RepsOnlyInfo) {
 		const { [exerciseName]: _, ...others } = repsOnly;
 		repsOnly = settings.repsOnly ? { ...others, [exerciseName]: settings.maxReps } : others;
 		saveStoresToLocalStorage();
@@ -196,6 +196,9 @@ function createWorkoutRunes() {
 		saveStoresToLocalStorage();
 	}
 
+	/** Whether an exercise logs reps only (no load), and its most reps */
+	type RepsOnlyInfo = { repsOnly: boolean; maxReps: number | null };
+
 	/** How an exercise in this workout is measured: cardio from its settings, else reps */
 	function measureOf(exerciseName: string): MeasureInfo {
 		return measures[exerciseName] ?? { measure: 'Reps', distanceUnit: null };
@@ -207,7 +210,7 @@ function createWorkoutRunes() {
 		return exercise !== undefined;
 	}
 
-	function addExercise(exercise: RoutineExerciseTemplate, measure?: MeasureInfo) {
+	function addExercise(exercise: RoutineExerciseTemplate, measure?: MeasureInfo, repsInfo?: RepsOnlyInfo) {
 		if (workoutExercises === null) return false;
 		if (exerciseNameExists(exercise.name)) return false;
 		// Known from the picker straight away, so a run shows its time and distance boxes before any suggestion arrives
@@ -230,6 +233,8 @@ function createWorkoutRunes() {
 			weightSetId
 		});
 		suggestionsFailed = false;
+		// Reps only from the picker, so no load box shows even before (or without) a connection for the suggestions
+		if (repsInfo) setRepsOnly(exercise.name, repsInfo);
 		saveStoresToLocalStorage();
 		suggestSetsFromLastTime(exercise.name);
 		return true;
@@ -294,8 +299,10 @@ function createWorkoutRunes() {
 		}
 	}
 
-	function editExercise(exercise: RoutineExerciseTemplate, measure?: MeasureInfo) {
-		if (!editingExercise || editingExerciseIndex === undefined || workoutExercises === null) return false;
+	function editExercise(exercise: RoutineExerciseTemplate, measure?: MeasureInfo, repsInfo?: RepsOnlyInfo) {
+		// (Not found among the exercises: an index of -1)
+		if (!editingExercise || editingExerciseIndex === undefined || editingExerciseIndex < 0 || workoutExercises === null)
+			return false;
 		if (exerciseNameExists(exercise.name, editingExerciseIndex)) return false;
 		const current = workoutExercises[editingExerciseIndex];
 		// Swapped for an exercise measured differently: the numbers so far mean something else; for one in
@@ -306,6 +313,10 @@ function createWorkoutRunes() {
 			setMeasure(exercise.name, measure);
 		}
 		const measureChanged = measureOf(exercise.name).measure !== measureBefore;
+		// Swapped for an exercise that logs reps only (or the reverse): its loads mean something else, like a
+		// switch between levels and weights
+		const wasRepsOnly = current.name in repsOnly;
+		const repsOnlyChanged = repsInfo !== undefined && repsInfo.repsOnly !== wasRepsOnly;
 		const [fromUnit, toUnit] = [unitBefore ?? 'KM', measureOf(exercise.name).distanceUnit ?? 'KM'];
 		// A typed-over distance is restored from its backup: it follows the unit switch too
 		const inDistanceUnit = <T extends { distance?: number; suggested?: { distance?: number } }>(set: T): T => {
@@ -348,7 +359,7 @@ function createWorkoutRunes() {
 						miniSets: []
 					};
 				})
-			: kindChanged
+			: kindChanged || repsOnlyChanged
 				? // Levels and weights don't mix: nothing of the old kind's loads stays, mini-sets and memory
 					// included; time and distance survive in the new unit
 					current.sets.map((set) => ({ ...clearLoads(inDistanceUnit(set)), miniSets: set.miniSets.map(clearLoads) }))
@@ -365,13 +376,18 @@ function createWorkoutRunes() {
 			...createWorkoutExerciseInProgressFromRoutineExercise(exercise, sets),
 			weightUnit
 		};
+		if (repsInfo) {
+			// Its name may be a new one: the old one's setting goes, the new one's comes
+			if (exercise.name !== current.name) setRepsOnly(current.name, { repsOnly: false, maxReps: null });
+			setRepsOnly(exercise.name, repsInfo);
+		}
 		// Same exercise, same card: who follows set 1 survives edits that leave the copied values valid -
 		// a measure change drops every follow, a levels/weights switch only the load follows
 		if (exercise.name === current.name)
 			followCarriers.get(current.name)?.(
 				current.sets,
 				workoutExercises[editingExerciseIndex].sets,
-				measureChanged ? 'all' : kindChanged ? 'loads' : 'none'
+				measureChanged ? 'all' : kindChanged || repsOnlyChanged ? 'loads' : 'none'
 			);
 		saveStoresToLocalStorage();
 		return true;
@@ -406,7 +422,8 @@ function createWorkoutRunes() {
 			note: string | null;
 			measure?: ExerciseMeasure;
 			distanceUnit?: DistanceUnit | null;
-		}
+		},
+		repsInfo?: RepsOnlyInfo
 	): 'replaced' | 'loadsCleared' | 'taken' | 'measureDiffers' {
 		if (workoutExercises === null || !workoutExercises[exerciseIdx]) return 'taken';
 		if (exerciseNameExists(exercise.name, exerciseIdx)) return 'taken';
@@ -430,7 +447,12 @@ function createWorkoutRunes() {
 		};
 		const weightSets: WeightSetLike[] = get(page).data.weightSets ?? [];
 		const levels = Boolean(levelSetOf(exercise.name, weightSets));
-		const kindChanged = levels !== isLevelUnit(current.weightUnit);
+		// To or from an exercise that logs reps only: the loads logged mean something else
+		const repsOnlyChanged = repsInfo !== undefined && repsInfo.repsOnly !== current.name in repsOnly;
+		const kindChanged = levels !== isLevelUnit(current.weightUnit) || repsOnlyChanged;
+		// A machine with weights is in its own unit (it can't be switched): a past workout's loads move to it
+		const machine = machineSetOf(exercise.name, weightSets);
+		const machineUnit = !levels && !kindChanged && machine && machine.unit !== current.weightUnit ? machine.unit : null;
 		workoutExercises[exerciseIdx] = {
 			...current,
 			// The save links it to its exercise by name
@@ -443,10 +465,30 @@ function createWorkoutRunes() {
 			weightSetId: null,
 			sets: current.sets.map(inNewUnit),
 			...(kindChanged && {
-				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
+				// The loads are cleared; the new inputs are in the destination's unit: a machine's own (it can't be
+				// switched), else the session's
+				weightUnit: levels
+					? 'LEVEL'
+					: (machine?.unit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
 				sets: current.sets.map((set) => ({ ...clearLoads(inNewUnit(set)), miniSets: set.miniSets.map(clearLoads) }))
+			}),
+			...(machineUnit && {
+				weightUnit: machineUnit,
+				sets: current.sets.map((set) => {
+					const inMachineUnit = (load: number | undefined) =>
+						load === undefined ? undefined : convertWeight(load, current.weightUnit ?? 'KG', machineUnit);
+					return {
+						...inNewUnit(set),
+						load: inMachineUnit(set.load),
+						miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: inMachineUnit(miniSet.load) }))
+					};
+				})
 			})
 		};
+		if (repsInfo) {
+			if (exercise.name !== current.name) setRepsOnly(current.name, { repsOnly: false, maxReps: null });
+			setRepsOnly(exercise.name, repsInfo);
+		}
 		saveStoresToLocalStorage();
 		return kindChanged ? 'loadsCleared' : 'replaced';
 	}
@@ -465,7 +507,8 @@ function createWorkoutRunes() {
 	function openExerciseWarmupDialog(exercise: WorkoutExerciseInProgress) {
 		if (workoutExercises === null) return;
 		// Not for levels, reps-only, bodyweight or cardio exercises: there's no weight to warm up to
-		if (!canWarmUp(exercise, exercise.name in repsOnly, measureOf(exercise.name).measure)) return;
+		const assisted = isAssistedExercise(exercise, get(page).data.weightSets ?? []);
+		if (!canWarmUp(exercise, exercise.name in repsOnly, measureOf(exercise.name).measure, assisted)) return;
 		exerciseWarmUpDialogOpen = true;
 		exerciseWarmUpDialogExercise = exercise;
 	}

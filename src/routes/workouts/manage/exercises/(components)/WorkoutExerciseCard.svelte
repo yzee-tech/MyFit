@@ -13,7 +13,7 @@
 		hintBaseAfterUnitSwitch,
 		convertSuggestedLoads
 	} from '$lib/utils/workoutUtils';
-	import { availableWeightsFor, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
+	import { availableWeightsFor, isAssistedExercise, machineSetOf, type WeightSetLike } from '$lib/utils/weightSets';
 	import { convertWeight, isLevelUnit, roundWeight, unitLabel } from '$lib/utils/weightUnits';
 	import { canWarmUp } from '$lib/utils/oneRepMax';
 	import { intervalsLabel, isCardioMeasure } from '$lib/utils/measure';
@@ -221,7 +221,7 @@
 								>
 									<EditIcon /> Edit
 								</DropdownMenu.Item>
-								{#if canWarmUp(exercise, isRepsOnly, measure.measure)}
+								{#if canWarmUp(exercise, isRepsOnly, measure.measure, isAssistedExercise(exercise, weightSets))}
 									<DropdownMenu.Item
 										class="gap-2"
 										onclick={() => {

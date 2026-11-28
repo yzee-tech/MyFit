@@ -9,6 +9,7 @@
 		ExerciseSplitDayCreateWithoutExerciseSplitInputSchema,
 		ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema
 	} from '$lib/zodSchemas';
+	import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 	import { toast } from 'svelte-sonner';
 	import { addedMessage, addToMyRoutines } from '../myRoutines';
 	import { goto, invalidate } from '$app/navigation';
@@ -21,17 +22,24 @@
 
 		try {
 			const splitData = JSON.parse(await splitFile.text());
+			if (splitData === null || typeof splitData !== 'object') throw new Error('This file has no routines to import');
 
 			const { exerciseSplitDays, ...split } = splitData;
 			ExerciseSplitCreateWithoutUserInputSchema.parse(split);
 
+			// A file that isn't a list of routines says so, not a TypeError from the loops below
+			if (!Array.isArray(exerciseSplitDays)) throw new Error('This file has no routines to import');
 			exerciseSplitDays.forEach((data: { [x: string]: unknown; exercises: unknown[] }) => {
+				if (data === null || typeof data !== 'object' || !Array.isArray(data.exercises)) {
+					throw new Error('A routine in this file has no list of exercises');
+				}
 				// Files exported before rest days went say whether each one is (addToMyRoutines leaves those out)
 				const { exercises, isRestDay, ...splitDay } = data;
 				ExerciseSplitDayCreateWithoutExerciseSplitInputSchema.parse(splitDay);
 
 				exercises.forEach((data) => {
-					ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema.parse(data);
+					// The app's own export carries each exercise's link (exerciseId); the save sets it itself
+					ignoreExerciseLink(ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema).parse(data);
 				});
 			});
 

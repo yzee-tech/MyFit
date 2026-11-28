@@ -8,14 +8,16 @@
 
 	let { isMobile }: { isMobile: boolean } = $props();
 
-	let deferredPrompt: Event | null;
+	// Not standard API yet: the install prompt the browser offers, which can be used once
+	type InstallPrompt = Event & { prompt: () => Promise<unknown> | void };
+	let deferredPrompt: InstallPrompt | null = null;
 	let reloading = $state(false);
 	let showInstallButton = $state(false);
 
 	onMount(() => {
 		window.addEventListener('beforeinstallprompt', (e) => {
 			e.preventDefault();
-			deferredPrompt = e;
+			deferredPrompt = e as InstallPrompt;
 			showInstallButton = true;
 		});
 		window.addEventListener('appinstalled', () => {
@@ -23,6 +25,14 @@
 			deferredPrompt = null;
 		});
 	});
+
+	/** Asks to install: the prompt is spent after that, so the button goes (the browser offers it again if it should) */
+	function install() {
+		const prompt = deferredPrompt;
+		deferredPrompt = null;
+		showInstallButton = false;
+		prompt?.prompt();
+	}
 
 	function updateApplication() {
 		updateDataLossDialog.open = true;
@@ -35,16 +45,7 @@
 			<UpdateIcon class={cn({ 'animate-spin': reloading })} />
 		</Button>
 	{:else if showInstallButton}
-		<Button
-			aria-label="Download"
-			onclick={() => {
-				// @ts-expect-error Not standard API yet, so need this ignore
-				deferredPrompt.prompt();
-				deferredPrompt = null;
-			}}
-			size="icon"
-			variant="ghost"
-		>
+		<Button aria-label="Download" onclick={install} size="icon" variant="ghost">
 			<DownloadIcon />
 		</Button>
 	{/if}
@@ -62,17 +63,7 @@
 				Reload
 			</Button>
 		{:else if showInstallButton}
-			<Button
-				class="w-full gap-2 text-base"
-				aria-label="Download"
-				onclick={() => {
-					// @ts-expect-error Not standard API yet, so need this ignore
-					deferredPrompt.prompt();
-					deferredPrompt = null;
-				}}
-				size="lg"
-				variant="outline"
-			>
+			<Button class="w-full gap-2 text-base" aria-label="Download" onclick={install} size="lg" variant="outline">
 				<DownloadIcon /> Download
 			</Button>
 		{/if}

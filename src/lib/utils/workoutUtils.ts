@@ -181,6 +181,80 @@ export function solveBergerFormula(input: BergerInput) {
 	}
 }
 
+type BergerKnownOverload = Extract<BergerInput, { variableToSolve: 'OverloadPercentage' }>['knownValues'];
+type BergerKnownNewReps = Extract<BergerInput, { variableToSolve: 'NewReps' }>['knownValues'];
+
+/** A set with its loads (and its mini-sets') and a bodyweight in kg, from the unit they are shown in */
+function setInKg<T extends { load: number; miniSets: { load: number }[] }>(set: T, unit: MassUnit): T {
+	return {
+		...set,
+		load: toKg(set.load, unit),
+		miniSets: set.miniSets.map((miniSet) => ({ ...miniSet, load: toKg(miniSet.load, unit) }))
+	};
+}
+
+/**
+ * Whether the formula can compare two sets' loads (with the bodyweight share counted, all in `unit`): not 0 against a
+ * weight, nor two amounts of help counted without bodyweight. The formula is in kg, so the loads move there first
+ */
+function bergerComparableSets(
+	oldSet: { load: number },
+	newSet: { load: number },
+	{
+		bodyweightFraction,
+		oldUserBodyweight,
+		newUserBodyweight,
+		unit
+	}: {
+		bodyweightFraction: number | null;
+		oldUserBodyweight?: number;
+		newUserBodyweight?: number;
+		unit: MassUnit;
+	}
+) {
+	const share = bodyweightFraction ?? 0;
+	return bergerComparable(
+		toKg(oldSet.load + share * (oldUserBodyweight ?? 0), unit),
+		toKg(newSet.load + share * (newUserBodyweight ?? 0), unit)
+	);
+}
+
+/**
+ * How much more (or less) a set did than another, in percent, by the formula; null when it can't tell (0 kg against
+ * a weight, help without bodyweight, a number it can't work out). Loads and bodyweights are in `unit` (the unit the
+ * workout shows them in); the formula itself is in kg
+ */
+export function bergerOverloadPercentage(known: BergerKnownOverload, unit: MassUnit = 'KG'): number | null {
+	if (!bergerComparableSets(known.oldSet, known.newSet, { ...known, unit })) return null;
+	const result = solveBergerFormula({
+		variableToSolve: 'OverloadPercentage',
+		knownValues: {
+			...known,
+			oldSet: setInKg(known.oldSet, unit),
+			newSet: setInKg(known.newSet, unit),
+			oldUserBodyweight: toKg(known.oldUserBodyweight ?? 0, unit),
+			newUserBodyweight: toKg(known.newUserBodyweight ?? 0, unit)
+		}
+	});
+	return Number.isFinite(result) ? result : null;
+}
+
+/** The reps that would do the same at another load, by the formula; null when it can't tell (see above) */
+export function bergerNewReps(known: BergerKnownNewReps, unit: MassUnit = 'KG'): number | null {
+	if (!bergerComparableSets(known.oldSet, known.newSet, { ...known, unit })) return null;
+	const result = solveBergerFormula({
+		variableToSolve: 'NewReps',
+		knownValues: {
+			...known,
+			oldSet: setInKg(known.oldSet, unit),
+			newSet: setInKg(known.newSet, unit),
+			oldUserBodyweight: toKg(known.oldUserBodyweight ?? 0, unit),
+			newUserBodyweight: toKg(known.newUserBodyweight ?? 0, unit)
+		}
+	});
+	return Number.isFinite(result) ? result : null;
+}
+
 export function getWorkoutVolume(workout: Workout) {
 	return arraySum(workout.workoutExercises.map((exercise) => getExerciseVolume(exercise, workout.userBodyweight)));
 }

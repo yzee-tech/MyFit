@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Popover from '$lib/components/ui/popover';
+	import { localDayKey } from '$lib/utils/calendarDays';
 
 	interface WorkoutData {
 		startedAt: Date;
@@ -7,17 +8,15 @@
 
 	let { workouts = [] }: { workouts: WorkoutData[] } = $props();
 
-	// Generate graph data for the last 365 days
-	const today = new Date();
-	const oneYearAgo = new Date();
-	oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+	// Days are local days everywhere here (a workout late in the evening is that evening's, whatever UTC says)
+	const now = new Date();
+	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-	// Create a map of dates to workout counts
+	// Create a map of local days to workout counts
 	const workoutsByDate = new Map<string, number>();
 
 	workouts.forEach((workout) => {
-		const date = new Date(workout.startedAt);
-		const dateKey = date.toISOString().split('T')[0];
+		const dateKey = localDayKey(new Date(workout.startedAt));
 
 		workoutsByDate.set(dateKey, (workoutsByDate.get(dateKey) ?? 0) + 1);
 	});
@@ -26,20 +25,15 @@
 	const weeks: { date: Date; count: number }[][] = [];
 	let currentWeek: { date: Date; count: number }[] = [];
 
-	// Start from 52 weeks ago
-	const startDate = new Date(today);
-	startDate.setDate(today.getDate() - 364);
-
-	// Adjust to start on Sunday
-	const dayOfWeek = startDate.getDay();
-	startDate.setDate(startDate.getDate() - dayOfWeek);
+	// Start from 52 weeks ago, on the Sunday of that week
+	const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364);
+	startDate.setDate(startDate.getDate() - startDate.getDay());
 
 	for (let i = 0; i < 371; i++) {
-		const date = new Date(startDate);
-		date.setDate(startDate.getDate() + i);
+		// Local midnight of each day (adding days to the date, not hours, so a clock change doesn't skip one)
+		const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
 
-		const dateKey = date.toISOString().split('T')[0];
-		currentWeek.push({ date: new Date(date), count: workoutsByDate.get(dateKey) ?? 0 });
+		currentWeek.push({ date, count: workoutsByDate.get(localDayKey(date)) ?? 0 });
 
 		if (currentWeek.length === 7) {
 			weeks.push(currentWeek);
@@ -114,12 +108,10 @@
 						<div class="grid grid-rows-7 gap-[2px]">
 							{#each week as day}
 								<Popover.Root>
-									<Popover.Trigger>
-										<button
-											class="h-3 w-3 rounded-sm transition-all hover:ring-2 hover:ring-offset-1 {getColor(day.count)}"
-											aria-label={day.date.toLocaleDateString()}
-										></button>
-									</Popover.Trigger>
+									<Popover.Trigger
+										class="h-3 w-3 rounded-sm transition-all hover:ring-2 hover:ring-offset-1 {getColor(day.count)}"
+										aria-label={day.date.toLocaleDateString()}
+									/>
 									<Popover.Content class="w-auto p-2 text-sm">
 										<p>{getPopoverText(day.count, day.date)}</p>
 									</Popover.Content>

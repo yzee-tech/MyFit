@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from '$lib/components/LoadFailed.svelte';
 	import { setTypeLabel } from '$lib/utils/setTypes';
 	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -45,9 +46,18 @@
 		[data, allExercises] = await Promise.all([trpc().exercises.get.query(id), trpc().exercises.list.query()]);
 	}
 
+	let loadFailed = $state(false);
+	function loadOrSayWhy() {
+		loadFailed = false;
+		load().catch(() => {
+			toast.error('Exercise not found');
+			loadFailed = true;
+		});
+	}
+
 	$effect(() => {
 		void $page.params.exerciseId;
-		load().catch(() => toast.error('Exercise not found'));
+		loadOrSayWhy();
 	});
 
 	function toggle(list: string[], id: string, checked: boolean) {
@@ -161,7 +171,9 @@
 	{/if}
 {/snippet}
 
-{#if data === 'loading'}
+{#if data === 'loading' && loadFailed}
+	<LoadFailed what="this exercise" retry={loadOrSayWhy} />
+{:else if data === 'loading'}
 	<Skeleton class="mb-4 h-10 w-48" />
 	<Skeleton class="h-40 w-full" />
 {:else}

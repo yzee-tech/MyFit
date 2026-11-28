@@ -14,10 +14,13 @@
 	import { workoutName } from '$lib/utils/workoutNames';
 
 	let exercisesFound: RouterOutputs['workouts']['getExerciseHistory'] = $state([]);
+	// The first answer for the exercise has come (or failed): its chart stops saying it is fetching
+	let historyAnswered = $state(false);
 
 	$effect(() => {
 		if (untrack(() => exercisesFound.at(-1)?.name) !== workoutRunes.exerciseHistorySheetName) {
 			exercisesFound = [];
+			historyAnswered = false;
 		}
 	});
 
@@ -33,11 +36,15 @@
 				exerciseName
 			});
 		} catch {
-			if (exerciseName === workoutRunes.exerciseHistorySheetName) infiniteEvent.detail.error();
+			if (exerciseName === workoutRunes.exerciseHistorySheetName) {
+				historyAnswered = true;
+				infiniteEvent.detail.error();
+			}
 			return;
 		}
 		// Another exercise's history was opened meanwhile: this answer isn't its
 		if (exerciseName !== workoutRunes.exerciseHistorySheetName) return;
+		historyAnswered = true;
 		if (newExercisesFound.length === 0) {
 			infiniteEvent.detail.complete();
 			return;
@@ -61,7 +68,11 @@
 			<Accordion.Item value="item-1">
 				<Accordion.Trigger>Show progression chart?</Accordion.Trigger>
 				<Accordion.Content>
-					<ExerciseStatsChart exercises={exercisesFound} selectedExercise={workoutRunes.exerciseHistorySheetName!} />
+					<ExerciseStatsChart
+						exercises={exercisesFound}
+						loading={!historyAnswered}
+						selectedExercise={workoutRunes.exerciseHistorySheetName!}
+					/>
 				</Accordion.Content>
 			</Accordion.Item>
 		</Accordion.Root>

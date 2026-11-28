@@ -4,7 +4,7 @@
  * sets, and half a set towards each body area. One place for these rules: the Stats page, a block's
  * stats and the charts all count through here.
  */
-import type { MuscleGroup } from './prismaEnums';
+import { MuscleGroup } from './prismaEnums';
 import { convertCamelCaseToNormal } from '../utils';
 
 /** The six areas of the radar, in the order drawn (clockwise from the top left) */
@@ -135,6 +135,11 @@ export function muscleShares(exercise: ExerciseMuscles): {
 /** A muscle group's name as shown, e.g. "Front delts", "Full body" (WholeBody shows as "Full body") */
 export function muscleGroupLabel(muscleGroup: string): string {
 	return convertCamelCaseToNormal(muscleGroup);
+}
+
+/** A muscle as the person reads it: a built-in group by its label ("FrontDelts" → "Front delts"), a custom one as typed ("TVA") */
+export function muscleLabel(muscle: string): string {
+	return muscle in MuscleGroup ? muscleGroupLabel(muscle) : muscle;
 }
 
 const comparable = (name: string) => name.replace(/\s+/g, '').toLowerCase();

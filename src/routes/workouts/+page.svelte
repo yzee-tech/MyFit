@@ -36,7 +36,8 @@
 		pickHint,
 		type CalendarMonth
 	} from '$lib/utils/calendarDays';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { workoutOutbox } from '$lib/workoutOutbox.svelte';
 	import OutboxCards from './(components)/OutboxCards.svelte';
 
 	let { data } = $props();
@@ -48,6 +49,21 @@
 	}
 	let workouts: RouterOutputs['workouts']['load'] = $state([]);
 	let currentFilters = $derived(getCurrentFilters());
+	// A workout sent from the outbox while this list is open: the list and the calendar ask again (the saved
+	// workout would otherwise show only after a reload)
+	let listRefresh = $state(0);
+	let loaderIdentifier = $derived({ currentFilters, listRefresh });
+	let seenSent = workoutOutbox.sentCount;
+	$effect(() => {
+		const sentCount = workoutOutbox.sentCount;
+		if (sentCount === seenSent) return;
+		seenSent = sentCount;
+		untrack(() => {
+			workouts = [];
+			listRefresh++;
+			if (calendarMonth) showMonth(calendarMonth);
+		});
+	});
 	let picked = $derived(getPicked());
 	let pickedKeys = $derived(picked && { from: localDayKey(picked.from), to: localDayKey(picked.to) });
 	// A held day waiting for the other end of its range (the calendar's; not in the link)
@@ -138,7 +154,9 @@
 		}
 
 		infiniteEvent.detail.loaded();
-		workouts.push(...newWorkouts);
+		// Two asks for the same page (the list started over while one was on its way) add it once
+		const shown = new Set(workouts.map((workout) => workout.id));
+		workouts.push(...newWorkouts.filter((workout) => !shown.has(workout.id)));
 		if (newWorkouts.length !== 10) infiniteEvent.detail.complete();
 	}
 
@@ -324,6 +342,6 @@
 				</span>
 			</Button>
 		{/each}
-		<DefaultInfiniteLoader {loadMore} identifier={currentFilters} entityPlural="workouts" />
+		<DefaultInfiniteLoader {loadMore} identifier={loaderIdentifier} entityPlural="workouts" />
 	</div>
 </div>
