@@ -139,11 +139,18 @@ export const exerciseSplits = t.router({
 				}),
 				{ restore: true }
 			);
+			/** The link and details a template takes: a renamed repeat's are its exercise's, else the workout row's own */
 			const exerciseOf = (ex: (typeof workoutExercises)[number]) => {
-				const renamed = renamedExercises.get(ex.name);
-				return renamed && renamedRows.includes(ex)
-					? exerciseCopy(renamed)
-					: { exerciseId: ex.exerciseId, name: ex.name };
+				const renamed = renamedRows.includes(ex) ? renamedExercises.get(ex.name) : undefined;
+				if (renamed) return exerciseCopy(renamed);
+				return {
+					exerciseId: ex.exerciseId,
+					name: ex.name,
+					targetMuscleGroup: ex.targetMuscleGroup,
+					customMuscleGroup: ex.customMuscleGroup,
+					secondaryMuscleGroups: ex.secondaryMuscleGroups,
+					bodyweightFraction: ex.bodyweightFraction
+				};
 			};
 			// A weight set deleted since the workout isn't linked: the delete only cleared the routines' links
 			const weightSetIds = new Set(
@@ -182,12 +189,6 @@ export const exerciseSplits = t.router({
 					data: workoutExercises.map((ex, exerciseIndex) => ({
 						exerciseSplitDayId: routineId,
 						exerciseIndex,
-						targetMuscleGroup: ex.targetMuscleGroup,
-						customMuscleGroup: ex.customMuscleGroup,
-						secondaryMuscleGroups: ex.secondaryMuscleGroups,
-						bodyweightFraction: ex.bodyweightFraction,
-						// After the workout's own copy: a renamed row that lands on an exercise already in the library takes
-						// that exercise's details, as in a save
 						...exerciseOf(ex),
 						sets: ex._count.sets || null,
 						setType: ex.setType,
