@@ -25,13 +25,21 @@ jobs:
       - name: Run Svelte Check
         run: pnpm check
 
-  playwright_tests:
+  # The browser tests run as parallel shards, each with its own runner and its own database: Playwright
+  # splits the suite by test (fullyParallel), so there is no list of files to keep up to date. The shard
+  # count is the number of entries in the matrix below.
+  playwright_shard:
     env:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
     # A version Playwright installs its browser's libraries on (ubuntu-latest is moving to 26)
     runs-on: ubuntu-24.04
     # A hang fails here, not after GitHub's six hours
     timeout-minutes: 30
+    strategy:
+      # Every shard finishes, so one failing does not hide the other's result
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       postgres:
         image: postgres:16
@@ -83,8 +91,12 @@ jobs:
           node --test tests/diagnostics/capture.test.cjs
           node --test tests/diagnostics/retried-tests-summary.test.cjs
 
-      - name: Run Playwright tests
-        run: pnpm exec playwright test
+      # Fails in about a minute, before the long run, if the shards would drop or double a test
+      - name: Check the shards together run every test once
+        run: bash tests/diagnostics/shard-coverage.sh ${{ matrix.shard }} ${{ strategy.job-total }}
+
+      - name: Run Playwright tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       # This directory contains strict-schema JSON only, never raw test-results/auth/trace/video.
       - name: Validate safe failure evidence
@@ -103,7 +115,21 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ always() && steps.safe_evidence.outcome == 'success' }}
         with:
-          name: playwright-safe-evidence
+          name: playwright-safe-evidence-${{ matrix.shard }}
           path: playwright-diagnostics/
           if-no-files-found: error
           retention-days: 7
+
+  # The check pull requests have always had to pass, under its old name: it passes only when every shard
+  # did (a failed, skipped or cancelled shard fails it), so gating on it needs no change
+  playwright_tests:
+    needs: playwright_shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Playwright shard to have passed
+        env:
+          SHARDS_RESULT: ${{ needs.playwright_shard.result }}
+        run: |
+          echo "Playwright shards: $SHARDS_RESULT"
+          test "$SHARDS_RESULT" = "success"

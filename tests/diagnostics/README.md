@@ -3,6 +3,10 @@
 CI writes `playwright-diagnostics/`. The upload runs even when the test command fails, but only after
 `safe-artifacts.cjs` validates every file. It never uploads `test-results/` or `playwright-report/`.
 
+The suite runs as parallel CI shards, each on its own runner: every shard writes and uploads its own
+`playwright-diagnostics/` as `playwright-safe-evidence-<shard>`, and lists its retried tests in its own job summary.
+`shard-coverage.sh` checks, before the run, that the shards together run every test exactly once.
+
 - Each attempt has a JSON record: test source/line, retry index, outcome, duration, up to 500 step timings,
   fixed action categories/operations, and up to 200 fixed UI-state changes. Records are written for every
   attempt, pass or fail, and are kept 7 days. Step entries name the operation (click, expect) and its
