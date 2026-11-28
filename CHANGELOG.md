@@ -2,6 +2,22 @@
 
 What changed in MyFit, newest first.
 
+## 2026-11-28: a lighter first launch, and more time for a sleeping database
+
+### Changed
+
+- Opening the app while signed in goes to the dashboard without first loading the start page's data: the visit now
+  costs only the sign-in lookup (2 database reads instead of 5). Opening "/" with `?forceView`, signed out, or any
+  other page works as before.
+- The installed app now starts on the dashboard.
+- The app waits up to 8 seconds (it was 5) for the database to connect, which gives a database that was asleep time to
+  wake. The sign-in lookup shares the app's one database client, so it waits the same.
+- The service worker gives a slow page load 10 seconds (it was 5) before it shows the offline page. It reaches people
+  after they accept the update prompt.
+
+This lowers the risk of an error page on the first launch on a slow connection. It does not wake a sleeping database
+faster, and the cause of the error someone saw has not been confirmed.
+
 ## 2026-11-28: fixes from the Gemini bug audit
 
 ### Fixed

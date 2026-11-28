@@ -21,7 +21,7 @@ export default defineConfig({
 				id: '/?app=v3',
 				name: 'MyFit v3',
 				short_name: 'MyFit',
-				start_url: '/',
+				start_url: '/dashboard',
 				display: 'standalone',
 				background_color: '#0a0a0a',
 				theme_color: '#3079ca',
