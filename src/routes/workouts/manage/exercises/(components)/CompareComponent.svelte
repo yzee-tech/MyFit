@@ -4,9 +4,9 @@
 	import { arrayAverage } from '$lib/utils';
 	import { fromKg, isLevelUnit } from '$lib/utils/weightUnits';
 	import {
+		bergerOverloadPercentage,
 		cleanupInProgressMiniSets,
 		convertExerciseLoads,
-		solveBergerFormula,
 		type WorkoutExerciseInProgress
 	} from '$lib/utils/workoutUtils';
 	import DownIcon from 'virtual:icons/lucide/chevron-down';
@@ -32,6 +32,9 @@
 	// The bodyweight on the day this exercise was last done (kg), not another exercise's day
 	let previousBodyweight = $derived(previousBodyweightOf(workoutRunes.previousWorkoutData, exercise.name));
 
+	// The unit its loads are in (levels never get here: they don't compare)
+	let exerciseMassUnit = $derived(isLevelUnit(exercise.weightUnit) ? 'KG' : (exercise.weightUnit ?? 'KG'));
+
 	// Loads here are in the exercise's unit; bodyweight is stored in kg
 	function inExerciseUnit(kg: number | null | undefined) {
 		return typeof kg === 'number' ? fromKg(kg, exercise.weightUnit ?? 'KG') : undefined;
@@ -50,18 +53,20 @@
 		if (!isSetCompleted(currentSet)) return;
 		let { reps, load, RIR, miniSets } = currentSet;
 
-		const actualOverload = solveBergerFormula({
-			variableToSolve: 'OverloadPercentage',
-			knownValues: {
+		// Loads here are in the exercise's unit; null when the formula can't compare them (0 against a weight, help
+		// without bodyweight): no percentage shown, not -46,009% or Infinity
+		const actualOverload = bergerOverloadPercentage(
+			{
 				oldSet: prevSet,
 				newSet: { reps, load, RIR, miniSets: cleanupInProgressMiniSets(miniSets) },
 				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
 				oldUserBodyweight: inExerciseUnit(previousBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
-			}
-		});
+			},
+			exerciseMassUnit
+		);
 
-		return actualOverload;
+		return actualOverload ?? undefined;
 	}
 
 	function getAverageVolumeChangeOfAllSets() {
@@ -82,17 +87,17 @@
 	function getTheoreticalVolumeChangeOfMiniSet(prev: Omit<CompletedSet, 'completed'>, current: InProgressSet) {
 		if (!isSetCompleted(current) || isLevelUnit(exercise.weightUnit)) return;
 
-		const actualOverload = solveBergerFormula({
-			variableToSolve: 'OverloadPercentage',
-			knownValues: {
+		const actualOverload = bergerOverloadPercentage(
+			{
 				oldSet: { ...prev, miniSets: [] },
 				newSet: { ...current, miniSets: [] },
 				newUserBodyweight: inExerciseUnit(workoutRunes.workoutData?.userBodyweight) as number,
 				oldUserBodyweight: inExerciseUnit(previousBodyweight),
 				bodyweightFraction: exercise.bodyweightFraction ?? null
-			}
-		});
-		return actualOverload;
+			},
+			exerciseMassUnit
+		);
+		return actualOverload ?? undefined;
 	}
 
 	let totalVolumeChange = $derived(getAverageVolumeChangeOfAllSets());
@@ -152,7 +157,7 @@
 				</p>
 				<span class="flex w-full items-center justify-end gap-1 text-sm font-light">
 					{#if typeof volumeChange === 'number'}
-						<span>{volumeChange?.toFixed(2)}%</span>
+						<span data-testid="set-volume-change">{volumeChange?.toFixed(2)}%</span>
 						{#if volumeChange < 0}
 							<DownIcon class="justify-self-end" />
 						{:else if volumeChange > 0}

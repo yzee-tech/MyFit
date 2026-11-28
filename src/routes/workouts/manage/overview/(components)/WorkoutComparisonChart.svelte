@@ -28,6 +28,8 @@
 	// No legend: the picker under the chart names it
 	const chartOptions = { plugins: { legend: { display: false } } };
 	let chart: Chart<'bar', number[], string>;
+	// What the bars show (Previous, Today), also as the canvas's data-values
+	let chartValues: number[] = $state([]);
 
 	const chartTypes = ['Work volume', 'Sets'] as const;
 	let selectedChartType: Selected<(typeof chartTypes)[number]> = $state({
@@ -59,16 +61,31 @@
 				return (
 					exerciseVolume +
 					exercise.sets.reduce((setVolume, set) => {
-						if (set.reps === undefined || set.load === undefined || set.RIR === undefined) {
+						// A skipped set is no work, as in the previous workout's volume; so is one without its numbers
+						if (set.skipped || set.reps === undefined || set.load === undefined || set.RIR === undefined) {
 							return setVolume;
 						}
+						// Only the mini-sets ticked: they are what gets saved (an unticked one has no reps yet, which
+						// would make the whole volume a NaN and empty the bar)
+						const miniSets = set.miniSets.filter(
+							(miniSet) =>
+								miniSet.completed &&
+								miniSet.reps !== undefined &&
+								miniSet.load !== undefined &&
+								miniSet.RIR !== undefined
+						) as SetDetails['miniSets'];
 						return (
 							setVolume +
-							getSetVolume(set as SetDetails, currentWorkoutData.userBodyweight, exercise.bodyweightFraction ?? null)
+							getSetVolume(
+								{ reps: set.reps, load: set.load, RIR: set.RIR, miniSets },
+								currentWorkoutData.userBodyweight,
+								exercise.bodyweightFraction ?? null
+							)
 						);
 					}, 0)
 				);
 			}, 0);
+			chartValues = [previousWorkoutVolume, currentWorkoutVolume];
 			chart = new Chart(chartCanvas, {
 				type: 'bar',
 				data: {
@@ -83,12 +100,14 @@
 				options: chartOptions
 			});
 		} else {
+			// Sets done: a skipped one isn't, as in the sets per muscle chart beside this one
 			const previousWorkoutSets = previousWorkoutData.exercises.reduce((sets, exercise) => {
-				return sets + exercise.sets.length;
+				return sets + exercise.sets.filter((set) => !set.skipped).length;
 			}, 0);
 			const currentWorkoutSets = currentWorkoutData.exercises.reduce((sets, exercise) => {
-				return sets + exercise.sets.length;
+				return sets + exercise.sets.filter((set) => !set.skipped).length;
 			}, 0);
+			chartValues = [previousWorkoutSets, currentWorkoutSets];
 			chart = new Chart(chartCanvas, {
 				type: 'bar',
 				data: {
@@ -107,7 +126,8 @@
 </script>
 
 <Card.Root class="space-y-2 p-4">
-	<canvas bind:this={chartCanvas} id="chart-canvas"></canvas>
+	<canvas bind:this={chartCanvas} id="chart-canvas" data-testid="comparison-chart" data-values={chartValues.join(',')}
+	></canvas>
 	<Select.Root bind:selected={selectedChartType}>
 		<Select.Label class="p-0">Chart</Select.Label>
 		<Select.Trigger class="mb-2 w-full">

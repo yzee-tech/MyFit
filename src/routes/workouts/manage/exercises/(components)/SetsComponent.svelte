@@ -25,7 +25,8 @@
 	import { arraySum } from '$lib/utils';
 	import {
 		downSetLoad,
-		solveBergerFormula,
+		bergerNewReps,
+		bergerOverloadPercentage,
 		type SetField,
 		type WorkoutExerciseInProgress,
 		hintBaseOf,
@@ -652,23 +653,28 @@
 		const reps = new Map<number, number>();
 
 		const sets = isSameLoadExercise ? exercise.sets.map((from, i) => [from, i] as const) : [[set, idx] as const];
+		// Loads and bodyweight are in the exercise's unit; the formula works in kg (it moves them there itself)
+		const unit = exercise.weightUnit === 'LB' ? 'LB' : 'KG';
 		let extraOverloadAchieved = 0;
 		for (const [from, i] of sets) {
 			// A set already done keeps its numbers; one without a starting point has no hint
 			if (from.completed || from.skipped || !from.hintBase) continue;
 			const newSet = { load: newLoad, RIR: from.hintBase.RIR, miniSets: [] };
-			const newReps = Math.round(
-				solveBergerFormula({
-					variableToSolve: 'NewReps',
-					knownValues: { ...known(from.hintBase), newSet, overloadPercentage: -extraOverloadAchieved }
-				})
+			// null: the formula can't compare these loads (0 against a weight, help without bodyweight): no hint
+			const reached = bergerNewReps(
+				{ ...known(from.hintBase), newSet, overloadPercentage: -extraOverloadAchieved },
+				unit
 			);
+			if (reached === null) return null;
+			const newReps = Math.round(reached);
 			if (!Number.isFinite(newReps) || newReps < 1) return null;
 			if (isSameLoadExercise) {
-				extraOverloadAchieved += solveBergerFormula({
-					variableToSolve: 'OverloadPercentage',
-					knownValues: { ...known(from.hintBase), newSet: { ...newSet, reps: newReps } }
-				});
+				const achieved = bergerOverloadPercentage(
+					{ ...known(from.hintBase), newSet: { ...newSet, reps: newReps } },
+					unit
+				);
+				if (achieved === null) return null;
+				extraOverloadAchieved += achieved;
 			}
 			reps.set(i, newReps);
 		}

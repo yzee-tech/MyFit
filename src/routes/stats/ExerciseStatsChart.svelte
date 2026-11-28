@@ -11,7 +11,7 @@
 	import type { RouterOutputs } from '$lib/trpc/router';
 	import { generateShadesAndTints } from '$lib/utils';
 	import { bestSetEstimate } from '$lib/utils/oneRepMax';
-	import { getExerciseVolume, getSetVolume, solveBergerFormula } from '$lib/utils/workoutUtils';
+	import { bergerOverloadPercentage, getExerciseVolume, getSetVolume } from '$lib/utils/workoutUtils';
 	import { measureOfSets } from '$lib/utils/measure';
 	import {
 		distanceUnitLabel,
@@ -216,24 +216,24 @@
 			dataValues = [nonSkippedExercises.map((ex) => inHomeUnit(getExerciseVolume(ex, ex.workout.userBodyweight)))];
 		} else if (shownChartType === 'relative-overload') {
 			dataValues = Array.from({ length: maxSets }, (_, setIdx) =>
-				nonSkippedExercises.map((ex, idx) => {
-					if (idx === 0) return 0;
-					const oldestSet = nonSkippedExercises.find((ex) => ex.sets[setIdx] && !ex.sets[setIdx].skipped)?.sets[setIdx];
-					if (!oldestSet) return null;
+				nonSkippedExercises.map((ex) => {
+					// Each set is charted from the first session that did it (not skipped): that one is 0%
+					const oldest = nonSkippedExercises.find((other) => other.sets[setIdx] && !other.sets[setIdx].skipped);
+					if (!oldest) return null;
 					if (!selectedSets.includes(setIdx.toString())) return null;
-					if (!ex.sets[setIdx]) return null;
+					const set = ex.sets[setIdx];
+					if (!set || set.skipped) return null;
+					if (ex === oldest) return 0;
 
-					const oldest = nonSkippedExercises.find((ex) => ex.sets[setIdx])!;
-					const overload = solveBergerFormula({
-						variableToSolve: 'OverloadPercentage',
-						knownValues: {
-							bodyweightFraction: ex.bodyweightFraction,
-							newSet: ex.sets[setIdx],
-							oldSet: oldestSet,
-							oldUserBodyweight: oldest.workout.userBodyweight,
-							newUserBodyweight: ex.workout.userBodyweight
-						}
+					// Kg, as stored; null (a gap) where the formula can't compare the loads, e.g. 0 kg against a weight
+					const overload = bergerOverloadPercentage({
+						bodyweightFraction: ex.bodyweightFraction,
+						newSet: set,
+						oldSet: oldest.sets[setIdx],
+						oldUserBodyweight: oldest.workout.userBodyweight,
+						newUserBodyweight: ex.workout.userBodyweight
 					});
+					if (overload === null) return null;
 					// To 0.1%: the same numbers twice must chart as 0, not a rounding error like 4.5E-5
 					return Math.round(overload * 10) / 10;
 				})
