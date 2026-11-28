@@ -48,11 +48,14 @@
 	/** How the picked exercise is measured, for a workout to show the right boxes straight away */
 	type MeasureInfo = { measure: ExerciseMeasure; distanceUnit: DistanceUnit | null };
 
+	/** Whether the picked exercise logs reps only (no load), for a workout to show no load box straight away */
+	type RepsOnlyInfo = { repsOnly: boolean; maxReps: number | null };
+
 	type CommonProps<T> = {
 		editingExercise: T | undefined;
-		addExercise: (exercise: T, measure?: MeasureInfo) => boolean;
+		addExercise: (exercise: T, measure?: MeasureInfo, repsInfo?: RepsOnlyInfo) => boolean;
 		setEditingExercise: (exercise: undefined) => void;
-		editExercise: (exercise: T, measure?: MeasureInfo) => boolean;
+		editExercise: (exercise: T, measure?: MeasureInfo, repsInfo?: RepsOnlyInfo) => boolean;
 	};
 
 	type PropsType =
@@ -117,6 +120,9 @@
 	// Cardio (a run, a plank): counted in intervals, no rep range, set type, weights or progression
 	let pickedMeasure: MeasureInfo | undefined = $derived(
 		pickedExercise ? { measure: pickedExercise.measure, distanceUnit: pickedExercise.distanceUnit } : undefined
+	);
+	let pickedRepsOnly: RepsOnlyInfo | undefined = $derived(
+		pickedExercise ? { repsOnly: pickedExercise.repsOnly, maxReps: pickedExercise.maxReps ?? null } : undefined
 	);
 	let isCardio = $derived(isCardioMeasure(pickedMeasure?.measure));
 	let pickerGroups = $derived(
@@ -233,11 +239,11 @@
 		}
 		const finishedExercise = currentExercise as NonUndefined<typeof props.editingExercise>;
 		if (isBlockExercise(finishedExercise)) {
-			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure);
-			else result = props.editExercise(finishedExercise, pickedMeasure);
+			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure, pickedRepsOnly);
+			else result = props.editExercise(finishedExercise, pickedMeasure, pickedRepsOnly);
 		} else if (props.context === 'exerciseSplit') {
-			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure);
-			else result = props.editExercise(finishedExercise, pickedMeasure);
+			if (mode === 'Add') result = props.addExercise(finishedExercise, pickedMeasure, pickedRepsOnly);
+			else result = props.editExercise(finishedExercise, pickedMeasure, pickedRepsOnly);
 		}
 
 		if (!result) {

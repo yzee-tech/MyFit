@@ -221,12 +221,26 @@
 		let load: undefined | number;
 		if (exercise.setType === 'MyorepMatch') load = exercise.sets[0].load;
 		if (exercise.setType === 'MyorepMatchDown') load = exercise.sets[setIndex].load;
+		// No load to enter for a reps-only exercise, as for its sets
+		if (repsOnly) load = 0;
 		exercise.sets[setIndex].miniSets.push({
 			completed: false,
 			reps: undefined,
 			load,
 			RIR: undefined
 		});
+		// Kept on the phone like any other change to the workout
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
+	}
+
+	/** A mini-set's box typed in or emptied: kept on the phone (after the box has taken its new number) */
+	function miniSetTyped() {
+		queueMicrotask(() => workoutRunes.saveStoresToLocalStorage());
+	}
+
+	function removeMiniSet(set: WorkoutExerciseSet) {
+		set.miniSets.pop();
+		workoutRunes.workoutExercises = workoutRunes.workoutExercises;
 	}
 
 	function completeMiniSet(e: SubmitEvent, set: WorkoutExerciseSet, miniSetIndex: number) {
@@ -234,6 +248,7 @@
 		const miniSet = set.miniSets[miniSetIndex];
 		if (exercise.setType === 'MyorepMatchDown') miniSet.load = set.load;
 		if (exercise.setType === 'MyorepMatch') miniSet.load = exercise.sets[0].load;
+		if (repsOnly) miniSet.load = 0;
 		// Its numbers first, like a set
 		if (!miniSet.completed && [miniSet.reps, miniSet.load, miniSet.RIR].some((value) => typeof value !== 'number'))
 			return;
@@ -1006,6 +1021,11 @@
 					<form class="contents" novalidate onsubmit={(e) => completeMiniSet(e, set, miniIdx)}>
 						{#if exercise.setType === 'MyorepMatch' || exercise.setType === 'MyorepMatchDown'}
 							<span></span>
+						{:else if repsOnly}
+							<span
+								class="grid place-items-center text-sm text-muted-foreground"
+								data-testid="{exercise.name}-set-{idx + 1}-mini-set-{miniIdx + 1}-no-load">–</span
+							>
 						{:else}
 							{@const expectedLoad = getMiniSetLoad(idx, miniIdx)}
 							<Input
@@ -1017,6 +1037,7 @@
 								required
 								step={0.25}
 								type="number"
+								oninput={miniSetTyped}
 								bind:value={miniSet.load}
 							/>
 						{/if}
@@ -1025,6 +1046,7 @@
 							class={boxClass}
 							disabled={miniSet.completed}
 							min={1}
+							oninput={miniSetTyped}
 							required
 							type="number"
 							bind:value={miniSet.reps}
@@ -1033,6 +1055,7 @@
 							id="{exercise.name}-set-{idx + 1}-mini-set-{miniIdx + 1}-RIR"
 							class={boxClass}
 							disabled={miniSet.completed}
+							oninput={miniSetTyped}
 							required
 							type="number"
 							bind:value={miniSet.RIR}
@@ -1070,7 +1093,7 @@
 					class="h-8"
 					aria-label="remove-mini-set-from-set-{idx + 1}-of-{exercise.name}"
 					disabled={set.miniSets.length === 0}
-					onclick={() => set.miniSets.pop()}
+					onclick={() => removeMiniSet(set)}
 					size="sm"
 					variant="secondary"
 				>

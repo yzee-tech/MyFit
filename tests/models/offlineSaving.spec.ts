@@ -474,3 +474,43 @@ test('reloading the "Saved on this phone" page keeps saying so; with nothing wai
 	await page.getByTestId('no-workout-here').getByRole('button', { name: 'Back to workouts' }).click();
 	await page.waitForURL('/workouts');
 });
+
+test('a workout sent while the Workouts list is open shows in the list and the calendar at once, no reload', async ({
+	page,
+	userData
+}) => {
+	// One saved workout already: the list has loaded and finished ("That's all") before the other one is sent
+	await prisma.workout.create({
+		data: {
+			userId: userData.userId,
+			userBodyweight: 80,
+			startedAt: new Date(Date.now() - 30 * 3600000),
+			endedAt: new Date(Date.now() - 29 * 3600000),
+			routineName: 'Old one'
+		}
+	});
+	const entry = waitingEntry(userData.userId);
+	entry.label = 'Just sent';
+	const data = entry.request.workoutData as Record<string, unknown>;
+	data.routineName = 'Just sent';
+	// Done a few minutes ago: today's cell on the calendar
+	data.startedAt = new Date(Date.now() - 10 * 60000).toISOString();
+	data.endedAt = new Date(Date.now() - 5 * 60000).toISOString();
+	await seedOutbox(page, [entry]);
+	// The send fails until the connection is "back", so the workout waits while the list loads
+	await page.route(CREATE, (route) => route.abort());
+	await page.goto('/workouts');
+	await expect(page.getByTestId('outbox-card')).toHaveCount(1);
+	await expect(page.getByTestId('workout-name')).toHaveText(['Old one']);
+	const today = page.locator('[data-today="true"]');
+	await expect(today).toHaveAttribute('data-done', 'false');
+
+	await page.unroute(CREATE);
+	await page.getByTestId('outbox-card').getByRole('button', { name: 'Send now' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Workout sent' })).toBeVisible({ timeout: 15000 });
+	// In the list (newest first) without leaving the page
+	await expect(page.getByTestId('workout-name')).toHaveText(['Just sent', 'Old one']);
+	await expect(page.getByTestId('outbox-card')).toHaveCount(0);
+	await expect(today).toHaveAttribute('data-done', 'true');
+	await expect(today).toContainText('Just sent');
+});

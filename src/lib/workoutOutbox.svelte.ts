@@ -43,6 +43,8 @@ function createWorkoutOutbox() {
 	let all: OutboxEntry[] = $state([]);
 	let userId: string | null = $state(null);
 	let sending = $state(false);
+	/** How many times workouts were sent since this page opened: a list of workouts reloads when it changes */
+	let sentCount = $state(0);
 	let signOutQuestionOpen = $state(false);
 	let unreadableNoticeShown = false;
 
@@ -105,6 +107,7 @@ function createWorkoutOutbox() {
 			for (const label of outsideBlock) {
 				toast.info(`${label} was saved outside its block: the block was deleted while it waited`);
 			}
+			sentCount++;
 			await invalidate('workouts:all');
 		}
 		return { sent, stillWaiting: mine.filter((entry) => entry.state !== 'refused').length };
@@ -116,6 +119,9 @@ function createWorkoutOutbox() {
 		},
 		get sending() {
 			return sending;
+		},
+		get sentCount() {
+			return sentCount;
 		},
 		/** Waiting to be sent (not refused) */
 		get waiting() {

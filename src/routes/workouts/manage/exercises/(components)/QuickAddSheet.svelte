@@ -82,7 +82,10 @@
 
 	function replaceWith(exercise: PickerExercise) {
 		if (replacingIdx === null) return;
-		const result = workoutRunes.replaceExercise(replacingIdx, exercise);
+		const result = workoutRunes.replaceExercise(replacingIdx, exercise, {
+			repsOnly: exercise.repsOnly,
+			maxReps: exercise.maxReps ?? null
+		});
 		if (result === 'taken') {
 			toast.error(`${exercise.name} is in this workout already`);
 			return;
@@ -180,7 +183,11 @@
 				lastSetToFailure: null,
 				minimumWeightChange: null
 			};
-			workoutRunes.addExercise(template, { measure: exercise.measure, distanceUnit: exercise.distanceUnit });
+			workoutRunes.addExercise(
+				template,
+				{ measure: exercise.measure, distanceUnit: exercise.distanceUnit },
+				{ repsOnly: exercise.repsOnly, maxReps: exercise.maxReps ?? null }
+			);
 		}
 		ticked = [];
 		open = false;
