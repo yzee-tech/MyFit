@@ -9,7 +9,7 @@ import { ExerciseTemplateCreateWithoutExerciseSplitDayInputSchema } from '$lib/z
 import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
-import { linkToExercise, resolveExercises } from '$lib/server/exercises';
+import { exerciseCopy, linkToExercise, resolveExercises } from '$lib/server/exercises';
 import { withUniqueNames } from '$lib/utils/routineNames';
 import { ensureMyRoutines, uniqueRoutineName, withRoutinesTransaction } from '$lib/server/blockCache';
 
@@ -116,6 +116,35 @@ export const exerciseSplits = t.router({
 			// An exercise twice in a workout (e.g. kept as a Levels one and a KG one after a merge) would crash the
 			// routine's editor: the second one is renamed, as in an import
 			const workoutExercises = withUniqueNames(workout.workoutExercises);
+			// A renamed row is its own exercise, as in a save: still linked to the first one's, a rename of that exercise
+			// (which renames every row linked to it) would give both rows the same name again
+			const renamedRows = workoutExercises.filter((ex, idx) => ex.name !== workout.workoutExercises[idx].name);
+			const sources = await prisma.exercise.findMany({
+				where: { userId: ctx.userId, id: { in: renamedRows.flatMap((ex) => (ex.exerciseId ? [ex.exerciseId] : [])) } },
+				select: { id: true, measure: true, distanceUnit: true }
+			});
+			const { byName: renamedExercises } = await resolveExercises(
+				ctx.userId,
+				renamedRows.map((ex) => {
+					const source = sources.find((exercise) => exercise.id === ex.exerciseId);
+					return {
+						name: ex.name,
+						targetMuscleGroup: ex.targetMuscleGroup,
+						customMuscleGroup: ex.customMuscleGroup,
+						secondaryMuscleGroups: ex.secondaryMuscleGroups,
+						bodyweightFraction: ex.bodyweightFraction,
+						measure: source?.measure,
+						distanceUnit: source?.distanceUnit
+					};
+				}),
+				{ restore: true }
+			);
+			const exerciseOf = (ex: (typeof workoutExercises)[number]) => {
+				const renamed = renamedExercises.get(ex.name);
+				return renamed && renamedRows.includes(ex)
+					? exerciseCopy(renamed)
+					: { exerciseId: ex.exerciseId, name: ex.name };
+			};
 			// A weight set deleted since the workout isn't linked: the delete only cleared the routines' links
 			const weightSetIds = new Set(
 				(
@@ -153,8 +182,7 @@ export const exerciseSplits = t.router({
 					data: workoutExercises.map((ex, exerciseIndex) => ({
 						exerciseSplitDayId: routineId,
 						exerciseIndex,
-						exerciseId: ex.exerciseId,
-						name: ex.name,
+						...exerciseOf(ex),
 						targetMuscleGroup: ex.targetMuscleGroup,
 						customMuscleGroup: ex.customMuscleGroup,
 						secondaryMuscleGroups: ex.secondaryMuscleGroups,
@@ -173,7 +201,14 @@ export const exerciseSplits = t.router({
 						weightUnit: ex.weightUnit !== 'LEVEL' && ex.weightUnit !== weightUnit ? ex.weightUnit : null
 					}))
 				});
-				const exerciseIds = [...new Set(workoutExercises.flatMap((ex) => (ex.exerciseId ? [ex.exerciseId] : [])))];
+				const exerciseIds = [
+					...new Set(
+						workoutExercises.flatMap((ex) => {
+							const { exerciseId } = exerciseOf(ex);
+							return exerciseId ? [exerciseId] : [];
+						})
+					)
+				];
 				if (exerciseIds.length > 0) {
 					await tx.exercise.updateMany({
 						where: { id: { in: exerciseIds }, userId: ctx.userId, archived: true },

@@ -274,3 +274,58 @@ test('History of an exercise never done: its chart says there are no sessions, n
 	await expect(sheet.getByTestId('chart-no-sessions')).toHaveText('No sessions to chart');
 	await expect(sheet.getByText('Fetching performances')).toHaveCount(0);
 });
+
+test('replacing a reps-only exercise with a machine in pounds: the new inputs are in pounds, not the session’s kg', async ({
+	page,
+	userData
+}) => {
+	const userId = userData.userId;
+	await prisma.exercise.create({
+		data: { userId, name: 'Sit-ups', targetMuscleGroup: 'Abs', repsOnly: true }
+	});
+	await prisma.exercise.create({
+		data: {
+			userId,
+			name: 'Ab machine',
+			targetMuscleGroup: 'Abs',
+			machineWeights: [20, 40, 60, 80],
+			machineUnit: 'LB'
+		}
+	});
+	const startedAt = new Date(Date.now() - 86400000);
+	const workout = await prisma.workout.create({
+		data: {
+			userId,
+			userBodyweight: 80,
+			startedAt,
+			endedAt: new Date(startedAt.getTime() + 3600000),
+			workoutExercises: {
+				create: [
+					{
+						exerciseIndex: 0,
+						name: 'Sit-ups',
+						targetMuscleGroup: 'Abs',
+						setType: 'Straight',
+						repRangeStart: 8,
+						repRangeEnd: 15,
+						weightUnit: 'KG',
+						sets: { create: [{ setIndex: 0, reps: 15, load: 0, RIR: 2, skipped: false }] }
+					}
+				]
+			}
+		}
+	});
+	await page.goto(`/workouts/${workout.id}`);
+	await page.getByLabel('workout-options').click();
+	await page.getByRole('menuitem', { name: 'Edit' }).click();
+	await page.waitForURL(/\/workouts\/manage\/exercises\?editing/);
+	await page.getByTestId('Sit-ups-menu-button').click();
+	await page.getByRole('menuitem', { name: 'Replace' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Ab machine', exact: true }).click();
+	// Its loads were cleared (reps only had none), and the load box is in the machine's pounds
+	await expect(page.getByTestId('Ab machine-load-header')).toContainText('LB');
+	await expect(page.getByTestId('Ab machine-unit-toggle')).toHaveCount(0);
+	const row = (await savedState(page)).workoutExercises.find((ex: { name: string }) => ex.name === 'Ab machine');
+	expect(row.weightUnit).toBe('LB');
+	expect(Object.keys((await savedState(page)).repsOnly)).toEqual([]);
+});

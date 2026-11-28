@@ -386,4 +386,18 @@ test('createFromWorkout counts sets done, names a repeated exercise apart, keeps
 	// The rows keep their LB; the others follow the routine; no link to the deleted weight set
 	expect(routine.exercises.map((exercise) => exercise.weightUnit)).toEqual([null, 'LB', null]);
 	expect(routine.exercises.map((exercise) => exercise.weightSetId)).toEqual([null, null, null]);
+
+	// The renamed row is its own exercise: renaming the first one (which renames every row linked to it) leaves it
+	const [firstRow, , secondRow] = routine.exercises;
+	expect(secondRow.exerciseId).not.toBe(firstRow.exerciseId);
+	await caller.exercises.update({
+		id: firstRow.exerciseId!,
+		details: { name: 'Chin-ups', targetMuscleGroup: 'Lats', customMuscleGroup: null, bodyweightFraction: 1, note: null }
+	});
+	const renamed = await prisma.exerciseTemplate.findMany({
+		where: { exerciseSplitDay: { exerciseSplit: { userId } } },
+		orderBy: { exerciseIndex: 'asc' },
+		select: { name: true }
+	});
+	expect(renamed.map((row) => row.name)).toEqual(['Chin-ups', rows.name, 'Pull-ups (2)']);
 });

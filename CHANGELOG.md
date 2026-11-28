@@ -10,7 +10,8 @@ What changed in MyFit, newest first.
   'exerciseId'"). A file that isn't a list of routines now says so. An exercise that appears twice in a routine (an
   import, Save as routine, or a saved list) is renamed "Name (2)", "(3)"... instead of crashing the routine editor.
 - Save as routine: sets skipped in the workout aren't counted, an exercise done in the other unit than most of the
-  workout keeps its unit, and a weight set deleted since the workout isn't linked.
+  workout keeps its unit, a weight set deleted since the workout isn't linked, and an exercise that was in the workout twice
+  is kept as two exercises ("Name (2)"), so renaming one doesn't rename the other.
 - Profile: the workout graph puts each workout on its own day (late evening workouts moved to the next day west of
   UTC), reaches its first week, and its cells are single buttons. The Sets count leaves out skipped sets.
 - Workouts: a workout sent from "Saved on this phone" while the list is open shows in the list and the calendar at
@@ -18,7 +19,8 @@ What changed in MyFit, newest first.
 - Mini-sets added, typed in or removed during a workout are kept on the phone: a reload no longer loses them or brings
   back a removed one. A drop set of a reps-only exercise has no load box in its mini-sets.
 - Swapping an exercise for a reps-only one (⋯ → Edit), or adding one with no connection, no longer leaves a load box;
-  replacing an exercise in a past workout with a machine in pounds moves the loads to pounds.
+  replacing an exercise in a past workout with a machine in pounds moves the loads to pounds, and replacing a reps-only
+  or levels exercise with one shows the machine's unit instead of the session's.
 - Compare, the reps hint and the stats' relative overload no longer show -46,009% or Infinity% (0 kg against a weight,
   help counted without bodyweight): they show nothing. Loads in pounds go through the formula in kg. The stats chart
   starts each set at the first session that had it, and skipped sets leave a gap.

@@ -465,7 +465,11 @@ function createWorkoutRunes() {
 			weightSetId: null,
 			sets: current.sets.map(inNewUnit),
 			...(kindChanged && {
-				weightUnit: levels ? 'LEVEL' : (workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
+				// The loads are cleared; the new inputs are in the destination's unit: a machine's own (it can't be
+				// switched), else the session's
+				weightUnit: levels
+					? 'LEVEL'
+					: (machine?.unit ?? workoutData?.sessionWeightUnit ?? workoutData?.homeWeightUnit ?? 'KG'),
 				sets: current.sets.map((set) => ({ ...clearLoads(inNewUnit(set)), miniSets: set.miniSets.map(clearLoads) }))
 			}),
 			...(machineUnit && {
