@@ -10,6 +10,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { TRPCError } from '@trpc/server';
 import { ignoreExerciseLink } from '$lib/trpc/exerciseLinkInput';
 import { linkToExercise, resolveExercises } from '$lib/server/exercises';
+import { withUniqueNames } from '$lib/utils/routineNames';
 import { ensureMyRoutines, uniqueRoutineName, withRoutinesTransaction } from '$lib/server/blockCache';
 
 const zodSaveRoutinesInput = z.strictObject({
@@ -49,9 +50,11 @@ export const exerciseSplits = t.router({
 			throw new TRPCError({ code: 'BAD_REQUEST', message: 'Routine names should be unique' });
 		}
 
+		// An exercise twice in a routine would crash its editor: the second one is renamed ("Bench (2)")
+		const routineExercises = input.routineExercises.map((exercises) => withUniqueNames(exercises));
 		// Exercises as they are: their details change only on the Exercises page. A template or an
 		// import creates the exercises it needs
-		const { byName, restoreIds } = await resolveExercises(ctx.userId, input.routineExercises.flat(), {
+		const { byName, restoreIds } = await resolveExercises(ctx.userId, routineExercises.flat(), {
 			restore: true
 		});
 		await withRoutinesTransaction(async (tx) => {
@@ -72,7 +75,7 @@ export const exerciseSplits = t.router({
 					}
 				});
 				await tx.exerciseTemplate.createMany({
-					data: input.routineExercises[dayIndex].map(({ id, ...exercise }, exerciseIndex) => ({
+					data: routineExercises[dayIndex].map(({ id, ...exercise }, exerciseIndex) => ({
 						...linkToExercise(exercise, byName),
 						exerciseIndex,
 						exerciseSplitDayId: routineId
@@ -96,7 +99,8 @@ export const exerciseSplits = t.router({
 				include: {
 					workoutExercises: {
 						orderBy: { exerciseIndex: 'asc' },
-						include: { _count: { select: { sets: true } } }
+						// Sets done: a skipped one doesn't count towards the routine's sets
+						include: { _count: { select: { sets: { where: { skipped: false } } } } }
 					}
 				}
 			});
@@ -109,6 +113,21 @@ export const exerciseSplits = t.router({
 			const massUnits = workout.workoutExercises.flatMap((ex) => (ex.weightUnit === 'LEVEL' ? [] : [ex.weightUnit]));
 			const lbCount = massUnits.filter((unit) => unit === 'LB').length;
 			const weightUnit = lbCount > massUnits.length - lbCount ? 'LB' : 'KG';
+			// An exercise twice in a workout (e.g. kept as a Levels one and a KG one after a merge) would crash the
+			// routine's editor: the second one is renamed, as in an import
+			const workoutExercises = withUniqueNames(workout.workoutExercises);
+			// A weight set deleted since the workout isn't linked: the delete only cleared the routines' links
+			const weightSetIds = new Set(
+				(
+					await prisma.weightSet.findMany({
+						where: {
+							userId: ctx.userId,
+							id: { in: workoutExercises.flatMap((ex) => (ex.weightSetId ? [ex.weightSetId] : [])) }
+						},
+						select: { id: true }
+					})
+				).map((weightSet) => weightSet.id)
+			);
 
 			const routineName = await withRoutinesTransaction(async (tx) => {
 				const listId = await ensureMyRoutines(tx, ctx.userId);
@@ -131,7 +150,7 @@ export const exerciseSplits = t.router({
 					}
 				});
 				await tx.exerciseTemplate.createMany({
-					data: workout.workoutExercises.map((ex, exerciseIndex) => ({
+					data: workoutExercises.map((ex, exerciseIndex) => ({
 						exerciseSplitDayId: routineId,
 						exerciseIndex,
 						exerciseId: ex.exerciseId,
@@ -149,12 +168,12 @@ export const exerciseSplits = t.router({
 						changeType: ex.changeType,
 						changeAmount: ex.changeAmount,
 						note: ex.note,
-						weightSetId: ex.weightSetId
+						weightSetId: ex.weightSetId && weightSetIds.has(ex.weightSetId) ? ex.weightSetId : null,
+						// One done in the other unit than the routine's keeps its own (levels come from the machine)
+						weightUnit: ex.weightUnit !== 'LEVEL' && ex.weightUnit !== weightUnit ? ex.weightUnit : null
 					}))
 				});
-				const exerciseIds = [
-					...new Set(workout.workoutExercises.flatMap((ex) => (ex.exerciseId ? [ex.exerciseId] : [])))
-				];
+				const exerciseIds = [...new Set(workoutExercises.flatMap((ex) => (ex.exerciseId ? [ex.exerciseId] : [])))];
 				if (exerciseIds.length > 0) {
 					await tx.exercise.updateMany({
 						where: { id: { in: exerciseIds }, userId: ctx.userId, archived: true },

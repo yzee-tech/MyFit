@@ -6,7 +6,7 @@
 import type { SplitExerciseTemplateWithoutIdsOrIndex } from '$lib/components/mesocycleAndExerciseSplit/commonTypes';
 import { trpc } from '$lib/trpc/client';
 import type { RoutineWeightUnit } from '$lib/utils/prismaEnums';
-import { uniqueRoutineName } from '$lib/utils/routineNames';
+import { uniqueRoutineName, withUniqueNames } from '$lib/utils/routineNames';
 import type { Prisma } from '@prisma/client';
 
 /** A template or an import: routines with their exercises, without database ids */
@@ -91,7 +91,8 @@ export function withAddedRoutines(routines: MyRoutine[], incoming: RoutineToAdd[
 				result.map((existing) => existing.name)
 			),
 			weightUnit: routine.weightUnit ?? 'KG',
-			exercises: withoutIds(routine.exercises)
+			// An exercise twice in a routine would crash its editor: the second one is renamed
+			exercises: withUniqueNames(withoutIds(routine.exercises))
 		});
 	}
 	return result;

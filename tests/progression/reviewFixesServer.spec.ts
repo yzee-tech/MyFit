@@ -341,3 +341,49 @@ test('exercises.delete archives an exercise used in a workout and deletes one wi
 	expect(delUsed).toEqual({ archived: true });
 	expect((await prisma.exercise.findUniqueOrThrow({ where: { id: used.id } })).archived).toBe(true);
 });
+
+test('createFromWorkout counts sets done, names a repeated exercise apart, keeps another unit and drops a deleted weight set', async () => {
+	const { userId, caller } = await newPerson();
+	const at = new Date('2026-11-10T10:00:00.000Z');
+	const set = (setIndex: number, skipped = false) => ({ setIndex, reps: 10, load: 20, RIR: 2, skipped });
+	await caller.workouts.create({
+		workoutData: { userBodyweight: 80, startedAt: at, endedAt: at, routineName: null },
+		workoutExercises: [
+			{ ...pullUps, exerciseIndex: 0 },
+			{ ...rows, exerciseIndex: 1 }
+		],
+		// Pull-ups: 2 done and 1 skipped
+		workoutExercisesSets: [[set(0), set(1), set(2, true)], [set(0)]],
+		workoutExercisesMiniSets: [[[], [], []], [[]]]
+	});
+	const { id: workoutId } = await prisma.workout.findFirstOrThrow({ where: { userId } });
+	const [first, second] = await prisma.workoutExercise.findMany({
+		where: { workoutId },
+		orderBy: { exerciseIndex: 'asc' }
+	});
+	// The workout was done in KG, but the rows in LB; its rows link a weight set that was deleted since
+	await prisma.workoutExercise.update({
+		where: { id: second.id },
+		data: { weightUnit: 'LB', weightSetId: createId() }
+	});
+	// A second Pull-ups (as an exercise merge can leave), and the first kept in KG
+	const { id: _, ...copy } = first;
+	await prisma.workoutExercise.create({ data: { ...copy, exerciseIndex: 2 } });
+
+	await caller.exerciseSplits.createFromWorkout({ workoutId, name: 'Pull day' });
+	const [routine] = (
+		await prisma.exerciseSplit.findUniqueOrThrow({
+			where: { userId },
+			include: {
+				exerciseSplitDays: { include: { exercises: { orderBy: { exerciseIndex: 'asc' } } } }
+			}
+		})
+	).exerciseSplitDays;
+	expect(routine.exercises.map((exercise) => exercise.name)).toEqual(['Pull-ups', rows.name, 'Pull-ups (2)']);
+	// Sets done, not skipped ones
+	expect(routine.exercises.map((exercise) => exercise.sets)).toEqual([2, 1, null]);
+	expect(routine.weightUnit).toBe('KG');
+	// The rows keep their LB; the others follow the routine; no link to the deleted weight set
+	expect(routine.exercises.map((exercise) => exercise.weightUnit)).toEqual([null, 'LB', null]);
+	expect(routine.exercises.map((exercise) => exercise.weightSetId)).toEqual([null, null, null]);
+});
